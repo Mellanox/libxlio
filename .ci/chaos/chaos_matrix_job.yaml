@@ -1,0 +1,132 @@
+---
+job: LIBXLIO-chaos
+
+registry_host: nbu-harbor.gtm.nvidia.com
+registry_path: /rivermax
+registry_auth: rivermax_harbor_credentials
+
+failFast: false
+timeout_minutes: 120
+
+kubernetes:
+  cloud: il-ipp-blossom-prod
+  namespace: swx-media
+  limits: '{memory: 256Mi, cpu: 100m}'
+  requests: '{memory: 256Mi, cpu: 100m}'
+  arch_table:
+    x86_64:
+      nodeSelector: 'kubernetes.io/arch=amd64'
+      jnlpImage: 'nbu-harbor.gtm.nvidia.com/toolbox/c3po-jnlp:latest'
+
+runs_on_dockers:
+  - { name: "ubuntu24.04", url: '${registry_host}/swx-infra/media/x86_64/base/ubuntu:24.04', arch: 'x86_64'}
+
+env:
+  MAIL_FROM: jenkins@nvidia.com
+  CHAOS_RESULTS_DIR: '/mnt/pvc/chaos_results'
+
+pvc_volumes:
+  - {claimName: swx-media-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+steps:
+  - name: Run Linux Build
+    shell: action
+    module: groovy
+    run: |
+      def build = build job: 'libxlio/LibXLIO-opensource',
+        parameters: [
+          string(name: 'sha1', value: "${sha1}"),
+          booleanParam(name: 'build_dockers', value: false),
+          booleanParam(name: 'do_chaos', value: true),
+          booleanParam(name: 'do_build', value: true),
+          booleanParam(name: 'do_compiler', value: true),
+          booleanParam(name: 'do_package', value: true),
+          booleanParam(name: 'do_cppcheck', value: true),
+          booleanParam(name: 'do_csbuild', value: true),
+          booleanParam(name: 'do_service', value: true),
+          booleanParam(name: 'do_style', value: true),
+          booleanParam(name: 'do_coverity', value: true),
+          booleanParam(name: 'do_test', value: true),
+          booleanParam(name: 'do_gtest', value: true),
+          booleanParam(name: 'do_valgrind', value: true),
+          booleanParam(name: 'do_documentation_test', value: true),
+          booleanParam(name: 'do_commit', value: true),
+          booleanParam(name: 'do_tidy', value: true),
+          booleanParam(name: 'do_artifact', value: true),
+          booleanParam(name: 'do_copyrights', value: true),
+          booleanParam(name: 'do_secretscan', value: true)
+        ],
+        propagate: false
+
+      env.LINUX_BUILD_URL = build.absoluteUrl
+      env.LINUX_BUILD_NUMBER = build.number
+      env.LINUX_BUILD_RES = build.result
+
+  # Compare which steps failed in the main build vs which are expected to fail per chaos_config.
+  - name: Check Results and Send Email
+    shell: action
+    module: groovy
+    run: |
+      def results_dir = "${env.CHAOS_RESULTS_DIR}/${env.LINUX_BUILD_NUMBER}"
+      def actual_failures = [] as Set
+      try {
+        def content = sh(script: "cat ${results_dir}/*.txt", returnStdout: true).trim()
+        actual_failures.addAll(content.split('\n').findAll { it })
+      } catch (e) {
+        echo "No chaos result files at ${results_dir}: ${e.message}"
+      }
+      sh "rm -rf ${results_dir}"
+
+      // Parse .ci/chaos/chaos_config for expected step failures.
+      def expected_failures = [] as Set
+      readFile(file: '.ci/chaos/chaos_config', encoding: 'UTF-8').readLines().each { line ->
+        if (line.trim() && !line.trim().startsWith('#')) {
+          def steps = line.contains(':') ? line.substring(line.indexOf(':') + 1).trim() : ''
+          steps.split().each { expected_failures.add(it) }
+        }
+      }
+
+      def status = (expected_failures - actual_failures).isEmpty() ? 'SUCCESS' : 'FAILURE'
+      def warning = (env.LINUX_BUILD_RES != 'SUCCESS') ? "WARNING: results may be incorrect. Main CI result was ${env.LINUX_BUILD_RES}" : ''
+
+      def step_results = expected_failures.collect { step ->
+        def failed = actual_failures.contains(step)
+        [ name: step,
+          icon: failed ? "✓" : "✗",
+          icon_color: failed ? '#28a745' : '#dc3545',
+          status: failed ? "FAILED as expected" : "PASSED (should have failed)" ]
+      }
+
+      def console_output = step_results.collect { "${it.name} - ${it.icon} ${it.status}" }.join('\n    ')
+      echo """
+          ========================================
+          CHAOS TEST RESULTS
+          ========================================
+          Status: ${status}
+          Main CI Build: ${env.LINUX_BUILD_URL}
+          ${console_output}
+          ${warning ? '\n    ' + warning : ''}
+          ========================================"""
+
+      echo "debug: params.mail_to=${params.mail_to}"
+      echo "debug: status=${status}"
+      echo "debug: env.MAIL_FROM='${env.MAIL_FROM}'"
+      if (params.mail_to && status == 'FAILURE') {
+        echo "debug: sending email to ${params.mail_to}"
+      }
+
+      if (params.mail_to && status == 'FAILURE') {
+        mail from: env.MAIL_FROM,
+        to: params.mail_to,
+        subject: "LibXLIO CI Chaos Test - $status",
+        mimeType: 'text/html',
+        body: """<b>Status: <span style='color: ${status == "SUCCESS" ? '#28a745' : '#dc3545'};'>${status}</span></b><br>
+            <b>Chaos Build:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a><br>
+            <b>Main CI Build:</b> <a href="${env.LINUX_BUILD_URL}">${env.LINUX_BUILD_URL}</a><br><br>
+            ${step_results.collect { "<b>${it.name}</b> - <span style='color: ${it.icon_color};'>${it.icon}</span> ${it.status}<br>" }.join('')}
+            ${warning ? "<br><b>${warning}</b>" : ''}"""
+      }
+
+      if (status == 'FAILURE') {
+        error("Chaos test failed - there were unexpected passes")
+      }

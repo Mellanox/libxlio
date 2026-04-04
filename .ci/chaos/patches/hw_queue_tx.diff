@@ -1,0 +1,16 @@
+diff --git a/src/core/dev/hw_queue_tx.h b/src/core/dev/hw_queue_tx.h
+index 04be4b6b..1df05c3a 100644
+--- a/src/core/dev/hw_queue_tx.h
++++ b/src/core/dev/hw_queue_tx.h
+@@ -1,9 +1,9 @@
+ /*
+  * SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+- * Copyright (c) 2021-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++ * Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
+  */
+-
++// trolollololollllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllsdfjoidsfjiodsfjdoifj
+ #ifndef HW_QUEUE_TX_H
+ #define HW_QUEUE_TX_H
+ 

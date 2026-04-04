@@ -36,6 +36,9 @@ volumes:
   # User profile for release
   - {mountPath: /var/home/swx-jenkins, hostPath: /labhome/swx-jenkins}
 
+pvc_volumes:
+  - {claimName: swx-media-pvc, mountPath: /mnt/pvc, readOnly: false}
+
 runs_on_dockers:
 # build
   - {file: '.ci/dockerfiles/Dockerfile.ubuntu22.04', name: 'ub22.04-x86_64', uri: 'xlio/$arch/$name/build', tag: '20251202', category: 'base', arch: 'x86_64', build_args: '--build-arg ARCH=x86_64 --no-cache --target build'}
@@ -187,6 +190,7 @@ matrix:
 
 env:
   jenkins_opt_artifacts: 'none'
+  CHAOS_RESULTS_DIR: '/mnt/pvc/chaos_results'
 
 steps:
   - name: Setup
@@ -218,8 +222,17 @@ steps:
 
   - name: Copyrights
     enable: ${do_copyrights}
+    shell: action
+    module: groovy
     credentialsId: 'mellanox_github_credentials'
-    run: env WORKSPACE=$PWD GITHUB_TOKEN=$MELLANOX_GH_TOKEN ./contrib/jenkins_tests/copyrights.sh
+    run: |
+      def step_cmd = "env WORKSPACE=${env.WORKSPACE} GITHUB_TOKEN=${env.MELLANOX_GH_TOKEN} ./contrib/jenkins_tests/copyrights.sh"
+      if (env.do_chaos != 'true') { sh step_cmd }
+      else {
+        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+          sh "./.ci/scripts/run_chaos_step.sh Copyrights " + step_cmd
+        }
+      }
     containerSelector:
       - "{name: 'header-check', category: 'tool', variant: 1}"
     archiveArtifacts: '*.log,*.tar.gz'
@@ -272,11 +285,19 @@ steps:
 
   - name: Style
     enable: ${do_style}
+    shell: action
+    module: groovy
     containerSelector:
       - "{name: 'style', category: 'tool'}"
     run: |
-      [ "x${do_style}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_style=${action} ./contrib/test_jenkins.sh
+      def step_cmd = "env WORKSPACE=\$PWD TARGET=${flags} jenkins_test_style=yes ./contrib/test_jenkins.sh"
+      if (env.do_chaos != 'true') { sh step_cmd }
+      else {
+        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+          sh "./.ci/scripts/run_chaos_step.sh Style " + step_cmd
+        }
+      }
+
     parallel: false
     onfail: |
       ./.ci/artifacts.sh
@@ -491,6 +512,34 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
+
+  - name: Verify Chaos Patches
+    containerSelector:
+      - "{name: 'toolbox', category: 'tool', variant: 1}"
+    run: |
+      patches_dir=.ci/chaos/patches
+
+      # Check that every patch referenced in config exists under patches_dir.
+      while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+        patch="${line%%:*}"; patch="${patch//[[:space:]]/}"
+        if [ ! -f "$patches_dir/$patch" ]; then
+          echo "ERROR: missing $patches_dir/$patch"
+          exit 1
+        fi
+      done < ".ci/chaos/chaos_config"
+
+      # Check that every .diff in patches_dir applies cleanly.
+      for patch_file in .ci/chaos/patches/*.diff; do
+        [ -f "$patch_file" ] || continue
+        if ! git apply --check --reject "$patch_file"; then
+          echo "ERROR: patch does not apply: $patch_file"
+          exit 1
+        fi
+      done
+    parallel: false
+    archiveArtifacts-onfail: '**/*.rej'
 
   - name: Artifacts
     enable: ${do_artifact}

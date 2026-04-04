@@ -103,6 +103,10 @@
             name: "do_secretscan"
             default: true
             description: "Check for secrets in source code"
+        - bool:
+            name: "do_chaos"
+            default: false
+            description: "Enable chaos testing mode"
     triggers:
         - github-pull-request:
             cron: 'H/5 * * * *'
