@@ -11,7 +11,8 @@
 #include "proto/dst_entry.h" /* xlio_send_attr */
 #include "proto/tls.h" /* xlio_tls_info */
 #include "lwip/err.h" /* err_t */
-
+#include <utility>
+#include <deque>
 #include <stdint.h>
 
 /*
@@ -35,6 +36,7 @@ public:
     virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg);
     virtual int postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send_attr &attr);
     virtual bool handle_send_ret(ssize_t ret, struct tcp_seg *seg);
+    virtual void incr_tls_rx_need_resync() {}
 
     virtual err_t recv(struct pbuf *p)
     {
@@ -73,7 +75,7 @@ public:
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     int postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send_attr &attr) override;
     bool handle_send_ret(ssize_t ret, struct tcp_seg *seg) override;
-
+    void incr_tls_rx_need_resync() override { ++m_tls_rx_need_resync; }
     void get_record_buf(mem_buf_desc_t *&buf, uint8_t *&data, bool is_zerocopy);
 
 private:
@@ -82,7 +84,7 @@ private:
 
     int send_alert(uint8_t alert_type);
     void terminate_session_fatal(uint8_t alert_type);
-
+    void rx_resync_success();
     err_t tls_rx_consume_ready_packets();
     err_t recv(struct pbuf *p) override;
     void copy_by_offset(uint8_t *dst, uint32_t offset, uint32_t len);
@@ -130,12 +132,6 @@ private:
     struct xlio_tls_info m_tls_info_tx;
     struct xlio_tls_info m_tls_info_rx;
 
-    /* Whether offload is configured. */
-    bool m_is_tls_tx;
-    bool m_is_tls_rx;
-    /* TLS record overhead (header + trailer). Different across versions. */
-    uint32_t m_tls_rec_overhead;
-
     /* TX specific fields */
     xlio_tis *m_p_tis;
 
@@ -155,6 +151,8 @@ private:
     void *m_p_evp_cipher;
     void *m_p_cipher_ctx;
 
+    /* Track records and TCP seq for TLS RX resyncs */
+    std::deque<std::pair<uint64_t, uint32_t>> m_recno_tcp_seq;
     /* List of RX buffers that contain unhandled records. */
     xlio_desc_list_t m_rx_bufs;
     /* Record number of current or incomplete TLS record. */
@@ -165,6 +163,10 @@ private:
     uint32_t m_rx_rec_len;
     /* Number of bytes received after m_rx_offset. */
     uint32_t m_rx_rec_rcvd;
+    /* Next Record TCP Sequence */
+    uint32_t m_rx_next_rec_tcp_seq;
+    /* TLS record overhead (header + trailer). Different across versions. */
+    uint32_t m_tls_rec_overhead;
     /* State machine for TLS RX stream. */
     enum tls_rx_state m_rx_sm;
     /* Refused data by sockinfo_tcp::rx_lwip_cb() to be retried. */
@@ -173,8 +175,13 @@ private:
     rfs_rule *m_rx_rule;
     /* Buffer to hold GET_PSV data during resync. */
     mem_buf_desc_t *m_rx_psv_buf;
-    /* Record number where resync request was received. */
-    uint64_t m_rx_resync_recno;
+    /* Track requested TLS RX resyncs */
+    uint16_t m_tls_rx_need_resync = 1U;
+    /* HW TCP resync seqno for pending parsing */
+    bool m_pending_resync_seqno = false;
+    /* Whether offload is configured. */
+    bool m_is_tls_tx;
+    bool m_is_tls_rx;
 };
 
 #endif /* DEFINED_UTLS */
