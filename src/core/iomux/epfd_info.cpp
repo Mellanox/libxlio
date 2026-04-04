@@ -294,6 +294,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
     } else {
         fd_rec.offloaded_index = -1;
         m_fd_non_offloaded_map[fd] = fd_rec;
+        g_p_fd_collection->add_non_offloaded_fd(fd, this);
     }
 
     __log_func("fd %d added in epfd %d with events=%#x and data=%#x", fd, m_epfd, event->events,
@@ -439,6 +440,7 @@ int epfd_info::del_fd(int fd, bool passthrough)
             // This can happen after bind(), listen() or accept() calls.
             m_fd_non_offloaded_map[fd] = *fi;
             m_fd_non_offloaded_map[fd].offloaded_index = -1;
+            g_p_fd_collection->add_non_offloaded_fd(fd, this);
         }
 
         remove_socket_from_ready_list(temp_sock_fd_api);
@@ -466,6 +468,7 @@ int epfd_info::del_fd(int fd, bool passthrough)
         fd_info_map_t::iterator fd_iter = m_fd_non_offloaded_map.find(fd);
         if (fd_iter != m_fd_non_offloaded_map.end()) {
             m_fd_non_offloaded_map.erase(fd_iter);
+            g_p_fd_collection->remove_non_offloaded_fd(fd, this);
         }
     }
 
