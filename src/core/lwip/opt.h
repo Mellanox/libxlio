@@ -173,15 +173,6 @@
    ---------- Socket options ----------
    ------------------------------------
 */
-/**
- * LWIP_TCP_KEEPALIVE==1: Enable TCP_KEEPIDLE, TCP_KEEPINTVL and TCP_KEEPCNT
- * options processing. Note that TCP_KEEPIDLE and TCP_KEEPINTVL have to be set
- * in seconds. (does not require sockets.c, and will affect tcp.c)
- */
-#ifndef LWIP_TCP_KEEPALIVE
-#define LWIP_TCP_KEEPALIVE 0
-#endif
-
 /* Platform endianness */
 #if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || !defined(__ORDER_BIG_ENDIAN__)
 #warning "__BYTE_ORDER__ or __ORDER_..._ENDIAN__ is not defined"
