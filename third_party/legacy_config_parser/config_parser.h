@@ -1,8 +1,9 @@
-/* A Bison parser, made by GNU Bison 2.7.  */
+/* A Bison parser, made by GNU Bison 3.8.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-      Copyright (C) 1984, 1989-1990, 2000-2012 Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2021 Free Software Foundation,
+   Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -30,104 +31,79 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
-#ifndef YY_CONFIG_PARSER_H_INCLUDED
-#define YY_CONFIG_PARSER_H_INCLUDED
-/* Enabling traces.  */
+/* DO NOT RELY ON FEATURES THAT ARE NOT DOCUMENTED in the manual,
+   especially those whose name start with YY_ or yy_.  They are
+   private implementation details that can be changed or removed.  */
+
+#ifndef YY_LIBXLIO_YY_THIRD_PARTY_LEGACY_CONFIG_PARSER_CONFIG_PARSER_H_INCLUDED
+# define YY_LIBXLIO_YY_THIRD_PARTY_LEGACY_CONFIG_PARSER_CONFIG_PARSER_H_INCLUDED
+/* Debug traces.  */
 #ifndef YYDEBUG
-#define YYDEBUG 0
+# define YYDEBUG 0
 #endif
 #if YYDEBUG
 extern int libxlio_yydebug;
 #endif
 
-/* Tokens.  */
+/* Token kinds.  */
 #ifndef YYTOKENTYPE
-#define YYTOKENTYPE
-/* Put the tokens into the symbol table, so that GDB and other debuggers
-   know about them.  */
-enum yytokentype {
-    USE = 258,
-    TCP_CLIENT = 259,
-    TCP_SERVER = 260,
-    UDP_SENDER = 261,
-    UDP_RECEIVER = 262,
-    UDP_CONNECT = 263,
-    TCP = 264,
-    UDP = 265,
-    OS = 266,
-    XLIO = 267,
-    SDP = 268,
-    SA = 269,
-    INT = 270,
-    APP_ID = 271,
-    PROGRAM = 272,
-    USER_DEFINED_ID_STR = 273,
-    LOG = 274,
-    DEST = 275,
-    STDERR = 276,
-    SYSLOG = 277,
-    FILENAME = 278,
-    NAME = 279,
-    LEVEL = 280,
-    LINE = 281
+# define YYTOKENTYPE
+  enum yytokentype
+  {
+    YYEMPTY = -2,
+    YYEOF = 0,                     /* "end of file"  */
+    YYerror = 256,                 /* error  */
+    YYUNDEF = 257,                 /* "invalid token"  */
+    USE = 258,                     /* "use"  */
+    TCP_CLIENT = 259,              /* "tcp client"  */
+    TCP_SERVER = 260,              /* "tcp server"  */
+    UDP_SENDER = 261,              /* "udp sender"  */
+    UDP_RECEIVER = 262,            /* "udp receiver"  */
+    UDP_CONNECT = 263,             /* "udp connect"  */
+    TCP = 264,                     /* "tcp"  */
+    UDP = 265,                     /* "udp"  */
+    OS = 266,                      /* "os"  */
+    XLIO = 267,                    /* "xlio"  */
+    SDP = 268,                     /* "sdp"  */
+    SA = 269,                      /* "sa"  */
+    INT = 270,                     /* "integer value"  */
+    APP_ID = 271,                  /* "application id"  */
+    PROGRAM = 272,                 /* "program name"  */
+    USER_DEFINED_ID_STR = 273,     /* "userdefined id str"  */
+    LOG = 274,                     /* "log statement"  */
+    DEST = 275,                    /* "destination"  */
+    STDERR = 276,                  /* "ystderr"  */
+    SYSLOG = 277,                  /* "syslog"  */
+    FILENAME = 278,                /* "yfile"  */
+    NAME = 279,                    /* "a name"  */
+    LEVEL = 280,                   /* "min-level"  */
+    LINE = 281                     /* "new line"  */
+  };
+  typedef enum yytokentype yytoken_kind_t;
+#endif
+
+/* Value type.  */
+#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
+union YYSTYPE
+{
+#line 286 "src/core/util/config_parser.y"
+
+  int        ival;
+  char      *sval;
+
+#line 95 "third_party/legacy_config_parser/config_parser.h"
+
 };
+typedef union YYSTYPE YYSTYPE;
+# define YYSTYPE_IS_TRIVIAL 1
+# define YYSTYPE_IS_DECLARED 1
 #endif
-/* Tokens.  */
-#define USE                 258
-#define TCP_CLIENT          259
-#define TCP_SERVER          260
-#define UDP_SENDER          261
-#define UDP_RECEIVER        262
-#define UDP_CONNECT         263
-#define TCP                 264
-#define UDP                 265
-#define OS                  266
-#define XLIO                267
-#define SDP                 268
-#define SA                  269
-#define INT                 270
-#define APP_ID              271
-#define PROGRAM             272
-#define USER_DEFINED_ID_STR 273
-#define LOG                 274
-#define DEST                275
-#define STDERR              276
-#define SYSLOG              277
-#define FILENAME            278
-#define NAME                279
-#define LEVEL               280
-#define LINE                281
 
-#if !defined YYSTYPE && !defined YYSTYPE_IS_DECLARED
-typedef union YYSTYPE {
-    /* Line 2058 of yacc.c  */
-    /* Line 306 of config_parser.y */
-
-    int ival;
-    char *sval;
-
-    /* Line 2058 of yacc.c  */
-    /* Line 115 of config_parser.h */
-} YYSTYPE;
-#define YYSTYPE_IS_TRIVIAL  1
-#define yystype             YYSTYPE /* obsolescent; will be withdrawn */
-#define YYSTYPE_IS_DECLARED 1
-#endif
 
 extern YYSTYPE libxlio_yylval;
 
-#ifdef YYPARSE_PARAM
-#if defined __STDC__ || defined __cplusplus
-int libxlio_yyparse(void *YYPARSE_PARAM);
-#else
-int libxlio_yyparse();
-#endif
-#else /* ! YYPARSE_PARAM */
-#if defined __STDC__ || defined __cplusplus
-int libxlio_yyparse(void);
-#else
-int libxlio_yyparse();
-#endif
-#endif /* ! YYPARSE_PARAM */
 
-#endif /* !YY_CONFIG_PARSER_H_INCLUDED  */
+int libxlio_yyparse (void);
+
+
+#endif /* !YY_LIBXLIO_YY_THIRD_PARTY_LEGACY_CONFIG_PARSER_CONFIG_PARSER_H_INCLUDED  */
