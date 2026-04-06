@@ -234,7 +234,7 @@ extern "C" int xlio_socket_destroy(xlio_socket_t sock)
         grp->mark_socket_to_close(si);
     } else {
         // Detached socket flow.
-        g_p_fd_collection->clear_socket(si->get_fd());
+        g_p_fd_collection->clear_socket(si->get_fd(), si);
         si->prepare_to_close(true);
         si->clean_socket_obj();
     }
