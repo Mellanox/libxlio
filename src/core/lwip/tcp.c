@@ -46,6 +46,7 @@
 #include "core/lwip/tcp.h"
 #include "core/lwip/tcp_impl.h"
 
+#include <assert.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -99,7 +100,9 @@ u32_t lwip_tcp_nodelay_treshold = 0;
 static u32_t slow_tmr_interval;
 /* Incremented every coarse grained timer shot (typically every slow_tmr_interval ms). */
 u32_t tcp_ticks = 0;
-const u8_t tcp_backoff[13] = {1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7};
+
+static_assert(TCP_SYNMAXRTX <= TCP_MAXRTX, "TCP_SYNMAXRTX must not exceed TCP_MAXRTX");
+const u8_t tcp_backoff[TCP_MAXRTX] = {1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7};
 /* Times per slowtmr hits */
 const u8_t tcp_persist_backoff[7] = {3, 6, 12, 24, 48, 96, 120};
 
@@ -620,11 +623,11 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
             err = ERR_TIMEOUT;
             pcb_reset += (pcb->so_options & SOF_KEEPALIVE);
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: user timeout occurred\n"));
-        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx == TCP_SYNMAXRTX) {
+        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= TCP_SYNMAXRTX) {
             ++pcb_remove;
             err = ERR_TIMEOUT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max SYN retries reached\n"));
-        } else if (pcb->nrtx == TCP_MAXRTX) {
+        } else if (pcb->nrtx >= TCP_MAXRTX) {
             ++pcb_remove;
             err = ERR_ABRT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max DATA retries reached\n"));
@@ -635,7 +638,7 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                 pcb->persist_cnt++;
                 if (pcb->persist_cnt >= tcp_persist_backoff[pcb->persist_backoff - 1]) {
                     pcb->persist_cnt = 0;
-                    if (pcb->persist_backoff < sizeof(tcp_persist_backoff)) {
+                    if (pcb->persist_backoff < ARRAY_SIZE(tcp_persist_backoff)) {
                         pcb->persist_backoff++;
                     }
                     /* Use tcp_keepalive() instead of tcp_zero_window_probe() to probe for window
