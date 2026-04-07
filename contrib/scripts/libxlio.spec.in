@@ -166,6 +166,7 @@ fi
 %dir %{_pkgdocdir}
 %doc %{_pkgdocdir}/README
 %doc %{_pkgdocdir}/CHANGES
+%config(noreplace) %{_sysconfdir}/libxlio.conf
 %config(noreplace) %{_sysconfdir}/xlio_config_schema.json
 %config(noreplace) %{_sysconfdir}/libxlio_config.json
 %{_sbindir}/xliod
