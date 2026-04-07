@@ -1308,10 +1308,15 @@ mapping for some levels. Use string names to avoid confusion.
 > **Maps to:** `XLIO_REPORT_FILE`
 
 Output path for the tuning report.
-A '%d' in the path is replaced with the process ID.
-
+The first '%d' in the path is replaced with the process
+ID at library initialization time. Use '%d' in multi-process
+deployments (nginx, gunicorn) so each worker writes its own
+file. Post-fork children inherit the parent's substituted
+path, so use pre-fork worker models where each worker
+initializes the library independently.
+The default is suitable for most deployments.
 See [Tuning Report Reference](xlio_tuning_report_reference.md)
-for report interpretation and troubleshooting guidance.
+for field definitions and troubleshooting guidance.
 
 **Default:** `/tmp/xlio_report_%d.txt`
 
