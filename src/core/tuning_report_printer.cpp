@@ -6,8 +6,8 @@
 
 // NOTE: If you modify WARNING text, add/remove report fields,
 // change thresholds, or change profile defaults, update
-// docs/xlio_tuning_report_reference.md and run
-// tests/validate_tuning_report_reference.py to verify consistency.
+// docs/llm/xlio_tuning_report_guide.md and docs/xlio_tuning_report_reference.md
+// and run tests/validate_tuning_report_docs.py to verify consistency.
 // Adding a new top-level config namespace also requires doc updates.
 
 #ifdef HAVE_CONFIG_H
