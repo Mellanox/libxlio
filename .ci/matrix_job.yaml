@@ -513,7 +513,7 @@ steps:
     run: |
       python3 generate_docs.py
       python3 src/core/config/generate_mappings.py
-      python3 tests/validate_tuning_report_reference.py
+      python3 tests/validate_tuning_report_docs.py
 
 pipeline_start:
   run: |
