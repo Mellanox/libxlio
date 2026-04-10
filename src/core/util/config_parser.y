@@ -51,7 +51,7 @@ int __xlio_config_empty(void)
 /* define the address by 4 integers */
 static void __xlio_set_ipv4_addr(short a0, short a1, short a2, short a3)
 {
-	char buf[16];
+	char buf[32];
 	struct in_addr *p_ipv4 = NULL;
   
 	p_ipv4 = &(__xlio_address_port_rule->ipv4);
@@ -497,12 +497,12 @@ int __xlio_parse_config_file (const char *fileName) {
 	return(parse_err);
 }
 
-int __xlio_parse_config_line (char *line) {
+int __xlio_parse_config_line (const char *line) {
 	extern FILE * libxlio_yyin;
 	
 	__xlio_rule_push_head = 1;
 	
-	libxlio_yyin = fmemopen(line, strlen(line), "r");
+	libxlio_yyin = fmemopen((void *)line, strlen(line), "r");
 	
 	if (!libxlio_yyin) {
 		printf("libxlio Error: Fail to parse line:%s\n", line);
