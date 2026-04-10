@@ -19,9 +19,10 @@ SUBDIRS = infra netlink
 
 EXTRA_DIST = \
 	config/descriptor_providers/xlio_config_schema.json \
-	config/descriptor_providers/libxlio_config.json
+	config/descriptor_providers/libxlio_config.json \
+	util/libxlio.conf
 
-sysconf_DATA = config/descriptor_providers/xlio_config_schema.json config/descriptor_providers/libxlio_config.json
+sysconf_DATA = config/descriptor_providers/xlio_config_schema.json config/descriptor_providers/libxlio_config.json util/libxlio.conf
 otherincludedir = $(includedir)/mellanox
 otherinclude_HEADERS = \
 	xlio.h \
