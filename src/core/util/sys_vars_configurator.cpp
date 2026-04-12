@@ -1255,14 +1255,6 @@ void sys_var_configurator::configure_after_user_settings()
                     CONFIG_VAR_RING_MIGRATION_RATIO_TX.name, -1, CONFIG_VAR_TSO.name);
     }
 #ifdef DEFINED_UTLS
-    m_runtime_registry.set_value(
-        CONFIG_VAR_UTLS_HIGH_WMARK_DEK_CACHE_SIZE,
-        static_cast<int64_t>(std::max(m_sys_vars.utls_high_wmark_dek_cache_size, 0LU)),
-        change_reason::AutoCorrected, "Minimum 0");
-    m_runtime_registry.set_value(
-        CONFIG_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE,
-        static_cast<int64_t>(std::max(m_sys_vars.utls_low_wmark_dek_cache_size, 0LU)),
-        change_reason::AutoCorrected, "Minimum 0");
     if (m_sys_vars.utls_low_wmark_dek_cache_size >= m_sys_vars.utls_high_wmark_dek_cache_size) {
         m_runtime_registry.set_value(
             CONFIG_VAR_UTLS_LOW_WMARK_DEK_CACHE_SIZE,
