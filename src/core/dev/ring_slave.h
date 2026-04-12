@@ -272,7 +272,7 @@ public:
 
 #ifdef DEFINED_UTLS
     /* Call this method in an RX ring. */
-    rfs_rule *tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_tir *tir);
+    rfs_rule *tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_tir *tir) override;
 #endif /* DEFINED_UTLS */
 
     transport_type_t get_transport_type() const { return m_transport_type; }
