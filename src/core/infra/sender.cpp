@@ -6,7 +6,7 @@
 
 #include "core/infra/sender.h"
 
-neigh_send_data::neigh_send_data(iovec *iov, size_t sz, header *hdr, uint32_t mtu,
+neigh_send_data::neigh_send_data(const iovec *iov, size_t sz, header *hdr, uint32_t mtu,
                                  uint32_t packet_id)
     : m_header(hdr->copy())
     , m_mtu(mtu)

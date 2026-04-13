@@ -483,7 +483,7 @@ static ssize_t sendfile_helper(sockinfo *p_socket_object, int in_fd, __off64_t *
 
         /* fallback on read() approach */
         if (totSent == 0) {
-            char buf[sysconf(_SC_PAGE_SIZE)];
+            std::vector<char> buf(sysconf(_SC_PAGE_SIZE));
             ssize_t toRead, numRead, numSent = 0;
 
             if (s->get_sock_stats()) {
@@ -491,8 +491,8 @@ static ssize_t sendfile_helper(sockinfo *p_socket_object, int in_fd, __off64_t *
             }
 
             while (count > 0) {
-                toRead = min(sizeof(buf), count);
-                numRead = pread(in_fd, buf, toRead, cur_offset + totSent);
+                toRead = min(buf.size(), count);
+                numRead = pread(in_fd, buf.data(), toRead, cur_offset + totSent);
                 if (numRead <= 0) {
                     if (numRead < 0 && totSent == 0) {
                         totSent = -1;
@@ -500,7 +500,7 @@ static ssize_t sendfile_helper(sockinfo *p_socket_object, int in_fd, __off64_t *
                     break;
                 }
 
-                piov[0].iov_base = (void *)buf;
+                piov[0].iov_base = (void *)buf.data();
                 piov[0].iov_len = numRead;
 
                 numSent = p_socket_object->tx(tx_arg);
