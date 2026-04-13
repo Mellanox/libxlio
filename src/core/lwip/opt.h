@@ -134,6 +134,15 @@
 #endif
 
 /**
+ * TCP_RTO_MAX: Maximum retransmission timeout in milliseconds.
+ * Per RFC 6298 Section 2.5, the cap MUST be at least 60 seconds.
+ * Matches Linux kernel TCP_RTO_MAX (120*HZ = 120 seconds).
+ */
+#ifndef TCP_RTO_MAX
+#define TCP_RTO_MAX 120000
+#endif
+
+/**
  * TCP_QUEUE_OOSEQ==1: TCP will queue segments that arrive out of order.
  * Define to 0 if your device is low on memory.
  */

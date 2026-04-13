@@ -50,6 +50,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
+#endif
+
 tcp_tx_pbuf_alloc_fn external_tcp_tx_pbuf_alloc;
 tcp_tx_pbuf_free_fn external_tcp_tx_pbuf_free;
 tcp_rx_pbuf_free_fn external_tcp_rx_pbuf_free;
@@ -580,8 +584,7 @@ static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
     u32_t user_timeout_ticks = (pcb->user_timeout_ms + slow_tmr_interval - 1U) / slow_tmr_interval;
 
     return pcb->user_timeout_ms != 0 && pcb->ticks_since_data_sent > 0 &&
-        (u32_t)pcb->ticks_since_data_sent > user_timeout_ticks &&
-        (get_tcp_state(pcb) == ESTABLISHED || get_tcp_state(pcb) == SYN_SENT);
+        (u32_t)pcb->ticks_since_data_sent > user_timeout_ticks;
 }
 
 /**
@@ -620,11 +623,12 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
             err = ERR_TIMEOUT;
             pcb_reset += (pcb->so_options & SOF_KEEPALIVE);
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: user timeout occurred\n"));
-        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx == TCP_SYNMAXRTX) {
+        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= TCP_SYNMAXRTX &&
+                   pcb->user_timeout_ms == 0) {
             ++pcb_remove;
             err = ERR_TIMEOUT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max SYN retries reached\n"));
-        } else if (pcb->nrtx == TCP_MAXRTX) {
+        } else if (pcb->nrtx >= TCP_MAXRTX && pcb->user_timeout_ms == 0) {
             ++pcb_remove;
             err = ERR_ABRT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max DATA retries reached\n"));
@@ -635,7 +639,7 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                 pcb->persist_cnt++;
                 if (pcb->persist_cnt >= tcp_persist_backoff[pcb->persist_backoff - 1]) {
                     pcb->persist_cnt = 0;
-                    if (pcb->persist_backoff < sizeof(tcp_persist_backoff)) {
+                    if (pcb->persist_backoff < ARRAY_SIZE(tcp_persist_backoff)) {
                         pcb->persist_backoff++;
                     }
                     /* Use tcp_keepalive() instead of tcp_zero_window_probe() to probe for window
@@ -658,7 +662,14 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                     /* Double retransmission time-out unless we are trying to
                      * connect to somebody (i.e., we are in SYN_SENT). */
                     if (get_tcp_state(pcb) != SYN_SENT) {
-                        pcb->rto = ((pcb->sa >> 3) + pcb->sv) << tcp_backoff[pcb->nrtx];
+                        u8_t backoff_idx = pcb->nrtx;
+                        if (backoff_idx >= ARRAY_SIZE(tcp_backoff)) {
+                            backoff_idx = (u8_t)(ARRAY_SIZE(tcp_backoff) - 1);
+                        }
+                        int calc_rto = ((pcb->sa >> 3) + pcb->sv) << tcp_backoff[backoff_idx];
+                        int max_rto = TCP_RTO_MAX / (int)slow_tmr_interval;
+                        calc_rto = LWIP_MIN(calc_rto, max_rto);
+                        pcb->rto = (s16_t)LWIP_MIN(calc_rto, 0x7FFF);
                     }
 
                     /* Reset the retransmission timer. */
