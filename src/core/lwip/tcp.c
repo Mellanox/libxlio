@@ -577,7 +577,7 @@ err_t tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool
 
 static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
 {
-    u32_t user_timeout_ticks = (pcb->user_timeout_ms + slow_tmr_interval - 1U) / slow_tmr_interval;
+    u32_t user_timeout_ticks = tcp_ms_to_ticks(pcb->user_timeout_ms);
 
     return pcb->user_timeout_ms != 0 && pcb->ticks_since_data_sent > 0 &&
         (u32_t)pcb->ticks_since_data_sent > user_timeout_ticks &&
@@ -690,7 +690,7 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
             if (pcb->flags & TF_RXCLOSED) {
                 /* PCB was fully closed (either through close() or SHUT_RDWR):
                    normal FIN-WAIT timeout handling. */
-                if ((u32_t)(tcp_ticks - pcb->tmr) > TCP_FIN_WAIT_TIMEOUT / slow_tmr_interval) {
+                if ((u32_t)(tcp_ticks - pcb->tmr) > tcp_ms_to_ticks(TCP_FIN_WAIT_TIMEOUT)) {
                     ++pcb_remove;
                     err = ERR_ABRT;
                     LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: removing pcb stuck in FIN-WAIT-2\n"));
@@ -703,9 +703,9 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
             ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT))) {
 #if LWIP_TCP_KEEPALIVE
             if ((u32_t)(tcp_ticks - pcb->tmr) >
-                (pcb->keep_idle + (pcb->keep_cnt * pcb->keep_intvl)) / slow_tmr_interval)
+                tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt * pcb->keep_intvl))
 #else
-            if ((u32_t)(tcp_ticks - pcb->tmr) > (pcb->keep_idle + TCP_MAXIDLE) / slow_tmr_interval)
+            if ((u32_t)(tcp_ticks - pcb->tmr) > tcp_ms_to_ticks(pcb->keep_idle + TCP_MAXIDLE))
 #endif /* LWIP_TCP_KEEPALIVE */
             {
                 LWIP_DEBUGF_IP_ADDR(TCP_DEBUG,
@@ -718,11 +718,10 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
             }
 #if LWIP_TCP_KEEPALIVE
             else if ((u32_t)(tcp_ticks - pcb->tmr) >
-                     (pcb->keep_idle + pcb->keep_cnt_sent * pcb->keep_intvl) / slow_tmr_interval)
+                     tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt_sent * pcb->keep_intvl))
 #else
             else if ((u32_t)(tcp_ticks - pcb->tmr) >
-                     (pcb->keep_idle + pcb->keep_cnt_sent * TCP_KEEPINTVL_DEFAULT) /
-                         slow_tmr_interval)
+                     tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt_sent * TCP_KEEPINTVL_DEFAULT))
 #endif /* LWIP_TCP_KEEPALIVE */
             {
                 tcp_keepalive(pcb);
@@ -743,7 +742,7 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
 
         /* Check if this PCB has stayed too long in SYN-RCVD */
         if (get_tcp_state(pcb) == SYN_RCVD) {
-            if ((u32_t)(tcp_ticks - pcb->tmr) > TCP_SYN_RCVD_TIMEOUT / slow_tmr_interval) {
+            if ((u32_t)(tcp_ticks - pcb->tmr) > tcp_ms_to_ticks(TCP_SYN_RCVD_TIMEOUT)) {
                 ++pcb_remove;
                 err = ERR_ABRT;
                 LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: removing pcb stuck in SYN-RCVD\n"));
@@ -752,7 +751,7 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
 
         /* Check if this PCB has stayed too long in LAST-ACK */
         if (get_tcp_state(pcb) == LAST_ACK) {
-            if ((u32_t)(tcp_ticks - pcb->tmr) > 2 * TCP_MSL / slow_tmr_interval) {
+            if ((u32_t)(tcp_ticks - pcb->tmr) > tcp_ms_to_ticks(2 * TCP_MSL)) {
                 ++pcb_remove;
                 err = ERR_ABRT;
                 LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: removing pcb stuck in LAST-ACK\n"));
@@ -778,7 +777,7 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
         pcb_remove = 0;
 
         /* Check if this PCB has stayed long enough in TIME-WAIT */
-        if ((u32_t)(tcp_ticks - pcb->tmr) > 2 * TCP_MSL / slow_tmr_interval) {
+        if ((u32_t)(tcp_ticks - pcb->tmr) > tcp_ms_to_ticks(2 * TCP_MSL)) {
             ++pcb_remove;
             /* err = ERR_ABRT; */ /* Note: suppress warning 'err' is never read */
         }
