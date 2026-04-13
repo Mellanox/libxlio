@@ -662,8 +662,10 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                     /* Double retransmission time-out unless we are trying to
                      * connect to somebody (i.e., we are in SYN_SENT). */
                     if (get_tcp_state(pcb) != SYN_SENT) {
-                        u8_t backoff_idx =
-                            (u8_t)LWIP_MIN(pcb->nrtx, (u8_t)(ARRAY_SIZE(tcp_backoff) - 1));
+                        u8_t backoff_idx = pcb->nrtx;
+                        if (backoff_idx >= ARRAY_SIZE(tcp_backoff)) {
+                            backoff_idx = (u8_t)(ARRAY_SIZE(tcp_backoff) - 1);
+                        }
                         int calc_rto = ((pcb->sa >> 3) + pcb->sv) << tcp_backoff[backoff_idx];
                         int max_rto = TCP_RTO_MAX / (int)slow_tmr_interval;
                         calc_rto = LWIP_MIN(calc_rto, max_rto);
