@@ -78,11 +78,15 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define TX_MEDIUM_VIEW " %-3s %-3s %10u %10u %" PRIu64 " %8u %7u %29s %7u %" PRIu64 " %7u %7u\n"
 #define CYCLES_SEPARATOR                                                                           \
     "-------------------------------------------------------------------------------\n"
-#define FORMAT_STATS_32bit     "%-20s %u\n"
-#define FORMAT_STATS_s_32bit   "%-20s %d\n"
-#define FORMAT_STATS_64bit     "%-20s %" PRIu64 " %-3s\n"
-#define FORMAT_STATS_double    "%-20s %.1f\n"
-#define FORMAT_RING_PACKETS    "%-20s %zu / %zu [kilobytes/packets] %-3s\n"
+#define FORMAT_STATS_32bit   "%-20s %u\n"
+#define FORMAT_STATS_s_32bit "%-20s %d\n"
+#define FORMAT_STATS_64bit   "%-20s %" PRIu64 " %-3s\n"
+#define FORMAT_STATS_double  "%-20s %.1f\n"
+#define FORMAT_RING_PACKETS  "%-20s %zu / %zu [kilobytes/packets] %-3s\n"
+#define FORMAT_LRO_PACKETS                                                                         \
+    "%-20s %" PRIu64 " / %" PRIu64 " / %" PRIu64 " [avg-bytes/packets/%%total] %-3s\n"
+#define FORMAT_GRO_PACKETS                                                                         \
+    "%-20s %" PRIu64 " / %.1f / %" PRIu64 " [avg-bytes/avg-frags/%%total] %-3s\n"
 #define FORMAT_RING_STRIDES    "%-20s %zu / %zu / %zu [total/max-per-packet/packets-per-rwqe] %-3s\n"
 #define FORMAT_RING_INTERRUPT  "%-20s %zu / %zu [requests/received] %-3s\n"
 #define FORMAT_RING_MODERATION "%-20s %u / %u [frames/usec period] %-3s\n"
@@ -269,8 +273,21 @@ void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
     p_prev_stat->tls_counters.n_tls_rx_bytes =
         (p_curr_stat->tls_counters.n_tls_rx_bytes - p_prev_stat->tls_counters.n_tls_rx_bytes) /
         delay;
-    p_prev_stat->tls_counters.n_tls_rx_resync =
-        (p_curr_stat->tls_counters.n_tls_rx_resync - p_prev_stat->tls_counters.n_tls_rx_resync) /
+    p_prev_stat->tls_counters.n_tls_rx_resync_attempt =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_attempt -
+         p_prev_stat->tls_counters.n_tls_rx_resync_attempt) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_resync_success =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_success -
+         p_prev_stat->tls_counters.n_tls_rx_resync_success) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_resync_retry =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_retry -
+         p_prev_stat->tls_counters.n_tls_rx_resync_retry) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_resync_long =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_long -
+         p_prev_stat->tls_counters.n_tls_rx_resync_long) /
         delay;
 #endif /* DEFINED_UTLS */
 
@@ -427,6 +444,8 @@ void update_delta_cq_stat(cq_stats_t *p_curr_cq_stats, cq_stats_t *p_prev_cq_sta
         p_prev_cq_stats->n_rx_max_stirde_per_packet = p_curr_cq_stats->n_rx_max_stirde_per_packet;
         p_prev_cq_stats->n_rx_cqe_error =
             (p_curr_cq_stats->n_rx_cqe_error - p_prev_cq_stats->n_rx_cqe_error) / delay;
+        p_prev_cq_stats->n_rx_tls_resync =
+            (p_curr_cq_stats->n_rx_tls_resync - p_prev_cq_stats->n_rx_tls_resync) / delay;
     }
 }
 
@@ -589,19 +608,21 @@ void print_cq_stats(cq_instance_block_t *p_cq_inst_arr)
                    p_cq_stats->n_rx_packet_count /
                        static_cast<double>(p_cq_stats->n_rx_consumed_rwqe_count + 1U));
             if (p_cq_stats->n_rx_lro_packets) {
-                printf(FORMAT_RING_PACKETS,
-                       "Rx lro:", p_cq_stats->n_rx_lro_bytes / BYTES_TRAFFIC_UNIT,
-                       p_cq_stats->n_rx_lro_packets, post_fix);
+                printf(FORMAT_LRO_PACKETS,
+                       "Rx LRO:", p_cq_stats->n_rx_lro_bytes / p_cq_stats->n_rx_lro_packets,
+                       p_cq_stats->n_rx_lro_packets,
+                       (p_cq_stats->n_rx_lro_packets * 100U) / p_cq_stats->n_rx_packet_count,
+                       post_fix);
             }
             if (p_cq_stats->n_rx_gro_packets) {
-                printf(FORMAT_RING_PACKETS,
-                       "Rx GRO:", p_cq_stats->n_rx_gro_bytes / BYTES_TRAFFIC_UNIT,
-                       p_cq_stats->n_rx_gro_packets, post_fix);
-                printf(FORMAT_STATS_64bit, "Avg GRO packet size:",
-                       p_cq_stats->n_rx_gro_bytes / p_cq_stats->n_rx_gro_packets, post_fix);
                 printf(
-                    FORMAT_STATS_double, "GRO frags per packet:",
-                    static_cast<double>(p_cq_stats->n_rx_gro_frags) / p_cq_stats->n_rx_gro_packets);
+                    FORMAT_GRO_PACKETS,
+                    "Rx GRO:", p_cq_stats->n_rx_gro_bytes / p_cq_stats->n_rx_gro_packets,
+                    static_cast<double>(p_cq_stats->n_rx_gro_frags) / p_cq_stats->n_rx_gro_packets,
+                    (p_cq_stats->n_rx_gro_frags * 100U) / p_cq_stats->n_rx_packet_count, post_fix);
+            }
+            if (p_cq_stats->n_rx_tls_resync) {
+                printf("%-20s %u\n", "HW TLS RX Resync:", p_cq_stats->n_rx_tls_resync);
             }
         }
     }
