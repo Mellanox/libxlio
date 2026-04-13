@@ -7,6 +7,7 @@
 #ifndef FD_COLLECTION_H
 #define FD_COLLECTION_H
 
+#include <atomic>
 #include <stack>
 #include <unordered_map>
 
@@ -109,8 +110,17 @@ public:
      */
     int del_cq_channel_fd(int fd, bool b_cleanup = false);
 
-    void set_socket(int fd, sockinfo *si) { m_p_sockfd_map[fd] = si; }
-    void clear_socket(int fd) { m_p_sockfd_map[fd] = nullptr; }
+    void set_socket(int fd, sockinfo *si)
+    {
+        m_p_sockfd_map[fd].store(si, std::memory_order_release);
+    }
+
+    // Only clears the entry if it still points to `expected`, preventing a stale
+    // clear from wiping a new socket that reused the same fd on another thread.
+    void clear_socket(int fd, sockinfo *expected)
+    {
+        m_p_sockfd_map[fd].compare_exchange_strong(expected, nullptr, std::memory_order_acq_rel);
+    }
 
     /**
      * Call set_immediate_os_sample of the input fd.
@@ -165,7 +175,7 @@ public:
 private:
     template <typename cls> int del(int fd, bool b_cleanup, cls **map_type);
     template <typename cls> inline cls *get(int fd, cls **map_type);
-    int del_socket(int fd, sockinfo **map_type);
+    int del_socket(int fd);
     inline bool is_valid_fd(int fd);
 
     inline bool create_offloaded_sockets();
@@ -181,7 +191,7 @@ private:
 
 private:
     int m_n_fd_map_size;
-    sockinfo **m_p_sockfd_map;
+    std::atomic<sockinfo *> *m_p_sockfd_map;
     epfd_info **m_p_epfd_map;
     cq_channel_info **m_p_cq_channel_map;
 
@@ -225,7 +235,7 @@ inline void fd_collection::reuse_sockfd(int fd, sockinfo *p_sfd_api_obj)
 {
     lock();
     m_pending_to_remove_lst.erase(p_sfd_api_obj);
-    m_p_sockfd_map[fd] = p_sfd_api_obj;
+    m_p_sockfd_map[fd].store(p_sfd_api_obj, std::memory_order_release);
     --g_global_stat_static.n_pending_sockets;
     unlock();
 }
@@ -241,7 +251,13 @@ inline void fd_collection::destroy_sockfd(sockinfo *p_sfd_api_obj)
 
 inline sockinfo *fd_collection::get_sockfd(int fd)
 {
-    return get(fd, m_p_sockfd_map);
+    if (!is_valid_fd(fd)) {
+        return nullptr;
+    }
+    // acquire pairs with the release in set_socket/addsocket to guarantee
+    // cross-thread visibility (e.g. ring packet-processing calling get_sockfd
+    // for a socket registered on a different worker thread).
+    return m_p_sockfd_map[fd].load(std::memory_order_acquire);
 }
 
 inline epfd_info *fd_collection::get_epfd(int fd)
