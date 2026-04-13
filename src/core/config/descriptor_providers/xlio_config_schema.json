@@ -1528,7 +1528,7 @@
                             "type": "string",
                             "default": "/tmp/xlio_report_%d.txt",
                             "title": "Tuning report file path",
-                            "description": "Maps to XLIO_REPORT_FILE environment variable.\nOutput path for the tuning report.\nA single '%d' in the filename is replaced with the process\nID at library initialization time. Use '%d' in multi-process\ndeployments (nginx, gunicorn) so each worker writes its own\nfile. Post-fork children inherit the parent's substituted\npath, so use pre-fork worker models where each worker\ninitializes the library independently.\nThe default is suitable for most deployments.\nSee [Tuning Report Reference](xlio_tuning_report_reference.md)\nfor report interpretation and troubleshooting guidance."
+                            "description": "Maps to XLIO_REPORT_FILE environment variable.\nOutput path for the tuning report.\nA single '%d' in the filename is replaced with the process\nID at library initialization time. Use '%d' in multi-process\ndeployments (nginx, gunicorn) so each worker writes its own\nfile. Post-fork children inherit the parent's substituted\npath, so use pre-fork worker models where each worker\ninitializes the library independently.\nThe default is suitable for most deployments.\nSee [Tuning Report Reference](xlio_tuning_report_reference.md)\nfor field definitions and troubleshooting guidance."
                         }
                     },
                     "additionalProperties": false
