@@ -45,6 +45,10 @@ extern "C" {
 #define NULL ((void *)0)
 #endif
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
+#endif /* ARRAY_SIZE */
+
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 /* These macros should be calculated by the preprocessor and are used
    with compile-time constants only (so that there is no little-endian
