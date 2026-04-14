@@ -376,7 +376,7 @@ ssize_t sys_sendto(int sockfd, const void *buf, size_t len, int flags,
     nb = 0;
     do {
         n = sendto(sockfd, data, len, flags, dest_addr, addrlen);
-        if (n <= 0) {
+        if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
                 if (flags & MSG_DONTWAIT) {
                     break;
@@ -384,6 +384,9 @@ ssize_t sys_sendto(int sockfd, const void *buf, size_t len, int flags,
                 continue;
             }
             return -errno;
+        }
+        if (n == 0) {
+            break;
         }
         len -= n;
         data += n;
