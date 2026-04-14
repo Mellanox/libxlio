@@ -1760,15 +1760,25 @@ Maximum data queued for transmission before sender receives ACKs. Memory is allo
 
 **Tradeoffs:**
 
-- *Higher (2MB+):* Better throughput on high bandwidth-delay product networks. Application can
-  queue more data without blocking (fewer EAGAIN). Risk: higher memory per socket, bufferbloat
-  (increased latency as more data queued before flow control kicks in).
-- *Lower (64KB-256KB):* Smaller memory footprint (important with thousands of connections), faster
-  flow control feedback, better latency. Risk: may limit throughput on high-latency networks,
-  more frequent EAGAIN on non-blocking sockets.
+- *Higher (2MB+):* Better throughput on high bandwidth-delay product
+  networks. Fewer EAGAIN on non-blocking sockets. Risk: higher memory
+  per socket, bufferbloat, and Send Queue exhaustion at high connection
+  counts (see below).
+- *Lower (64KB-256KB):* Smaller memory footprint, faster flow control
+  feedback, better latency. Risk: may limit throughput on high-latency
+  networks, more frequent EAGAIN on non-blocking sockets.
 
-**When to change:** Increase for bulk transfers over high-latency links. Decrease for latency-
-sensitive apps or high connection counts. Default 1MB suits most datacenter and LAN environments.
+**Send Queue sizing constraint:** With per-interface ring allocation
+(nginx profile), all connections on a worker share one Send Queue.
+Larger buffers let each connection post more Work Queue Elements
+simultaneously. At high connection counts the aggregate demand can
+exceed the hardware Send Queue capacity, causing TX drops
+(`ring_tx_dropped_wqes` in the tuning report). Reduce wmem until
+drops reach zero.
+
+**When to change:** Increase for bulk transfers over high-latency
+links. Decrease for high connection counts or latency-sensitive apps.
+Default 1MB suits most datacenter and LAN environments.
 
 **Override:** Per-socket via setsockopt(SO_SNDBUF). XLIO doubles the
 requested value (matching Linux kernel behavior), but counts only
@@ -1776,7 +1786,9 @@ payload bytes (kernel includes metadata overhead). Ultra API ignores
 this buffer.
 
 **Auto-modified:** set to 2MB by the nginx and
-nginx_dpu profiles ([`profiles.spec`](#profilesspec)).
+nginx_dpu profiles ([`profiles.spec`](#profilesspec)). At 2MB the Send
+Queue saturates at ~512 concurrent senders per ring — override for
+high connection counts.
 
 **Default:** `1MB`
 
