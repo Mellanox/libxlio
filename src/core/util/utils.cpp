@@ -1268,7 +1268,7 @@ int validate_lro(int if_index)
     int ret = -1;
     int fd = -1;
     struct ifreq req;
-    struct ethtool_value eval;
+    struct ethtool_value eval = {};
 
     fd = SYSCALL(socket, AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) {
