@@ -177,6 +177,7 @@ void hw_queue_rx::release_rx_buffers()
     hwqrx_logdbg("draining cq_mgr_rx %p (last_posted_rx_wr_id = %lu)", m_p_cq_mgr_rx,
                  m_last_posted_rx_wr_id);
     uintptr_t last_polled_rx_wr_id = 0;
+    errno = 0;
     while (m_p_cq_mgr_rx && last_polled_rx_wr_id != m_last_posted_rx_wr_id && errno != EIO &&
            !is_rq_empty() && !m_p_ib_ctx_handler->is_removed()) {
 
