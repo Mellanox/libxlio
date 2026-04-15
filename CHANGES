@@ -1,3 +1,12 @@
+Version 3.70.2-1:
+Date + Time 2026-04-15
+=============================================================
+Fixed:
+	- RM #4896482 Switch epfd lock from mutex to spinlock
+	- RM #4934380 Fix configuration reference and schema documentation accuracy
+	- RM #4961328 Fix netlink ENOBUFS by raising socket buffer sizes
+	- RM #4963693 Restore default DNS-to-OS offloading rule in package
+
 Version 3.70.1-1:
 Date + Time 2026-03-17
 =============================================================
