@@ -211,7 +211,7 @@ extern "C" int xlio_socket_create(const struct xlio_socket_attr *attr, xlio_sock
         errno = ENOMEM;
         return -1;
     }
-    si->set_xlio_socket(attr);
+    si->set_xlio_socket(attr, true /* Allow app callbacks */);
 
     poll_group *grp = reinterpret_cast<poll_group *>(attr->group);
     grp->add_socket(si);
