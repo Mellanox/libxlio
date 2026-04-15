@@ -1579,37 +1579,41 @@ void tcp_rst(u32_t seqno, u32_t ackno, u16_t local_port, u16_t remote_port, stru
  */
 void tcp_rexmit_rto(struct tcp_pcb *pcb)
 {
+    struct tcp_seg *a, *b, **tail;
+
     if (pcb->unacked == NULL) {
         return;
     }
 
-    if (pcb->unsent != NULL && TCP_SEQ_GT(pcb->unacked->seqno, pcb->unsent->seqno)) {
-        // Move fast-retransmitted segments to unacked - RTO after fast retransmission
-        struct tcp_seg *rexmit_start = pcb->unsent;
-        struct tcp_seg *rexmit_end = pcb->unsent;
-        while (rexmit_end->next != NULL &&
-               TCP_SEQ_GT(pcb->unacked->seqno, rexmit_end->next->seqno)) {
-            rexmit_end = rexmit_end->next;
-        }
+    /* Sorted merge of unacked and unsent into a single unsent queue.
+     * Both queues are individually sorted by seqno. A simple prepend of
+     * unacked before unsent is insufficient because partial fast-retransmit
+     * with segment splitting can interleave seqno ranges between the queues.
+     */
+    a = pcb->unacked;
+    b = pcb->unsent;
+    tail = &pcb->unsent;
 
-        pcb->unsent = rexmit_end->next;
-        if (pcb->unsent == NULL) {
-            pcb->last_unsent = NULL;
+    while (a != NULL && b != NULL) {
+        if (TCP_SEQ_LEQ(a->seqno, b->seqno)) {
+            *tail = a;
+            a = a->next;
+        } else {
+            *tail = b;
+            b = b->next;
         }
-
-        rexmit_end->next = pcb->unacked;
-        pcb->unacked = rexmit_start;
+        tail = &((*tail)->next);
     }
+    *tail = (a != NULL) ? a : b;
 
-    /* Move all unacked segments to the head of the unsent queue */
-    if (pcb->unsent) {
-        pcb->last_unacked->next = pcb->unsent;
-    } else {
-        /* If there are no unsent segments, update last_unsent to the last unacked */
+    /* Update last_unsent to the tail with the highest seqno. */
+    if (pcb->last_unsent == NULL) {
+        pcb->last_unsent = pcb->last_unacked;
+    } else if (pcb->last_unacked != NULL &&
+               TCP_SEQ_GT(pcb->last_unacked->seqno, pcb->last_unsent->seqno)) {
         pcb->last_unsent = pcb->last_unacked;
     }
-    /* unsent queue is the concatenated queue (of unacked, unsent) */
-    pcb->unsent = pcb->unacked;
+
     /* unacked queue is now empty */
     pcb->unacked = NULL;
     pcb->last_unacked = NULL;
