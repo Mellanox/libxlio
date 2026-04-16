@@ -40,9 +40,7 @@ runs_on_dockers:
       uri: '$arch/$name/release',
       build_args: '--no-cache --target release',
       arch: 'x86_64',
-      tag: '20260112',
-      runAsUser: '6213',
-      runAsGroup: '101'
+      tag: '20260112'
     }
   - {
      file: '.ci/dockerfiles/Dockerfile.rhel8.6',
@@ -62,9 +60,10 @@ steps:
     containerSelector:
       - "{name: 'rhel8.6'}"
     run: |
-      git clone git@github.com:Mellanox/libdpcp.git libdpcp
+      chown -R swx-jenkins "$WORKSPACE"
+      sudo -u swx-jenkins git clone git@github.com:Mellanox/libdpcp.git libdpcp
       cd libdpcp
-      ./autogen.sh && ./configure --prefix=/usr && sudo make install
+      ./autogen.sh && ./configure --prefix=/usr && make install
 
   - name: Release
     parallel: false
@@ -72,15 +71,15 @@ steps:
       - "{name: 'rhel8.6'}"
     run: |
       if ${do_dr_build}; then
-        git checkout tags/${release_tag}
+        sudo -u swx-jenkins git checkout tags/${release_tag}
       fi
-      .ci/do_release.sh
+      sudo -E -u swx-jenkins env HOME=/var/home/swx-jenkins .ci/do_release.sh
     archiveArtifacts: "**/build_pkg.log,**/packages/*.rpm"
 
   - name: Antivirus
     enable: ${do_antivirus}
     run: |
-      env WORKSPACE=$PWD .ci/antivirus.sh
+      sudo -E -u swx-jenkins env HOME=/var/home/swx-jenkins WORKSPACE=$PWD .ci/antivirus.sh
     archiveArtifacts: 'logs/'
 
   - name: Blackduck
