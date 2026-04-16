@@ -679,9 +679,15 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                                 ("tcp_slowtmr: cwnd %" U16_F " ssthresh %" U16_F "\n", pcb->cwnd,
                                  pcb->ssthresh));
 
-                    /* The following needs to be called AFTER cwnd is set to one
-                       mss - STJ */
+                    /* The following needs to be called AFTER cwnd is set to one mss */
                     tcp_rexmit_rto(pcb);
+                } else if (pcb->unacked == NULL && pcb->rtime != -1 && pcb->unsent != NULL) {
+                    /* Retry tcp_output() when unsent data is stalled with an empty unacked queue.
+                     * This happens after fast retransmit empties unacked and tcp_output() fails
+                     * to send (e.g. segment split blocked by pbuf ref > 1). Without unacked
+                     * segments, the RTO above cannot fire and TCP progress can stop.
+                     */
+                    tcp_output(pcb);
                 }
             }
         }
