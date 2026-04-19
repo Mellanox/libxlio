@@ -392,7 +392,12 @@ void sockinfo_tcp::rx_add_ring_cb(ring *p_ring)
     sockinfo::rx_add_ring_cb(p_ring);
 }
 
-void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
+bool sockinfo_tcp::xlio_app_callbacks_allowed() const
+{
+    return is_xlio_socket() && m_p_group && m_xlio_app_callbacks_allowed;
+}
+
+void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr, bool allow_app_callbacks)
 {
     if (is_shadow_socket_present() && m_rx_epfd != -1) {
         // XLIO Socket API doesn't use per socket epfd
@@ -422,6 +427,7 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
     tcp_acked(&m_pcb, nullptr);
     set_blocking(false);
     m_is_xlio_socket = true;
+    m_xlio_app_callbacks_allowed = allow_app_callbacks;
 }
 
 void sockinfo_tcp::set_entity_context(entity_context *ctx)
@@ -612,7 +618,7 @@ int sockinfo_tcp::attach_xlio_group(poll_group *group)
 
     // TODO reinitialize lwip callbacks
 
-    set_xlio_socket(&attr);
+    set_xlio_socket(&attr, true /* Allow app callbacks */);
     group->add_socket(this);
 
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
@@ -656,7 +662,9 @@ void sockinfo_tcp::add_tx_ring_to_group()
 
 void sockinfo_tcp::xlio_socket_event(int event, int value)
 {
-    if (is_xlio_socket()) {
+    /* Before accept_cb on accepted children, suppress app events (incl. ERROR): see
+     * m_xlio_app_callbacks_allowed. */
+    if (xlio_app_callbacks_allowed()) {
         /* poll_group::m_socket_event_cb must be always set. */
         m_p_group->m_socket_event_cb(reinterpret_cast<xlio_socket_t>(this), m_xlio_socket_userdata,
                                      event, value);
@@ -685,6 +693,10 @@ err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struc
     tcp_recved(pcb, p->tot_len, true);
 
     if (conn->m_p_group->m_socket_rx_cb) {
+        if (!conn->xlio_app_callbacks_allowed()) {
+            pbuf_free(p);
+            return ERR_OK;
+        }
         struct pbuf *ptmp = p;
 
         if (unlikely(conn->m_p_socket_stats)) {
@@ -3511,7 +3523,7 @@ sockinfo_tcp *sockinfo_tcp::accept_clone()
             .group = reinterpret_cast<xlio_poll_group_t>(m_p_group),
             .userdata_sq = 0,
         };
-        si->set_xlio_socket(&attr);
+        si->set_xlio_socket(&attr, false /* until accept_cb is called */);
         m_p_group->add_socket(si);
     }
 
@@ -3650,6 +3662,9 @@ bool sockinfo_tcp::wait_for_listen_rss_children_ready()
 void sockinfo_tcp::accept_connection_xlio_socket(sockinfo_tcp *new_sock)
 {
     remove_received_syn_socket(new_sock);
+    // Set this before making the callback, so user can call xlio_socket_attach_group(),
+    // which calls sockinfo_tcp::attach_xlio_group(), from within the callback.
+    new_sock->m_xlio_app_callbacks_allowed = true;
     m_p_group->m_socket_accept_cb(reinterpret_cast<xlio_socket_t>(new_sock),
                                   reinterpret_cast<xlio_socket_t>(this), m_xlio_socket_userdata);
 }
@@ -5790,7 +5805,8 @@ void sockinfo_tcp::tcp_express_zc_callback(mem_buf_desc_t *p_desc)
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(p_desc->tx.zc.ctx);
     const uintptr_t opaque_op = reinterpret_cast<uintptr_t>(p_desc->lwip_pbuf.desc.opaque);
 
-    if (opaque_op && si->m_p_group && si->m_p_group->m_socket_comp_cb) {
+    if (opaque_op && si->m_p_group && si->m_p_group->m_socket_comp_cb &&
+        si->xlio_app_callbacks_allowed()) {
         si->m_p_group->m_socket_comp_cb(reinterpret_cast<xlio_socket_t>(si),
                                         si->m_xlio_socket_userdata, opaque_op);
     }

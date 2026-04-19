@@ -391,7 +391,8 @@ public:
     int tcp_tx_express_inline(const struct iovec *iov, unsigned iov_len, unsigned flags);
     void flush();
     void make_dirty();
-    void set_xlio_socket(const struct xlio_socket_attr *attr);
+    // Sets XLIO socket attributes and status of application callbacks gating
+    void set_xlio_socket(const struct xlio_socket_attr *attr, bool allow_app_callbacks);
     int update_xlio_socket(unsigned flags, uintptr_t userdata_sq);
     void add_tx_ring_to_group();
     int detach_xlio_group();
@@ -421,6 +422,9 @@ private:
     bool prepare_listen_to_close();
     void remove_received_syn_socket(sockinfo_tcp *accepted);
     void accept_connection_xlio_socket(sockinfo_tcp *new_sock);
+    // Returns true if application is aware of this socket (i.e. was created or accepted by the
+    // application).
+    bool xlio_app_callbacks_allowed() const;
 
     // Builds rfs key
     static void create_flow_tuple_key_from_pcb(flow_tuple &key, struct tcp_pcb *pcb);
@@ -613,10 +617,12 @@ private:
     std::atomic<int32_t> m_snd_buf;
     uint32_t m_snd_buf_max;
     sockinfo_tcp *m_parent;
+
     // received packet source (true if its from internal thread)
     bool m_b_incoming;
-    bool m_b_attached;
+    bool m_b_attached; // For socket reuse
     bool m_timer_registered = false;
+
     /* connection state machine */
     int m_conn_timeout;
     /* RCVBUF acconting */
@@ -670,6 +676,10 @@ private:
     bool m_b_xlio_socket_dirty = false;
     uintptr_t m_xlio_socket_userdata = 0;
     rfs_rule *m_p_rule_extracted = nullptr;
+
+    // When false, poll-group event/rx/comp callbacks are suppressed (accepted child before
+    // accept_cb).
+    bool m_xlio_app_callbacks_allowed = false;
 
     mem_buf_desc_t *m_store = nullptr;
     uint32_t m_store_offset = 0;
