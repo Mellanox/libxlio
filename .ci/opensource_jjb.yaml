@@ -183,6 +183,49 @@
                 browser-url: "{jjb_git}"
         script-path: ".ci/Jenkinsfile"
 
+- job-template:
+    name: "{jjb_proj}-chaos"
+    project-type: pipeline
+    folder: "{jjb_folder}"
+    properties:
+        - github:
+             url: "https://github.com/Mellanox/libxlio"
+        - build-discarder:
+            days-to-keep: 50
+            num-to-keep: 10
+        - inject:
+            keep-system-variables: true
+            properties-content: |
+              jjb_proj={jjb_proj}-chaos
+    description: Do NOT edit this job through the Web GUI !
+    concurrent: true
+    parameters:
+        - string:
+            name: "sha1"
+            default: "vNext"
+            description: "Branch or commit to run chaos testing on"
+        - string:
+            name: "mail_to"
+            default: "c6dabe6c.NVIDIA.onmicrosoft.com@amer.teams.ms"
+            description: "Mail for chaos test results"
+        - string:
+            name: "conf_file"
+            default: ".ci/pipeline/chaos_matrix_job.yaml"
+            description: "Chaos launcher config file. Do not change it"
+    triggers:
+        - timed: "0 2 * * 6 % mail_to=c6dabe6c.NVIDIA.onmicrosoft.com@amer.teams.ms"
+    pipeline-scm:
+        scm:
+            - git:
+                url: "{jjb_git}"
+                credentials-id: 'svc-nbu-swx-media_ssh_key'
+                branches: ['$sha1']
+                shallow-clone: false
+                refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/* +refs/tags/*:refs/remotes/origin/tags/*"
+                browser: githubweb
+                browser-url: "{jjb_git}"
+        script-path: ".ci/Jenkinsfile"
+
 - project:
     name: LibXLIO-opensource
     jjb_email: 'nwolfer@nvidia.com'
@@ -193,3 +236,4 @@
     jobs:
         - "{jjb_proj}"
         - "{jjb_proj}-ultra-api"
+        - "{jjb_proj}-chaos"

@@ -1,0 +1,136 @@
+---
+job: LIBXLIO-chaos
+
+registry_host: nbu-harbor.gtm.nvidia.com
+registry_path: /rivermax
+registry_auth: rivermax_harbor_credentials
+
+failFast: false
+timeout_minutes: 120
+
+kubernetes:
+  cloud: il-ipp-blossom-prod
+  namespace: swx-media
+  limits: '{memory: 256Mi, cpu: 100m}'
+  requests: '{memory: 256Mi, cpu: 100m}'
+  arch_table:
+    x86_64:
+      nodeSelector: 'kubernetes.io/arch=amd64'
+      jnlpImage: 'nbu-harbor.gtm.nvidia.com/toolbox/c3po-jnlp:latest'
+
+runs_on_dockers:
+  - { name: "ubuntu24.04", url: '${registry_host}/swx-infra/media/x86_64/base/ubuntu:24.04', arch: 'x86_64'}
+
+env:
+  MAIL_FROM: jenkins@nvidia.com
+  CHAOS_RESULTS_DIR: '/mnt/pvc/chaos_results'
+
+pvc_volumes:
+  - {claimName: swx-media-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+steps:
+  - name: Run Linux Build
+    shell: action
+    module: groovy
+    run: |
+      // Build step_name -> do_<param> map from matrix_job.yaml.
+      def stepToParam = [:]
+      readYaml(file: '.ci/matrix_job.yaml').steps.each { step ->
+        def m = (step.enable ?: '') =~ /\$\{(do_\w+)\}/
+        if (step.name && m) { stepToParam[step.name] = m[0][1] }
+      }
+
+      // Build set of steps that have chaos patches.
+      chaosSteps = [] as Set
+      sh(script: '.ci/scripts/chaos_config_parse.sh', returnStdout: true).trim().readLines().each { line ->
+        def parts = line.split('\t', 2)
+        if (parts.length == 2) { chaosSteps.add(parts[1]) }
+      }
+
+      // Enable do_* for each step with a chaos patch, do_build if step with patch depends on it.
+      def buildDependents = ['Service', 'Test', 'Test (Worker thread mode)', 'Gtest'] as Set
+      def enabledParams = chaosSteps.collect { stepToParam[it] } as Set
+      if (chaosSteps.any { buildDependents.contains(it) }) { enabledParams.add('do_build') }
+      def doParams = (stepToParam.values() as Set).collect { param ->
+        booleanParam(name: param, value: enabledParams.contains(param))
+      }
+
+      def build = build job: 'libxlio/LibXLIO-opensource',
+        parameters: [
+          string(name: 'sha1', value: "${sha1}"),
+          booleanParam(name: 'build_dockers', value: false),
+          booleanParam(name: 'do_chaos', value: true),
+        ] + doParams,
+        propagate: false
+
+      env.LINUX_BUILD_URL = build.absoluteUrl
+      env.LINUX_BUILD_NUMBER = build.number
+      env.LINUX_BUILD_RES = build.result
+
+  # Compare which steps failed in the main build vs which are expected to fail per chaos_config.
+  - name: Check Results and Send Email
+    shell: action
+    module: groovy
+    run: |
+      def results_dir = "${env.CHAOS_RESULTS_DIR}/${env.LINUX_BUILD_NUMBER}"
+      def chaos_ran = (sh(script: "[ -d '${results_dir}' ]", returnStatus: true) == 0)
+      def actual_failures = [] as Set
+      if (chaos_ran) {
+        def content = sh(script: "find ${results_dir} -name '*.txt' -exec cat {} + 2>/dev/null || true", returnStdout: true).trim()
+        if (content) {
+          actual_failures.addAll(content.split('\n').findAll { it })
+        }
+        sh "rm -rf ${results_dir}"
+      }
+
+      def warning = ''
+      def status
+      if (!chaos_ran) {
+        warning = "⚠ WARNING: chaos steps never ran in main CI! check main CI logs\n     Main CI status: ${env.LINUX_BUILD_RES}"
+        status = 'UNSTABLE'
+      } else if (env.LINUX_BUILD_RES != 'SUCCESS' && env.LINUX_BUILD_RES != 'FAILURE') {
+        warning = "⚠ WARNING: main CI ended with status ${env.LINUX_BUILD_RES} - RESULTS MAY BE INCORRECT"
+        status = 'UNSTABLE'
+      } else {
+        status = 'SUCCESS'
+      }
+      if (chaos_ran && !(chaosSteps - actual_failures).isEmpty()) { status = 'FAILURE' }
+
+      def step_results = chaos_ran ? chaosSteps.collect { step ->
+        def failed = actual_failures.contains(step)
+        [ name: step,
+          icon: failed ? "✓" : "✗",
+          icon_color: failed ? '#28a745' : '#dc3545',
+          status: failed ? "FAILED as expected" : "NOT FAILED (expected to fail)" ]
+      } : []
+
+      def console_output = step_results.collect { "${it.name} - ${it.icon} ${it.status}" }.join('\n    ')
+      echo """
+          ========================================
+          CHAOS TEST RESULTS
+          ========================================
+          Status: ${status}
+          Main CI Build: ${env.LINUX_BUILD_URL}
+          ${console_output}
+          ${warning}
+          ========================================"""
+
+      if (params.mail_to && status != 'SUCCESS') {
+        mail from: env.MAIL_FROM,
+        to: params.mail_to,
+        subject: "LibXLIO CI Chaos Test - $status",
+        mimeType: 'text/html',
+        body: """<b>Status: <span style='color: ${status == "SUCCESS" ? '#28a745' : '#dc3545'};'>${status}</span></b><br>
+            <b>Chaos Build:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a><br>
+            <b>Main CI Build:</b> <a href="${env.LINUX_BUILD_URL}">${env.LINUX_BUILD_URL}</a><br><br>
+            ${step_results.collect { "<b>${it.name}</b> - <span style='color: ${it.icon_color};'>${it.icon}</span> ${it.status}<br>" }.join('')}
+            ${warning ? "<br><b>" + warning + "</b>" : ""}"""
+      }
+
+      if (status == 'FAILURE') {
+        error("Chaos test failed - there were unexpected passes")
+      } else if (status == 'UNSTABLE') {
+        catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
+          error(warning ?: "Chaos test unstable")
+        }
+      }
