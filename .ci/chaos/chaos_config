@@ -1,2 +1,4 @@
 # Chaos testing config: maps each patch file to the CI steps it is expected to break.
 # Format: patch_file: StepName1, StepName2, ...
+
+hw_queue_tx.diff: Style, Copyrights

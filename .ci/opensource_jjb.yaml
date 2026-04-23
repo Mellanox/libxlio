@@ -229,7 +229,7 @@
             default: ".ci/pipeline/chaos_matrix_job.yaml"
             description: "Chaos launcher config file. Do not change it"
     triggers:
-        - timed: "0 2 * * 6 % mail_to=c6dabe6c.NVIDIA.onmicrosoft.com@amer.teams.ms"
+        - timed: "0 2 * * 6"
     pipeline-scm:
         scm:
             - git:
