@@ -36,6 +36,9 @@ volumes:
   # User profile for release
   - {mountPath: /var/home/swx-jenkins, hostPath: /labhome/swx-jenkins}
 
+pvc_volumes:
+  - {claimName: swx-media-pvc, mountPath: /mnt/pvc, readOnly: false}
+
 runs_on_dockers:
 # build
   - {file: '.ci/dockerfiles/Dockerfile.ubuntu22.04', name: 'ub22.04-x86_64', uri: 'xlio/$arch/$name/build', tag: '20251202', category: 'base', arch: 'x86_64', build_args: '--build-arg ARCH=x86_64 --no-cache --target build'}
@@ -194,6 +197,8 @@ matrix:
 
 env:
   jenkins_opt_artifacts: 'none'
+  CHAOS_RESULTS_DIR: '/mnt/pvc/chaos_results'
+  CHAOS_WRAPPER: '.ci/scripts/run_chaos_step.sh'
 
 steps:
   - name: Setup
@@ -487,6 +492,34 @@ steps:
       ./.ci/artifacts.sh
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
+
+  - name: Verify Chaos Patches
+    containerSelector:
+      - "{name: 'toolbox', category: 'tool', variant: 1}"
+    run: |
+      patches_dir=.ci/chaos/patches
+      errors=0
+
+      # Check that every patch referenced in config exists under patches_dir.
+      while IFS=$'\t' read -r patch _step; do
+        if [ ! -f "$patches_dir/$patch" ]; then
+          echo "ERROR: chaos_config references missing file: $patches_dir/$patch"
+          errors=$(( errors + 1 ))
+        fi
+      done < <(.ci/scripts/chaos_config_parse.sh)
+
+      # Check that every .diff applies cleanly.
+      for patch_file in "$patches_dir"/*.diff; do
+        [ -f "$patch_file" ] || continue
+        if ! git apply --check --reject "$patch_file"; then
+          echo "ERROR: patch does not apply cleanly: $patch_file"
+          errors=$(( errors + 1 ))
+        fi
+      done
+
+      [ "$errors" -eq 0 ] || { echo "FAILED: $errors error(s) in chaos patches verification."; exit 1; }
+    parallel: false
+    archiveArtifacts-onfail: '**/*.rej'
 
   - name: Artifacts
     enable: ${do_artifact}
