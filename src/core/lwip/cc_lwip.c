@@ -87,7 +87,13 @@ static void lwip_ack_received(struct tcp_pcb *pcb, uint16_t type)
             }
             LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_receive: slow start cwnd %" U32_F "\n", pcb->cwnd));
         } else {
-            u32_t new_cwnd = (pcb->cwnd + ((u32_t)pcb->mss * (u32_t)pcb->mss) / pcb->cwnd);
+            u32_t increment = ((u32_t)pcb->mss * (u32_t)pcb->mss) / pcb->cwnd;
+
+            if (increment == 0) {
+                increment = 1;
+            }
+
+            u32_t new_cwnd = pcb->cwnd + increment;
             if (new_cwnd > pcb->cwnd) {
                 pcb->cwnd = new_cwnd;
             }
