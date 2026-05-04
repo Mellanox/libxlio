@@ -579,13 +579,12 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             pcb->mss = LWIP_MIN(pcb->mss, tcp_send_mss(pcb));
 #endif /* TCP_CALCULATE_EFF_SEND_MSS */
 
-            /* Set ssthresh again after changing pcb->mss (already set in tcp_connect
-             * but for the default value of pcb->mss) */
-            pcb->ssthresh = pcb->mss * 10;
+            /* Recalculate after tcp_parseopt/tcp_send_mss may have changed pcb->mss. */
+            pcb->ssthresh = tcp_calc_initial_ssthresh();
 #if TCP_CC_ALGO_MOD
             cc_conn_init(pcb);
 #else
-            pcb->cwnd = ((pcb->cwnd == 1) ? (pcb->mss * 2) : pcb->mss);
+            pcb->cwnd = tcp_calc_initial_cwnd(pcb->mss);
 #endif
             rseg = pcb->unacked;
             pcb->unacked = rseg->next;
@@ -653,7 +652,9 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
                 pcb->cwnd = old_cwnd;
                 cc_conn_init(pcb);
 #else
-                pcb->cwnd = ((old_cwnd == 1) ? (pcb->mss * 2) : pcb->mss);
+                LWIP_UNUSED_ARG(old_cwnd);
+                pcb->cwnd = tcp_calc_initial_cwnd(pcb->mss);
+                pcb->ssthresh = tcp_calc_initial_ssthresh();
 #endif
                 if (in_data->recv_flags & TF_GOT_FIN) {
                     tcp_ack_now(pcb);
@@ -1127,8 +1128,9 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                 cc_ack_received(pcb, CC_ACK);
 #else
                 if (pcb->cwnd < pcb->ssthresh) {
-                    if ((u32_t)(pcb->cwnd + pcb->mss) > pcb->cwnd) {
-                        pcb->cwnd += pcb->mss;
+                    u32_t increase = tcp_calc_slow_start_increment(pcb->acked, pcb->mss);
+                    if ((u32_t)(pcb->cwnd + increase) > pcb->cwnd) {
+                        pcb->cwnd += increase;
                     }
                     LWIP_DEBUGF(TCP_CWND_DEBUG,
                                 ("tcp_receive: slow start cwnd %" U32_F "\n", pcb->cwnd));

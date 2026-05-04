@@ -100,6 +100,7 @@ gtest_SOURCES = \
 	\
 	tcp/tcp_accept.cc \
 	tcp/tcp_bind.cc \
+	tcp/tcp_cc.cc \
 	tcp/tcp_connect.cc \
 	tcp/tcp_connect_nb.cc \
 	tcp/tcp_event.cc \

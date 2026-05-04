@@ -119,7 +119,10 @@ static void cubic_ack_received(struct tcp_pcb *pcb, uint16_t type)
         /* Use the logic in NewReno ack_received() for slow start. */
         if (pcb->cwnd <= pcb->ssthresh /*||
 		    cubic_data->min_rtt_ticks == 0*/) {
-            pcb->cwnd += pcb->mss;
+            u32_t increase = tcp_calc_slow_start_increment(pcb->acked, pcb->mss);
+            if ((u32_t)(pcb->cwnd + increase) > pcb->cwnd) {
+                pcb->cwnd += increase;
+            }
         } else if (cubic_data->min_rtt_ticks > 0) {
             ticks_since_cong = ticks - cubic_data->t_last_cong;
 
@@ -251,8 +254,8 @@ static void cubic_conn_init(struct tcp_pcb *pcb)
 {
     struct cubic *cubic_data = pcb->cc_data;
 
-    pcb->cwnd = ((pcb->cwnd == 1) ? (pcb->mss * 2) : pcb->mss);
-    pcb->ssthresh = pcb->mss * 3;
+    pcb->cwnd = tcp_calc_initial_cwnd(pcb->mss);
+    pcb->ssthresh = tcp_calc_initial_ssthresh();
     /*
      * Ensure we have a sane initial value for max_cwnd recorded. Without
      * this here bad things happen when entries from the TCP hostcache

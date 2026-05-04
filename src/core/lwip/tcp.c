@@ -560,7 +560,7 @@ err_t tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool
     pcb->advtsd_mss = tcp_send_mss(pcb);
     pcb->mss = pcb->advtsd_mss;
     pcb->cwnd = 1;
-    pcb->ssthresh = pcb->mss * 10;
+    pcb->ssthresh = tcp_calc_initial_ssthresh();
     pcb->connected = connected;
 
     /* Send a SYN together with the MSS option. */

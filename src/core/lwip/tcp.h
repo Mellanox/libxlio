@@ -83,6 +83,31 @@ struct tcp_pcb;
 
 extern enum cc_algo_mod lwip_cc_algo_module;
 
+/* RFC 5681 permits an arbitrarily high initial ssthresh; Linux uses an effectively
+ * infinite initial threshold so startup is governed by cwnd, not ssthresh. */
+#define TCP_INITIAL_SSTHRESH ((u32_t)0x7FFFFFFFU)
+
+/* RFC 3390 / upstream lwIP initial window:
+ * min(4 * SMSS, max(2 * SMSS, 4380 bytes)). */
+static inline u32_t tcp_calc_initial_cwnd(u32_t mss)
+{
+    return LWIP_MIN(4U * mss, LWIP_MAX(2U * mss, 4380U));
+}
+
+static inline u32_t tcp_calc_initial_ssthresh(void)
+{
+    return TCP_INITIAL_SSTHRESH;
+}
+
+/* RFC 3465 Appropriate Byte Counting, as implemented by upstream lwIP: cap
+ * slow-start growth from a stretch ACK to at most 2 * SMSS. */
+static inline u32_t tcp_calc_slow_start_increment(u32_t acked, u16_t mss)
+{
+    u32_t max_increment = 2U * (u32_t)mss;
+
+    return LWIP_MIN(acked, max_increment);
+}
+
 /** Function prototype for tcp accept callback functions. Called when a new
  * connection can be accepted on a listening pcb.
  *
