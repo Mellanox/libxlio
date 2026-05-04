@@ -134,6 +134,28 @@
 #endif
 
 /**
+ * TCP_INITIAL_RTO_MS: Initial retransmission timeout in milliseconds (RFC 6298 2.1).
+ */
+#ifndef TCP_INITIAL_RTO_MS
+#define TCP_INITIAL_RTO_MS 1000
+#endif
+
+/**
+ * TCP_MIN_RTO_TICKS: Minimum computed/data RTO in slow-timer ticks.
+ * Preserve the legacy effective floor reached by the tick-based RTT estimator.
+ */
+#ifndef TCP_MIN_RTO_TICKS
+#define TCP_MIN_RTO_TICKS 3
+#endif
+
+/**
+ * TCP_FALLBACK_RTO_MS: RTO after SYN retransmission when initial RTO < 3s (RFC 6298 5.7).
+ */
+#ifndef TCP_FALLBACK_RTO_MS
+#define TCP_FALLBACK_RTO_MS 3000
+#endif
+
+/**
  * TCP_QUEUE_OOSEQ==1: TCP will queue segments that arrive out of order.
  * Define to 0 if your device is low on memory.
  */

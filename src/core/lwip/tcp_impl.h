@@ -320,7 +320,46 @@ extern u32_t rcv_wnd_scale;
 extern u8_t enable_push_flag;
 extern u8_t enable_ts_option;
 extern u32_t tcp_ticks;
+extern u32_t slow_tmr_interval;
 extern ip_route_mtu_fn external_ip_route_mtu;
+
+static inline u32_t tcp_ms_to_ticks(u32_t ms)
+{
+    return (u32_t)(((u64_t)ms + slow_tmr_interval - 1U) / slow_tmr_interval);
+}
+
+/* RTO uses rtime >= rto after rtime is incremented, so add one tick to avoid
+ * retransmitting before the requested timeout has elapsed. */
+static inline u32_t tcp_ms_to_rto_ticks(u32_t ms)
+{
+    return tcp_ms_to_ticks(ms) + 1;
+}
+
+static inline u32_t tcp_clamp_rto_ticks(u32_t rto)
+{
+    if (rto < TCP_MIN_RTO_TICKS) {
+        return TCP_MIN_RTO_TICKS;
+    }
+    if (rto > 0x7FFFU) {
+        return 0x7FFFU;
+    }
+    return rto;
+}
+
+static inline u32_t tcp_clamp_rto_signed_ticks(s32_t rto)
+{
+    /* Legacy lwIP stores RTT estimator state in signed s16_t fields. Clamp
+     * negative intermediate RTO values before converting to u32, otherwise they
+     * wrap to a huge timeout.
+     * TODO: remove once RTO/RTT state uses wider unsigned storage.
+     */
+    return rto < 0 ? TCP_MIN_RTO_TICKS : tcp_clamp_rto_ticks((u32_t)rto);
+}
+
+static inline u32_t tcp_initial_rto_ticks(void)
+{
+    return tcp_clamp_rto_ticks(tcp_ms_to_rto_ticks(TCP_INITIAL_RTO_MS));
+}
 
 #if defined(__GNUC__) && (((__GNUC__ == 4) && (__GNUC_MINOR__ >= 4)) || (__GNUC__ > 4))
 #pragma GCC visibility push(hidden)

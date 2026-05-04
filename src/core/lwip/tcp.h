@@ -268,7 +268,8 @@ struct tcp_pcb {
 #define TF_NODELAY   ((u16_t)0x0040U) /* Disable Nagle algorithm */
 #define TF_NAGLEMEMERR                                                                             \
     ((u16_t)0x0080U) /* nagle enabled, memerr, try to output to prevent delayed ACK to happen */
-#define TF_WND_SCALE ((u16_t)0x0100U) /* Window Scale option enabled */
+#define TF_WND_SCALE         ((u16_t)0x0100U) /* Window Scale option enabled */
+#define TF_SYN_RTO_REXMITTED ((u16_t)0x0200U) /* SYN/SYN-ACK retransmitted by RTO timer */
 
     /* the rest of the fields are in host byte order
        as we have to do some math with them */

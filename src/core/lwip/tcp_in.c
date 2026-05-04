@@ -78,6 +78,7 @@ static void tcp_parseopt(struct tcp_pcb *pcb, tcp_in_data *in_data);
 static void tcp_listen_input(struct tcp_pcb *pcb, tcp_in_data *in_data);
 static err_t tcp_timewait_input(struct tcp_pcb *pcb, tcp_in_data *in_data);
 static s8_t tcp_quickack(struct tcp_pcb *pcb, tcp_in_data *in_data);
+static bool tcp_handle_syn_established(struct tcp_pcb *pcb);
 
 /**
  * Send quickack if TCP_QUICKACK is enabled
@@ -92,6 +93,27 @@ s8_t tcp_quickack(struct tcp_pcb *pcb, tcp_in_data *in_data)
     LWIP_UNUSED_ARG(in_data);
     return pcb->quickack;
 #endif
+}
+
+static bool tcp_handle_syn_established(struct tcp_pcb *pcb)
+{
+    const bool syn_rto_rexmitted = (pcb->flags & TF_SYN_RTO_REXMITTED) != 0;
+    const bool syn_retransmitted = syn_rto_rexmitted || pcb->nrtx > 0;
+
+    /* RFC 6298 5.7: If SYN/SYN-ACK was retransmitted due to RTO while initial
+     * RTO < 3s, re-initialize RTO to 3s when data transmission begins. */
+    if (syn_rto_rexmitted && TCP_INITIAL_RTO_MS < TCP_FALLBACK_RTO_MS) {
+        const u32_t fallback = tcp_clamp_rto_ticks(tcp_ms_to_rto_ticks(TCP_FALLBACK_RTO_MS));
+        pcb->rto = fallback;
+        pcb->sv = fallback;
+    }
+
+    if (syn_retransmitted) {
+        /* Karn's algorithm: do not use a retransmitted SYN/SYN-ACK for RTT. */
+        pcb->rttest = 0;
+    }
+    pcb->flags &= ~TF_SYN_RTO_REXMITTED;
+    return syn_retransmitted;
 }
 
 static inline void fill_parsed_ip_hdr(const void *payload, parsed_ip_hdr_t *iphdr)
@@ -565,6 +587,7 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
         /* received SYN ACK with expected sequence number? */
         if ((in_data->flags & TCP_ACK) && (in_data->flags & TCP_SYN) &&
             in_data->ackno == pcb->unacked->seqno + 1) {
+            bool syn_retransmitted;
             pcb->rcv_nxt = in_data->seqno + 1;
             pcb->rcv_ann_right_edge = pcb->rcv_nxt;
             pcb->lastack = in_data->ackno;
@@ -573,6 +596,9 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             pcb->snd_wnd_max = pcb->snd_wnd;
             pcb->snd_wl1 = in_data->seqno - 1; /* initialise to seqno - 1 to force window update */
             set_tcp_state(pcb, ESTABLISHED);
+
+            syn_retransmitted = tcp_handle_syn_established(pcb);
+            pcb->nrtx = 0;
 
 #if TCP_CALCULATE_EFF_SEND_MSS
             // mss can be changed by tcp_parseopt, need to take the MIN
@@ -587,6 +613,9 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
 #else
             pcb->cwnd = ((pcb->cwnd == 1) ? (pcb->mss * 2) : pcb->mss);
 #endif
+            if (syn_retransmitted) {
+                pcb->cwnd = pcb->mss;
+            }
             rseg = pcb->unacked;
             pcb->unacked = rseg->next;
 
@@ -599,7 +628,6 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             } else {
                 pcb->rtime = 0;
                 pcb->ticks_since_data_sent = 0;
-                pcb->nrtx = 0;
             }
 
             tcp_tx_seg_free(pcb, rseg);
@@ -624,7 +652,11 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             /* expected ACK number? */
             if (TCP_SEQ_BETWEEN(in_data->ackno, pcb->lastack + 1, pcb->snd_nxt)) {
                 u32_t old_cwnd;
+                bool syn_retransmitted;
                 set_tcp_state(pcb, ESTABLISHED);
+
+                syn_retransmitted = tcp_handle_syn_established(pcb);
+                pcb->nrtx = 0;
                 LWIP_DEBUGF(TCP_DEBUG,
                             ("TCP connection established %" U16_F " -> %" U16_F ".\n",
                              in_data->inseg.tcphdr->src, in_data->inseg.tcphdr->dest));
@@ -655,6 +687,9 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
 #else
                 pcb->cwnd = ((old_cwnd == 1) ? (pcb->mss * 2) : pcb->mss);
 #endif
+                if (syn_retransmitted) {
+                    pcb->cwnd = pcb->mss;
+                }
                 if (in_data->recv_flags & TF_GOT_FIN) {
                     tcp_ack_now(pcb);
                     set_tcp_state(pcb, CLOSE_WAIT);
@@ -1112,7 +1147,7 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
             pcb->nrtx = 0;
 
             /* Reset the retransmission time-out. */
-            pcb->rto = (pcb->sa >> 3) + pcb->sv;
+            pcb->rto = tcp_clamp_rto_signed_ticks((pcb->sa >> 3) + pcb->sv);
 
             /* Update the send buffer space.*/
             pcb->acked = in_data->ackno - pcb->lastack;
@@ -1214,7 +1249,7 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
             }
             m = m - (pcb->sv >> 2);
             pcb->sv += m;
-            pcb->rto = (pcb->sa >> 3) + pcb->sv;
+            pcb->rto = tcp_clamp_rto_signed_ticks((pcb->sa >> 3) + pcb->sv);
 
             LWIP_DEBUGF(TCP_RTO_DEBUG,
                         ("tcp_receive: RTO %" U16_F " (%" U16_F " milliseconds)\n", pcb->rto,
