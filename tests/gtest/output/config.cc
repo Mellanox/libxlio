@@ -6,7 +6,9 @@
 
 #include <climits>
 #include <cstdlib>
+#include <dirent.h>
 #include <fstream>
+#include <unistd.h>
 
 #include "common/def.h"
 
@@ -440,4 +442,53 @@ TEST_F(output, config_pid_substitution_new_config)
 
     unlink(config_file.c_str());
     int unused __attribute__((unused)) = system(("rm -rf " + report_dir).c_str());
+}
+
+/**
+ * @test output.config_stats_file_pid_substitution_after_fork_new_config
+ * @brief monitor.stats.file_path with %d is reopened with the child PID after fork.
+ */
+TEST_F(output, config_stats_file_pid_substitution_after_fork_new_config)
+{
+    std::string stats_dir = "/tmp/xlio_test_stats_pid_nc_" + std::to_string(getpid());
+    ASSERT_EQ(system(("mkdir -p " + stats_dir).c_str()), 0) << "Failed to create test directory";
+
+    std::string stats_pattern = "xlio_stats_";
+    std::string config_file = m_prefix + "/stats_pid_test_config.json";
+    {
+        std::ofstream cfg(config_file);
+        cfg << R"({ "monitor": { "stats": { "fd_num": 16, "file_path": ")" << stats_dir << "/"
+            << stats_pattern << R"(%d.log" } } })";
+    }
+
+    std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + config_file +
+        " python3 -c 'import os, socket; s=socket.socket(); pid=os.fork(); "
+        "os._exit(0) if pid == 0 else os.waitpid(pid, 0)' > " +
+        m_output_file + " 2>&1";
+    int rc = system(cmd.c_str());
+    ASSERT_EQ(rc, 0) << "Command failed: " << cmd;
+
+    DIR *dir = opendir(stats_dir.c_str());
+    ASSERT_NE(dir, nullptr) << "Cannot open stats directory: " << stats_dir;
+
+    size_t file_count = 0;
+    while (dirent *entry = readdir(dir)) {
+        std::string filename = entry->d_name;
+        const std::string stats_suffix = ".log";
+        bool is_stats_file = filename.find(stats_pattern) == 0 &&
+            filename.size() >= stats_suffix.size() &&
+            filename.compare(filename.size() - stats_suffix.size(), stats_suffix.size(),
+                             stats_suffix) == 0;
+        if (is_stats_file) {
+            ++file_count;
+            unlink((stats_dir + "/" + filename).c_str());
+        }
+    }
+    closedir(dir);
+
+    ASSERT_EQ(file_count, 2U) << "Expected separate parent and child stats files under "
+                              << stats_dir;
+
+    unlink(config_file.c_str());
+    ASSERT_EQ(0, rmdir(stats_dir.c_str())) << "Failed to remove stats directory: " << stats_dir;
 }

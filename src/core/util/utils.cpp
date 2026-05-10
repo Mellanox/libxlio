@@ -49,6 +49,8 @@ using namespace std;
 #undef MODULE_NAME
 #define MODULE_NAME "utils:"
 
+static string g_stats_file_open_path;
+
 int check_if_regular_file(const char *path)
 {
     static struct stat __sys_st;
@@ -66,17 +68,54 @@ int check_if_regular_file(const char *path)
 
 void open_stats_file()
 {
-    if (*safe_mce_sys().stats_filename) {
-        if (check_if_regular_file(safe_mce_sys().stats_filename)) {
-            vlog_printf(VLOG_WARNING,
-                        "FAILED to create " PRODUCT_NAME
-                        " statistics file. %s is not a regular file.\n",
-                        safe_mce_sys().stats_filename);
-        } else if (!(g_stats_file = fopen(safe_mce_sys().stats_filename, "w"))) {
-            vlog_printf(VLOG_WARNING, "Couldn't open statistics file: %s (errno=%d)\n",
-                        safe_mce_sys().stats_filename, errno);
-        }
+    const char *stats_filename = safe_mce_sys().stats_filename;
+
+    if (stats_filename[0] == '\0') {
+        return;
     }
+
+    if (check_if_regular_file(stats_filename)) {
+        vlog_printf(VLOG_WARNING,
+                    "FAILED to create " PRODUCT_NAME
+                    " statistics file. %s is not a regular file.\n",
+                    stats_filename);
+        return;
+    }
+
+    FILE *stats_file = fopen(stats_filename, "w");
+    if (!stats_file) {
+        vlog_printf(VLOG_WARNING, "Couldn't open statistics file: %s (errno=%d)\n", stats_filename,
+                    errno);
+        return;
+    }
+
+    g_stats_file = stats_file;
+    g_stats_file_open_path = stats_filename;
+}
+
+void close_stats_file()
+{
+    if (g_stats_file) {
+        fclose(g_stats_file);
+        g_stats_file = nullptr;
+    }
+    g_stats_file_open_path.clear();
+}
+
+void sync_stats_file_with_config()
+{
+    const char *stats_filename = safe_mce_sys().stats_filename;
+
+    if (!g_stats_file && stats_filename[0] == '\0') {
+        return;
+    }
+
+    if (g_stats_file && g_stats_file_open_path == stats_filename) {
+        return;
+    }
+
+    close_stats_file();
+    open_stats_file();
 }
 
 int get_sys_max_fd_num(int def_max_fd /*=1024*/)

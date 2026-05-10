@@ -43,6 +43,8 @@
 int check_if_regular_file(const char *path);
 
 void open_stats_file();
+void close_stats_file();
+void sync_stats_file_with_config();
 
 /**
  * L3 and L4 Header Checksum Calculation

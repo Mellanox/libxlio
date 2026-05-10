@@ -255,10 +255,7 @@ static int free_libxlio_resources()
 
     vlog_stop();
 
-    if (g_stats_file) {
-        fclose(g_stats_file);
-        g_stats_file = nullptr;
-    }
+    close_stats_file();
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     if (g_p_app) {
