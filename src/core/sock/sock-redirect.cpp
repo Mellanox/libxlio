@@ -782,9 +782,8 @@ int sigaction_internal(int signum, const struct sigaction *act, struct sigaction
 }
 
 extern "C" {
-/* Create a new socket of type TYPE in domain DOMAIN, using
-   protocol PROTOCOL.  If PROTOCOL is zero, one is chosen automatically.
-   Returns a file descriptor for the new socket, or -1 for errors.  */
+
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(socket)(int __domain, int __type, int __protocol)
 {
     return socket_internal(__domain, __type, __protocol, true, true);

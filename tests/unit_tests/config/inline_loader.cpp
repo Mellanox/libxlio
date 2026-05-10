@@ -510,37 +510,35 @@ TEST_F(InlineLoaderTest, rejects_empty_boolean_value)
 
 TEST_F(InlineLoaderTest, rejects_multiple_equals_in_string)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path==Checking_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG", "core.log.file_path==Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST_F(InlineLoaderTest, rejects_empty_string_value)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path=");
+    env_setter setter("XLIO_INLINE_CONFIG", "core.log.file_path=");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST_F(InlineLoaderTest, rejects_single_quote_in_string_value)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path='Checking_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG", "core.log.file_path='Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST_F(InlineLoaderTest, rejects_quotes_in_string_value)
 {
-    env_setter setter("XLIO_INLINE_CONFIG", "monitor.log.file_path=Checkin\"\"\"\"g_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG", "core.log.file_path=Checkin\"\"\"\"g_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
 
 TEST_F(InlineLoaderTest, rejects_spaces_in_string_value)
 {
-    env_setter setter(
-        "XLIO_INLINE_CONFIG",
-        "monitor.log.file_path=Checking_Syntax monitor.log.file_path=Checking_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG", "core.log.file_path=Checking_Syntax Checking_Syntax");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
@@ -548,9 +546,8 @@ TEST_F(InlineLoaderTest, rejects_spaces_in_string_value)
 TEST_F(InlineLoaderTest, rejects_comma_as_delimiter)
 {
     // Comma is no longer accepted as delimiter - semicolon is the new delimiter
-    env_setter setter(
-        "XLIO_INLINE_CONFIG",
-        "monitor.log.file_path=Checking_Syntax,monitor.log.file_path=Checking_Syntax");
+    env_setter setter("XLIO_INLINE_CONFIG",
+                      "core.log.file_path=Checking_Syntax,core.quick_init=true");
     inline_loader loader("XLIO_INLINE_CONFIG", m_descriptor);
     ASSERT_THROW(loader.load_all(), xlio_exception);
 }
