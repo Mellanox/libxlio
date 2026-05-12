@@ -251,19 +251,6 @@ steps:
     archiveArtifacts-onfail: |
       jenkins/**/arch-*.tar.gz
 
-  - name: Service
-    enable: ${do_service}
-    containerSelector:
-      - "{category: 'base', variant:1}"
-    run: |
-      [ "x${do_service}" == "xtrue" ] && action=yes || action=no
-      env WORKSPACE=$PWD TARGET=${flags} jenkins_test_tool=${action} ./contrib/test_jenkins.sh
-    parallel: false
-    onfail: |
-      ./.ci/artifacts.sh
-    archiveArtifacts-onfail: |
-      jenkins/**/arch-*.tar.gz
-
   - name: Package
     enable: ${do_package}
     containerSelector:

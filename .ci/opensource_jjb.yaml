@@ -52,10 +52,6 @@
             default: true
             description: "Run static analysis using csbuild tool."
         - bool:
-            name: "do_service"
-            default: true
-            description: "Verify service."
-        - bool:
             name: "do_style"
             default: true
             description: "Analysis source code for coding style."

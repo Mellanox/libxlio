@@ -24,7 +24,6 @@ cppcheck_dir=${WORKSPACE}/${prefix}/cppcheck
 csbuild_dir=${WORKSPACE}/${prefix}/csbuild
 vg_dir=${WORKSPACE}/${prefix}/vg
 style_dir=${WORKSPACE}/${prefix}/style
-tool_dir=${WORKSPACE}/${prefix}/tool
 commit_dir=${WORKSPACE}/${prefix}/commit
 tidy_dir=${WORKSPACE}/${prefix}/tidy
 
