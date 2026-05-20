@@ -32,6 +32,14 @@
             default: 0
             description: "Enable debug prints and traces, valid values are 0-9."
         - bool:
+            name: "do_setup"
+            default: true
+            description: "Print build environment info."
+        - bool:
+            name: "do_autogen"
+            default: true
+            description: "Regenerate Autotools build files."
+        - bool:
             name: "do_build"
             default: true
             description: "This verifies different configuration using gcc compiler."
@@ -71,6 +79,10 @@
             name: "do_gtest"
             default: true
             description: "Use google tests."
+        - bool:
+            name: "do_unit_test"
+            default: true
+            description: "Run unit tests."
         - bool:
             name: "do_valgrind"
             default: true

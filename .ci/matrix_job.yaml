@@ -197,6 +197,7 @@ env:
 
 steps:
   - name: Setup
+    enable: ${do_setup}
     run: |
       set +x
       echo
@@ -233,6 +234,7 @@ steps:
     parallel: false
 
   - name: Autogen
+    enable: ${do_autogen}
     run: |
       ./autogen.sh -s
     parallel: false
@@ -405,7 +407,7 @@ steps:
       jenkins/**/arch-*.tar.gz
 
   - name: Unit Tests
-    #enable: ${do_unit_test}
+    enable: ${do_unit_test}
     containerSelector:
       - "{name: 'unit-test', category: 'tool', variant: 1}"
     run: |
