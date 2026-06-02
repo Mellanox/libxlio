@@ -156,6 +156,230 @@ TEST_F(tcp_sockopt, ti_1_getsockopt_tcp_info)
 }
 
 /**
+ * @test tcp_sockopt.ti_1b_tcp_info_low_rtt_us
+ * @brief Report microsecond TCP_INFO RTT/RTO after a data round trip.
+ */
+TEST_F(tcp_sockopt, ti_1b_tcp_info_low_rtt_us)
+{
+    auto test_lambda = [this]() {
+        int rc = EOK;
+        int pid = fork();
+
+        if (0 == pid) { /* I am the child (client) */
+            barrier_fork(pid);
+
+            int fd = tcp_base::sock_create();
+            ASSERT_LE(0, fd);
+
+            rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            /* Exercise ACK estimation beyond the handshake. */
+            static const char payload[] = HELLO_STR;
+            for (int i = 0; i < 4; ++i) {
+                ssize_t len = send(fd, (void *)payload, sizeof(payload), 0);
+                EXPECT_EQ(static_cast<ssize_t>(sizeof(payload)), len);
+            }
+
+            /* The reply synchronizes ACK processing before TCP_INFO. */
+            char reply = 0;
+            ssize_t got = recv(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), got);
+
+            struct tcp_info ti;
+            socklen_t optlen = sizeof(ti);
+            memset(&ti, 0, sizeof(ti));
+            rc = getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &optlen);
+            ASSERT_EQ(0, rc);
+            /* A synchronized read may observe any live state, but not abort. */
+            ASSERT_NE(TCP_CLOSE, ti.tcpi_state);
+
+            EXPECT_GE(ti.tcpi_rto, 200000U)
+                << "tcpi_rto below the common XLIO/Linux test lower bound";
+
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTT
+            EXPECT_GT(ti.tcpi_rtt, 0U) << "tcpi_rtt missing after real ACK";
+#endif
+
+            /* Hold peer teardown until after TCP_INFO. */
+            static const char done = 'D';
+            ssize_t done_sent = send(fd, &done, sizeof(done), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(done)), done_sent);
+
+            close(fd);
+            exit(testing::Test::HasFailure());
+        } else { /* I am the parent (server) */
+            struct sockaddr_storage peer_addr;
+            socklen_t socklen;
+            char buf[sizeof(HELLO_STR) * 8];
+
+            int l_fd = tcp_base::sock_create();
+            ASSERT_LE(0, l_fd);
+
+            rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = listen(l_fd, 5);
+            ASSERT_EQ(0, rc);
+
+            barrier_fork(pid);
+
+            socklen = sizeof(peer_addr);
+            int fd = accept(l_fd, (struct sockaddr *)&peer_addr, &socklen);
+            ASSERT_LE(0, fd);
+
+            ssize_t total = 0;
+            const ssize_t target = static_cast<ssize_t>(sizeof(HELLO_STR) * 4);
+            while (total < target) {
+                ssize_t len = recv(fd, buf, sizeof(buf), 0);
+                if (len <= 0) {
+                    break;
+                }
+                total += len;
+            }
+
+            char reply = 'X';
+            ssize_t sent = send(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), sent);
+
+            /* Hold teardown until the client's TCP_INFO read completes. */
+            char done = 0;
+            (void)recv(fd, &done, sizeof(done), 0);
+
+            close(fd);
+            close(l_fd);
+
+            ASSERT_EQ(0, wait_fork(pid));
+        }
+    };
+
+    test_lambda();
+}
+
+/**
+ * @test tcp_sockopt.ti_1c_tcp_info_handshake_seeded_rto
+ * @brief Seed TCP_INFO tcpi_rto from handshake RTT before sending data.
+ */
+TEST_F(tcp_sockopt, ti_1c_tcp_info_handshake_seeded_rto)
+{
+    auto test_lambda = [this]() {
+        int rc = EOK;
+        int pid = fork();
+
+        if (0 == pid) { /* I am the child (client) */
+            barrier_fork(pid);
+
+            int fd = tcp_base::sock_create();
+            ASSERT_LE(0, fd);
+
+            /* Fixed test ports can remain in TIME_WAIT. */
+            int reuse = 1;
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+            rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            /* Observe the handshake seed before any data RTT sample. */
+            struct tcp_info ti;
+            socklen_t optlen = sizeof(ti);
+            memset(&ti, 0, sizeof(ti));
+            rc = getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &optlen);
+            ASSERT_EQ(0, rc);
+            ASSERT_NE(TCP_CLOSE, ti.tcpi_state);
+
+            EXPECT_GE(ti.tcpi_rto, 200000U)
+                << "tcpi_rto below the common XLIO/Linux test lower bound";
+            EXPECT_LT(ti.tcpi_rto, 1000000U) << "handshake RTT did not seed tcpi_rto";
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTT
+            EXPECT_EQ(0U, ti.tcpi_rtt);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTTVAR
+            EXPECT_EQ(0U, ti.tcpi_rttvar);
+#endif
+
+            /* Confirm the first data RTT updates steady-state RTO. */
+            static const char payload[] = HELLO_STR;
+            ssize_t len = send(fd, (void *)payload, sizeof(payload), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(payload)), len);
+
+            char reply = 0;
+            ssize_t got = recv(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), got);
+
+            memset(&ti, 0, sizeof(ti));
+            optlen = sizeof(ti);
+            rc = getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &optlen);
+            ASSERT_EQ(0, rc);
+            ASSERT_NE(TCP_CLOSE, ti.tcpi_state);
+            EXPECT_GE(ti.tcpi_rto, 200000U);
+            EXPECT_LT(ti.tcpi_rto, 1000000U) << "data RTT did not update tcpi_rto";
+
+            /* Hold peer teardown until after TCP_INFO. */
+            static const char done = 'D';
+            ssize_t done_sent = send(fd, &done, sizeof(done), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(done)), done_sent);
+
+            close(fd);
+            exit(testing::Test::HasFailure());
+        } else { /* I am the parent (server) */
+            struct sockaddr_storage peer_addr;
+            socklen_t socklen;
+            char buf[sizeof(HELLO_STR) * 8];
+
+            int l_fd = tcp_base::sock_create();
+            ASSERT_LE(0, l_fd);
+
+            /* Fixed test ports can remain in TIME_WAIT. */
+            int reuse = 1;
+            setsockopt(l_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+            rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = listen(l_fd, 5);
+            ASSERT_EQ(0, rc);
+
+            barrier_fork(pid);
+
+            socklen = sizeof(peer_addr);
+            int fd = accept(l_fd, (struct sockaddr *)&peer_addr, &socklen);
+            ASSERT_LE(0, fd);
+
+            ssize_t total = 0;
+            const ssize_t target = static_cast<ssize_t>(sizeof(HELLO_STR));
+            while (total < target) {
+                ssize_t len = recv(fd, buf, sizeof(buf), 0);
+                if (len <= 0) {
+                    break;
+                }
+                total += len;
+            }
+
+            char reply = 'X';
+            ssize_t sent = send(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), sent);
+
+            /* Hold teardown until the client's TCP_INFO read completes. */
+            char done = 0;
+            (void)recv(fd, &done, sizeof(done), 0);
+
+            close(fd);
+            close(l_fd);
+
+            ASSERT_EQ(0, wait_fork(pid));
+        }
+    };
+
+    test_lambda();
+}
+
+/**
  * @test tcp_sockopt.ti_2_tcp_congestion
  * @brief
  *    TCP_CONGESTION option to change and check congestion control mechanism.
