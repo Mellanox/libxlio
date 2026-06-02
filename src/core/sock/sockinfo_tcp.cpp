@@ -29,6 +29,8 @@
 #include "event/poll_group.h"
 #include "proto/route_table_mgr.h"
 #include "proto/xlio_lwip.h"
+#include "proto/xlio_time.h"
+#include "core/lwip/tcp_rto.h"
 #include "proto/dst_entry_tcp.h"
 #include "iomux/io_mux_call.h"
 #include "sock-redirect.h"
@@ -1136,13 +1138,13 @@ void sockinfo_tcp::unlock_rx_q()
     unlock_tcp_con();
 }
 
-void sockinfo_tcp::tcp_timer()
+void sockinfo_tcp::tcp_timer(int64_t timer_now_us)
 {
     if (m_state == SOCKINFO_DESTROYING) {
         return;
     }
 
-    tcp_tmr(&m_pcb);
+    tcp_tmr(&m_pcb, timer_now_us);
 
     return_pending_rx_buffs();
     return_pending_tx_buffs();
@@ -1778,16 +1780,9 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
     return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp);
 }
 
-static bool inspect_socket_error_state(const mem_buf_desc_t *mem_buf_desc, struct tcp_pcb *pcb)
+static bool has_tx_completion_error(const mem_buf_desc_t *mem_buf_desc)
 {
-    // this means a retransmit happened - let's check the error_state we'll put if we got error
-    // cqe
-    if (mem_buf_desc->m_flags & mem_buf_desc_t::HAD_CQE_ERROR) {
-        TCP_EVENT_ERR(pcb->errf, pcb->my_container, ERR_RST);
-        return true;
-    }
-
-    return false;
+    return mem_buf_desc->m_flags & mem_buf_desc_t::HAD_CQE_ERROR;
 }
 
 /*
@@ -1815,8 +1810,7 @@ err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_con
     int count = 0;
 
     if (unlikely(flags & XLIO_TX_PACKET_REXMIT)) {
-        if (unlikely(inspect_socket_error_state(reinterpret_cast<const mem_buf_desc_t *>(seg->p),
-                                                reinterpret_cast<struct tcp_pcb *>(v_p_conn)))) {
+        if (unlikely(has_tx_completion_error(reinterpret_cast<const mem_buf_desc_t *>(seg->p)))) {
             return ERR_RST;
         }
     }
@@ -2061,10 +2055,58 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
 }
 
 // Execute TCP timers of this connection
-void sockinfo_tcp::handle_timer_expired()
+void sockinfo_tcp::handle_timer_expired(int64_t timer_now_us)
 {
     si_tcp_logfunc("");
-    tcp_timer();
+    tcp_timer(timer_now_us);
+}
+
+static void update_tcp_timer_skips_high_water(socket_stats_t *socket_stats, uint32_t value)
+{
+    if (socket_stats && value > socket_stats->n_tcp_timer_consecutive_skips_max) {
+        socket_stats->n_tcp_timer_consecutive_skips_max = value;
+    }
+
+    uint32_t global_prev =
+        g_tuning_report_counters.tcp_timer_consecutive_skips_max.load(std::memory_order_relaxed);
+    while (value > global_prev &&
+           !g_tuning_report_counters.tcp_timer_consecutive_skips_max.compare_exchange_weak(
+               global_prev, value, std::memory_order_relaxed, std::memory_order_relaxed)) {
+    }
+}
+
+void sockinfo_tcp::note_tcp_timer_attempt_missed()
+{
+    /* Timer collection serialization makes this streak single-writer. Publish
+     * each high-water before teardown can discard socket state. */
+    if (m_tcp_timer_consecutive_skips < UINT8_MAX) {
+        ++m_tcp_timer_consecutive_skips;
+    }
+    update_tcp_timer_skips_high_water(m_p_socket_stats, m_tcp_timer_consecutive_skips);
+}
+
+void sockinfo_tcp::note_tcp_timer_attempt_acquired()
+{
+    if (m_tcp_timer_consecutive_skips == 0) {
+        return;
+    }
+    const uint32_t timer_cadence_ms = safe_mce_sys().tcp_timer_resolution_msec;
+    const unsigned long long drift_us =
+        (unsigned long long)m_tcp_timer_consecutive_skips * timer_cadence_ms * 1000ULL;
+    /* Report sustained contention at WARN and isolated misses at DEBUG once
+     * per streak. */
+    if (m_tcp_timer_consecutive_skips >= XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD) {
+        si_tcp_logwarn("TCP timer trylock starvation: %u consecutive missed timer visits "
+                       "(~%llu us drift at cadence %u ms) [%s -> %s]",
+                       m_tcp_timer_consecutive_skips, drift_us, timer_cadence_ms,
+                       m_bound.to_str_ip_port(true).c_str(),
+                       m_connected.to_str_ip_port(true).c_str());
+    } else {
+        si_tcp_logdbg("TCP timer trylock skip: %u missed timer visit "
+                      "(~%llu us drift at cadence %u ms)",
+                      m_tcp_timer_consecutive_skips, drift_us, timer_cadence_ms);
+    }
+    m_tcp_timer_consecutive_skips = 0;
 }
 
 void sockinfo_tcp::abort_connection()
@@ -5351,8 +5393,20 @@ void sockinfo_tcp::get_tcp_info(struct tcp_info *ti)
     ti->tcpi_state = state < TCP_STATE_NR ? pcb_to_tcp_state[state] : 0;
     ti->tcpi_options = (!!(m_pcb.flags & TF_TIMESTAMP) * TCPI_OPT_TIMESTAMPS) |
         (!!(m_pcb.flags & TF_WND_SCALE) * TCPI_OPT_WSCALE);
-    // We keep rto with TCP slow timer granularity and need to convert it to usec.
-    ti->tcpi_rto = m_pcb.rto * safe_mce_sys().tcp_timer_resolution_msec * 2 * 1000U;
+
+    /* Estimator clamps guarantee non-negative TCP_INFO values. */
+    assert(m_pcb.rto_us >= 0 && "rto_us must be non-negative; tcp_rto_clamp_us bypassed?");
+    ti->tcpi_rto = (uint32_t)m_pcb.rto_us;
+    /* tcp_info reports microseconds; sa_us and sv_us store 8*SRTT and
+     * 4*RTTVAR. Lock-free reads may span estimator updates. */
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTT
+    assert(m_pcb.sa_us >= 0 && "sa_us must be non-negative; estimator clamp bypassed?");
+    ti->tcpi_rtt = (uint32_t)(m_pcb.sa_us >> 3);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTTVAR
+    assert(m_pcb.sv_us >= 0 && "sv_us must be non-negative; estimator clamp bypassed?");
+    ti->tcpi_rttvar = m_pcb.sa_us != 0 ? (uint32_t)(m_pcb.sv_us >> 2) : 0;
+#endif
     ti->tcpi_advmss = m_pcb.advtsd_mss;
     ti->tcpi_snd_mss = m_pcb.mss;
     ti->tcpi_retransmits = m_pcb.nrtx;
@@ -6011,11 +6065,12 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                 m_snd_buf_max);
 
     // Retransmission
-    vlog_printf(log_level, "Retransmission : rtime %hd, rto %u, nrtx %u\n", pcb.rtime, pcb.rto,
-                pcb.nrtx);
+    vlog_printf(log_level, "Retransmission : rtime %hd, rto_us %d, rto_deadline_us %lld, nrtx %u\n",
+                pcb.rtime, (int)pcb.rto_us, (long long)pcb.rto_deadline_us, pcb.nrtx);
 
     // RTT
-    vlog_printf(log_level, "RTT variables : rttest %u, rtseq %u\n", pcb.rttest, pcb.rtseq);
+    vlog_printf(log_level, "RTT variables : rttest_us %lld, rtseq %u, sa_us %d, sv_us %d\n",
+                (long long)pcb.rttest_us, pcb.rtseq, (int)pcb.sa_us, (int)pcb.sv_us);
 
     // First unsent
     if (first_unsent_seqno) {
@@ -6300,17 +6355,24 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
     sock_list &bucket = m_p_intervals[m_n_location];
     m_n_location = (m_n_location + 1) % m_n_intervals_size;
 
+    if (bucket.empty()) {
+        return;
+    }
+
+    const int64_t timer_now_us = clock_gettime_monotonic_us();
+    xlio_time_dbg_inc_timer_pass();
+
     auto iter = bucket.begin();
     while (iter != bucket.end()) {
         sockinfo_tcp *p_sock = *iter;
         // Must increment iterator first, the socket can be erased below in case of local timers.
         iter++;
 
-        // TODO Trylock can miss a timer tick and we don't trigger it in unlock() anymore.
         if (!p_sock->trylock_tcp_con()) {
             bool destroyable = false;
             if (!p_sock->is_cleaned()) {
-                p_sock->handle_timer_expired();
+                p_sock->handle_timer_expired(timer_now_us);
+                p_sock->note_tcp_timer_attempt_acquired();
                 destroyable = p_sock->is_destroyable_no_lock();
             }
             p_sock->unlock_tcp_con();
@@ -6321,6 +6383,9 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
                     g_p_fd_collection->destroy_sockfd(p_sock);
                 }
             }
+        } else {
+            /* trylock_tcp_con() returns nonzero on contention. */
+            p_sock->note_tcp_timer_attempt_missed();
         }
     }
 }

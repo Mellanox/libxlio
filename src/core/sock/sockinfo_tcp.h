@@ -344,9 +344,12 @@ public:
 
     inline fd_type_t get_type() override { return FD_TYPE_SOCKET; }
 
-    void handle_timer_expired();
+    void handle_timer_expired(int64_t timer_now_us);
     bool is_timer_registered() const { return m_timer_registered; }
     void set_timer_registered(bool v) { m_timer_registered = v; }
+
+    void note_tcp_timer_attempt_missed();
+    void note_tcp_timer_attempt_acquired();
 
     inline ib_ctx_handler *get_ctx()
     {
@@ -459,7 +462,7 @@ private:
 
     inline void lwip_pbuf_init_custom(mem_buf_desc_t *p_desc);
 
-    void tcp_timer();
+    void tcp_timer(int64_t timer_now_us);
     bool poll_and_progress_rx();
     bool check_last_rx_poll_progress(unsigned int prev_sndbuf, bool all_drained);
     bool prepare_listen_to_close();
@@ -674,6 +677,8 @@ private:
     bool m_b_incoming;
     bool m_b_attached;
     bool m_timer_registered = false;
+    /* Live timer-lock miss streak; stats retain the socket-lifetime high-water. */
+    uint8_t m_tcp_timer_consecutive_skips = 0;
     /* connection state machine */
     int m_conn_timeout;
     /* RCVBUF acconting */

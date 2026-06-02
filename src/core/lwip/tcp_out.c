@@ -41,8 +41,12 @@
 #include "core/lwip/opt.h"
 
 #include "core/lwip/tcp_impl.h"
+#include "core/lwip/tcp_rto.h"
+#include "core/proto/xlio_time.h"
 
 #include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <errno.h>
 #include <assert.h>
 
@@ -1210,22 +1214,28 @@ err_t tcp_output(struct tcp_pcb *pcb)
                 ("tcp_output: snd_wnd %" U32_F ", cwnd %" U32_F ", wnd %" U32_F "\n", pcb->snd_wnd,
                  pcb->cwnd, wnd));
 
-    if (pcb->is_last_seg_dropped && pcb->unacked && !pcb->unacked->next) {
-        /* Forcibly retransmit segment from the unacked queue if it was dropped
-         * on the previous iteration.
-         * Disable the retransmission timer after the unacked queue is emptied.
-         */
-        pcb->is_last_seg_dropped = false;
-        pcb->unacked->next = pcb->unsent;
-        pcb->unsent = pcb->unacked;
-        pcb->unacked = NULL;
-        if (NULL == pcb->last_unsent) {
-            pcb->last_unsent = pcb->last_unacked;
+    if (pcb->is_last_seg_dropped) {
+        if (pcb->unacked && !pcb->unacked->next) {
+            /* A locally rejected idle-flight segment remains on unacked so RTO
+             * and TCP_USER_TIMEOUT retain ownership. Move it back before retry. */
+            pcb->unacked->next = pcb->unsent;
+            pcb->unsent = pcb->unacked;
+            pcb->unacked = NULL;
+            if (pcb->last_unsent == NULL) {
+                pcb->last_unsent = pcb->last_unacked;
+            }
+            pcb->last_unacked = NULL;
+            /* Unsent data owns no deadline or transmission marker. Keep
+             * TCP_USER_TIMEOUT age across the retry handoff. */
+            tcp_rto_deadline_clear(pcb);
+            pcb->rtime = -1;
         }
-        pcb->last_unacked = NULL;
-        pcb->rtime = -1;
-        pcb->ticks_since_data_sent = -1;
+        /* A queue transition or ACK may already have consumed ownership.
+         * Never let a stale marker classify a later real transmission as
+         * locally dropped. */
+        pcb->is_last_seg_dropped = false;
     }
+
     seg = pcb->unsent;
 
 #if TCP_OUTPUT_DEBUG
@@ -1319,15 +1329,20 @@ err_t tcp_output(struct tcp_pcb *pcb)
             }
 
             rc = tcp_output_segment(seg, pcb);
-            if (rc != ERR_OK && pcb->unacked) {
-                /* Transmission failed, skip moving the segment to unacked, so we
-                 * retry with the next tcp_output(). We must have at least one unacked
-                 * segment in this case or RTO would be broken otherwise. */
+            if (rc != ERR_OK && (pcb->unacked != NULL || TCP_SEGLEN(seg) == 0)) {
+                if (rc == ERR_RST) {
+                    TCP_EVENT_ERR(pcb->errf, pcb->my_container, rc);
+                    return rc;
+                }
+                /* With an existing flight, keep a failed segment on unsent and
+                 * let that flight's timer retain liveness. Empty control segments
+                 * cannot be tracked on the unacked queue. */
                 break;
             }
-            if (rc == ERR_WOULDBLOCK) {
-                /* Mark that the segment is dropped, so we can retransmit it during
-                 * the next iteration. */
+
+            const bool send_failed = rc != ERR_OK;
+            const bool locally_dropped = rc == ERR_WOULDBLOCK;
+            if (locally_dropped) {
                 pcb->is_last_seg_dropped = true;
             }
 
@@ -1369,6 +1384,20 @@ err_t tcp_output(struct tcp_pcb *pcb)
                 /* do not queue empty segments on the unacked list */
             } else {
                 tcp_tx_seg_free(pcb, seg);
+            }
+
+            if (send_failed && pcb->rto_deadline_us == 0) {
+                /* tcp_output_segment() discarded the failed attempt's RTT sample.
+                 * Now that the segment is linked on unacked, arm the microsecond
+                 * deadline so the RTO path can retry or abort. */
+                int64_t retry_now_us = clock_gettime_monotonic_us();
+                xlio_time_dbg_inc_tx_arm_idle();
+                tcp_rto_timer_start_if_needed(pcb, retry_now_us);
+            }
+            if (rc == ERR_RST) {
+                /* Queue ownership is final before a callback may purge it. */
+                TCP_EVENT_ERR(pcb->errf, pcb->my_container, rc);
+                return rc;
             }
             seg = pcb->unsent;
         } else {
@@ -1462,20 +1491,21 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
         LWIP_ASSERT("tcp_output_segment: need to find route to host", 0);
     }
 
-    /* Set retransmission timer running if it is not currently enabled */
-    if (pcb->rtime == -1) {
-        pcb->rtime = 0;
-    }
+    /* Only a sample opened by this attempt can be cleared on failure. */
+    bool sample_started_here = false;
+    int64_t tx_now_us = 0;
 
-    if (pcb->ticks_since_data_sent == -1) {
-        pcb->ticks_since_data_sent = 0;
-    }
-
-    if (pcb->rttest == 0) {
-        pcb->rttest = tcp_ticks;
+    if (tcp_rtt_sample_should_start(pcb, seg->seqno, seg->len,
+                                    (TCPH_FLAGS(seg->tcphdr) & TCP_SYN) != 0)) {
+        tx_now_us = clock_gettime_monotonic_us();
+        xlio_time_dbg_inc_tx_rtt_start();
+        pcb->rttest_us = tx_now_us;
         pcb->rtseq = seg->seqno;
+        sample_started_here = true;
 
-        LWIP_DEBUGF(TCP_RTO_DEBUG, ("tcp_output_segment: rtseq %" U32_F "\n", pcb->rtseq));
+        LWIP_DEBUGF(TCP_RTO_DEBUG,
+                    ("tcp_output_segment: rtseq %" U32_F " rttest_us %lld\n", pcb->rtseq,
+                     (long long)pcb->rttest_us));
     }
 
     LWIP_DEBUGF(TCP_OUTPUT_DEBUG,
@@ -1507,7 +1537,30 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
     flags |= (TCP_SEQ_LT(seg->seqno, pcb->snd_nxt) ? TCP_WRITE_REXMIT : 0);
     flags |= seg->flags & TF_SEG_OPTS_ZEROCOPY;
 
-    return pcb->ip_output(p, seg, pcb, flags);
+    err_t rc = pcb->ip_output(p, seg, pcb, flags);
+
+    if (rc != ERR_OK) {
+        /* Karn: only the call that started the in-flight sample may clear it,
+         * so a failed send cannot erase an earlier call's still-valid sample.
+         */
+        if (sample_started_here) {
+            pcb->rttest_us = 0;
+        }
+    }
+
+    if (rc == ERR_OK) {
+        /* The first successful segment owns the deadline. Reuse its RTT
+         * timestamp when available. */
+        if (pcb->rto_deadline_us == 0) {
+            if (!sample_started_here) {
+                tx_now_us = clock_gettime_monotonic_us();
+                xlio_time_dbg_inc_tx_arm_idle();
+            }
+            tcp_rto_timer_start_if_needed(pcb, tx_now_us);
+        }
+    }
+
+    return rc;
 }
 
 /**
@@ -1618,14 +1671,27 @@ void tcp_rexmit_rto(struct tcp_pcb *pcb)
     pcb->unacked = NULL;
     pcb->last_unacked = NULL;
 
-    /* increment number of retransmissions */
-    ++pcb->nrtx;
+    /* tcp_output() will establish fresh ownership for this attempt. If the
+     * local output blocks again it sets the marker again; if it succeeds, a
+     * stale local-drop marker must not force an extra retransmission. */
+    pcb->is_last_seg_dropped = false;
 
-    /* Don't take any RTT measurements after retransmitting. */
-    pcb->rttest = 0;
+    /* Increment the retry count without allowing a long fast-retransmit
+     * episode to wrap and evade the retry limit. */
+    if (pcb->nrtx < UINT8_MAX) {
+        ++pcb->nrtx;
+    }
+
+    /* Karn invalidates RTT sampling for the retransmitted flight. */
+    pcb->rttest_us = 0;
 
     /* Do the actual retransmission */
     tcp_output(pcb);
+
+    if (pcb->unacked == NULL) {
+        /* Unsent data cannot own a deadline; a successful re-drive arms one. */
+        tcp_rto_deadline_clear(pcb);
+    }
 }
 
 /**
@@ -1664,10 +1730,16 @@ void tcp_rexmit(struct tcp_pcb *pcb)
         pcb->last_unsent = seg;
     }
 
-    ++pcb->nrtx;
+    /* Moving the marked segment out of unacked consumes local-drop
+     * ownership. tcp_output() will set it again only if this attempt blocks. */
+    pcb->is_last_seg_dropped = false;
 
-    /* Don't take any rtt measurements after retransmitting. */
-    pcb->rttest = 0;
+    if (pcb->nrtx < UINT8_MAX) {
+        ++pcb->nrtx;
+    }
+
+    /* Karn invalidates RTT sampling for the retransmitted flight. */
+    pcb->rttest_us = 0;
 }
 
 /**
