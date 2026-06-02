@@ -368,7 +368,8 @@ TEST_F(tuning_report, socket_counts_without_stats_pool)
     std::string report_path = m_prefix + "/report_socket_counts.txt";
     check_report(report_path,
                  {"## Socket Summary", "total_sockets:", "tcp_sockets:", "offloaded_sockets:",
-                  "non_offloaded_sockets: 0", "monitor.stats.fd_num"},
+                  "non_offloaded_sockets: 0",
+                  "tcp_timer_consecutive_skips_max_global:", "monitor.stats.fd_num"},
                  {"# Socket stats not available", "# No sockets were created"});
 }
 

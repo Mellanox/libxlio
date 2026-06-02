@@ -1517,22 +1517,31 @@ request-response protocols, or when experiencing latency spikes with small messa
 >
 > **Maps to:** `XLIO_TCP_TIMER_RESOLUTION_MSEC`
 
-Resolution in milliseconds for TCP internal timers.
+Resolution in milliseconds for TCP internal timer scheduling.
 
 **Two timer mechanisms:**
 
 - *Fast timer* (fires every timer_msec): Sends delayed ACKs. Maximum ACK delay = timer_msec.
-- *Slow timer* (fires every timer_msec × 2): Retransmission timeout detection, persist probes
-  (zero-window), keepalive probes, connection state cleanup (FIN_WAIT, TIME_WAIT, etc.).
+- *Slow timer* (fires every timer_msec × 2): Schedules when RTO deadline checks run,
+  persist probes (zero-window), keepalive probes, connection state cleanup (FIN_WAIT,
+  TIME_WAIT, etc.).
+
+**Note:** This parameter no longer governs RTT/RTO estimator precision or `TCP_INFO`
+timing fields. RTT samples and the retransmission timeout (`tcpi_rto`, `tcpi_rtt`,
+`tcpi_rttvar`) are now measured directly with monotonic microsecond timestamps and are
+independent of `timer_msec`. The slow timer only decides *when* the RTO deadline check
+runs; the deadline itself uses microsecond precision. [`network.protocols.tcp.timestamps`](#networkprotocolstcptimestamps)
+controls the on-wire RFC 1323 timestamp option and is unaffected.
 
 **Tradeoffs:**
 
-- *Lower (10-50ms):* Faster packet loss detection, lower delayed ACK
+- *Lower (10-50ms):* Faster packet loss detection (RTO check cadence), lower delayed ACK
   latency when quickack is disabled. Higher CPU overhead and more
   frequent internal thread lock contention from timer processing.
 - *Higher (200-500ms):* Lower CPU overhead, less timer thread
   contention, better for high connection counts. Slower loss
-  detection, higher ACK latency, less responsive state machine.
+  detection cadence (deadline value unchanged), higher ACK latency, less responsive
+  state machine.
 
 **Sizing:** Match to your latency tolerance. Default 100ms balances responsiveness and CPU.
 Reduce if delayed ACKs are in use and latency matters. Increase for CPU-constrained servers

@@ -19,6 +19,7 @@ public:
     gro_mgr(uint32_t flow_max, uint32_t buf_max);
     bool reserve_stream(rfs_uc_tcp_gro *rfs_uc_tcp_gro);
     bool is_stream_max();
+    inline bool has_active_streams() const { return m_n_flow_count > 0; }
     inline uint32_t get_buf_max() { return m_n_buf_max; }
     inline uint32_t get_byte_max() { return MAX_AGGR_BYTE_PER_STREAM; }
     void flush_all(void *pv_fd_ready_array);

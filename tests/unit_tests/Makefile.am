@@ -69,12 +69,14 @@ unit_tests_LDADD = libgtest.la $(LIBJSON_LIBS)
 
 unit_tests_CPPFLAGS = \
 	-I$(top_srcdir)/ \
+	-I$(top_builddir)/ \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/core \
 	-I$(top_srcdir)/src/core/config \
-    -I$(top_srcdir)/src/core/util \
+	-I$(top_srcdir)/src/core/util \
 	-I$(top_srcdir)/tests/gtest \
 	-I$(top_srcdir)/tests/gtest/googletest/include \
+	-DXLIO_TIME_DEBUG_COUNTERS=1 \
 	$(AM_CPPFLAGS) \
 	$(LIBJSON_CFLAGS)
 
@@ -85,7 +87,7 @@ unit_tests_CXXFLAGS = \
 # Tests
 unit_tests_SOURCES = \
 	main.cpp \
-    config/config_registry.cpp \
+	config/config_registry.cpp \
 	config/config_descriptor.cpp \
 	config/inline_loader.cpp \
 	config/json_loader.cpp \
@@ -94,7 +96,19 @@ unit_tests_SOURCES = \
 	config/parameter_descriptor.cpp \
 	config/schema_analyzer.cpp \
 	job_queue/job_queue_test.cpp \
-    $(top_builddir)/src/core/config/loaders/inline_loader.cpp \
+	tcp/tcp_in.cpp \
+	tcp/tcp_output.cpp \
+	tcp/tcp_rto.cpp \
+	$(top_builddir)/src/core/lwip/cc.c \
+	$(top_builddir)/src/core/lwip/cc_lwip.c \
+	$(top_builddir)/src/core/lwip/cc_none.c \
+	$(top_builddir)/src/core/lwip/pbuf.c \
+	$(top_builddir)/src/core/lwip/tcp.c \
+	$(top_builddir)/src/core/lwip/tcp_in.c \
+	$(top_builddir)/src/core/lwip/tcp_out.c \
+	$(top_builddir)/src/core/lwip/tcp_rto.c \
+	$(top_builddir)/src/core/proto/xlio_time.cpp \
+	$(top_builddir)/src/core/config/loaders/inline_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/json_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/key_resolver.cpp \
 	$(top_builddir)/src/core/config/descriptor_providers/json_descriptor_provider.cpp \

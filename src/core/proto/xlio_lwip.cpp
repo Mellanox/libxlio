@@ -10,6 +10,7 @@
 #include "core/event/event_handler_manager.h"
 #include "core/sock/sockinfo_tcp.h"
 #include "core/lwip/tcp_impl.h"
+#include "core/lwip/tcp_rto.h"
 #include "xlio_lwip.h"
 
 // debugging macros
@@ -108,7 +109,8 @@ xlio_lwip::xlio_lwip()
     set_tmr_resolution(safe_mce_sys().tcp_timer_resolution_msec);
     // tcp_ticks increases in the rate of tcp slow_timer
     void *node = g_p_event_handler_manager->register_timer_event(
-        safe_mce_sys().tcp_timer_resolution_msec * 2, this, PERIODIC_TIMER, nullptr);
+        safe_mce_sys().tcp_timer_resolution_msec * TCP_SLOW_INTERVAL_FACTOR, this, PERIODIC_TIMER,
+        nullptr);
     if (!node) {
         lwip_logdbg("LWIP: failed to register timer event");
         free_lwip_resources();
