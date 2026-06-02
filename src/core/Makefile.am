@@ -123,6 +123,7 @@ libxlio_la_SOURCES := \
 	lwip/tcp.c \
 	lwip/tcp_in.c \
 	lwip/tcp_out.c \
+	lwip/tcp_rto.c \
 	lwip/cc.c \
 	lwip/cc_lwip.c \
 	lwip/cc_none.c \
@@ -130,6 +131,7 @@ libxlio_la_SOURCES := \
 	proto/ip_frag.cpp \
 	proto/flow_tuple.cpp \
 	proto/xlio_lwip.cpp \
+	proto/xlio_time.cpp \
 	proto/neighbour.cpp \
 	proto/neighbour_table_mgr.cpp \
 	proto/netlink_socket_mgr.cpp \
@@ -282,6 +284,7 @@ libxlio_la_SOURCES := \
 	lwip/pbuf.h \
 	lwip/tcp.h \
 	lwip/tcp_impl.h \
+	lwip/tcp_rto.h \
 	\
 	netlink/link_info.h \
 	netlink/neigh_info.h \
@@ -290,6 +293,8 @@ libxlio_la_SOURCES := \
 	\
 	proto/arp.h \
 	proto/mem_desc.h \
+	proto/xlio_cache.h \
+	proto/xlio_time.h \
 	proto/dst_entry.h \
 	proto/dst_entry_tcp.h \
 	proto/dst_entry_udp.h \

@@ -45,6 +45,8 @@
 #include "core/lwip/cc.h"
 #include "core/lwip/tcp.h"
 #include "core/lwip/tcp_impl.h"
+#include "core/lwip/tcp_rto.h"
+#include "core/proto/xlio_time.h"
 
 #include <string.h>
 #include <sys/types.h>
@@ -99,7 +101,6 @@ u32_t lwip_tcp_nodelay_treshold = 0;
 u32_t slow_tmr_interval;
 /* Incremented every coarse grained timer shot (typically every slow_tmr_interval ms). */
 u32_t tcp_ticks = 0;
-const u8_t tcp_backoff[13] = {1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7};
 /* Times per slowtmr hits */
 const u8_t tcp_persist_backoff[7] = {3, 6, 12, 24, 48, 96, 120};
 
@@ -109,13 +110,13 @@ const u8_t tcp_persist_backoff[7] = {3, 6, 12, 24, 48, 96, 120};
  */
 void set_tmr_resolution(u32_t v)
 {
-    slow_tmr_interval = v * 2;
+    slow_tmr_interval = v * TCP_SLOW_INTERVAL_FACTOR;
 }
 /**
  * Called periodically to dispatch TCP timers.
  *
  */
-void tcp_tmr(struct tcp_pcb *pcb)
+void tcp_tmr(struct tcp_pcb *pcb, int64_t timer_now_us)
 {
     /* Call tcp_fasttmr() every (slow_tmr_interval / 2) ms */
     tcp_fasttmr(pcb);
@@ -123,7 +124,7 @@ void tcp_tmr(struct tcp_pcb *pcb)
     if (++(pcb->tcp_timer) & 1) {
         /* Call tcp_tmr() every slow_tmr_interval ms, i.e., every other timer
            tcp_tmr() is called. */
-        tcp_slowtmr(pcb);
+        tcp_slowtmr(pcb, timer_now_us);
     }
 }
 
@@ -591,7 +592,7 @@ static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
  *
  * Automatically called from tcp_tmr().
  */
-void tcp_slowtmr(struct tcp_pcb *pcb)
+void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
 {
     u8_t pcb_remove = 0; /* flag if a PCB should be removed */
     u8_t pcb_reset = 0; /* flag if a RST should be sent when removing */
@@ -620,11 +621,13 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
             err = ERR_TIMEOUT;
             pcb_reset += (pcb->so_options & SOF_KEEPALIVE);
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: user timeout occurred\n"));
-        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx == TCP_SYNMAXRTX) {
+        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= TCP_SYNMAXRTX) {
             ++pcb_remove;
             err = ERR_TIMEOUT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max SYN retries reached\n"));
-        } else if (pcb->nrtx == TCP_MAXRTX) {
+            /* >= not ==: retransmission paths can advance nrtx between timer
+             * passes, so the counter can step past the exact limit. */
+        } else if (pcb->nrtx >= TCP_MAXRTX) {
             ++pcb_remove;
             err = ERR_ABRT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max DATA retries reached\n"));
@@ -644,27 +647,30 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                     tcp_keepalive(pcb);
                 }
             } else {
-                /* Increase the retransmission timer if it is running */
-                if (pcb->rtime >= 0) {
+                /* Increase the tick-domain marker if it is running. */
+                if (tcp_rexmit_timer_running(pcb)) {
                     ++pcb->rtime;
                 }
 
-                if (pcb->unacked != NULL && pcb->rtime >= pcb->rto) {
+                if (tcp_rto_deadline_elapsed(pcb, timer_now_us)) {
                     /* Time for a retransmission. */
                     LWIP_DEBUGF(TCP_RTO_DEBUG,
-                                ("tcp_slowtmr: rtime %" S16_F " pcb->rto %" S16_F "\n", pcb->rtime,
-                                 pcb->rto));
+                                ("tcp_slowtmr: deadline_us %lld now_us %lld rto_us %ld\n",
+                                 (long long)pcb->rto_deadline_us, (long long)timer_now_us,
+                                 (long)pcb->rto_us));
 
                     if (get_tcp_state(pcb) == SYN_SENT || get_tcp_state(pcb) == SYN_RCVD) {
                         pcb->flags |= TF_SYN_RTO_REXMITTED;
                     }
 
-                    /* RFC 6298 5.5: Exponential backoff of the retransmission timer. */
-                    pcb->rto =
-                        tcp_clamp_rto_ticks(tcp_clamp_rto_signed_ticks((pcb->sa >> 3) + pcb->sv)
-                                            << tcp_backoff[pcb->nrtx]);
+                    /* RFC 6298 5.5: double the operational RTO. Keep this
+                     * independent of nrtx: an advancing ACK resets the retry
+                     * episode but a sample-less ACK retains this backed-off
+                     * value until a valid RTT sample recomputes it. */
+                    pcb->rto_us = tcp_rto_clamp_us((int64_t)pcb->rto_us << 1);
 
-                    /* Reset the retransmission timer. */
+                    /* Re-arm deadline relative to the timer pass time. */
+                    pcb->rto_deadline_us = timer_now_us + (int64_t)pcb->rto_us;
                     pcb->rtime = 0;
 
                     if (get_tcp_state(pcb) != SYN_SENT) {
@@ -686,11 +692,18 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
 
                     /* The following needs to be called AFTER cwnd is set to one mss */
                     tcp_rexmit_rto(pcb);
-                } else if (pcb->unacked == NULL && pcb->rtime >= 0 && pcb->unsent != NULL) {
-                    /* Retry tcp_output() when unsent data is stalled with an empty unacked queue.
-                     * This happens after fast retransmit empties unacked and tcp_output() fails
-                     * to send (e.g. segment split blocked by pbuf ref > 1). Without unacked
-                     * segments, the RTO above cannot fire and TCP progress can stop.
+                } else if (pcb->unacked == NULL && pcb->unsent != NULL) {
+                    /* Unsent data stalled with an empty unacked queue: nothing is in flight, so
+                     * the RTO deadline above can never fire and TCP progress would otherwise
+                     * stop. Re-drive tcp_output(). Two ways to reach here:
+                     *   - fast retransmit emptied unacked and tcp_output() then failed to send
+                     *     (e.g. segment split blocked by pbuf ref > 1); rtime is >= 0.
+                     *   - the first segment of an idle flight failed on a transient
+                     *     TX-buffer / ring-full ERR_WOULDBLOCK; that path leaves rtime at the -1
+                     *     "no flight" sentinel, so this must NOT require rtime >= 0 (the previous
+                     *     guard did, leaking that case and risking a stalled connection).
+                     * tcp_output() respects the send window, so this is a no-op under flow
+                     * control; it only makes progress when there is a real send to retry.
                      */
                     pcb->rtime = 0;
                     tcp_output(pcb);
@@ -744,12 +757,18 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
 
         /* If this PCB has queued out of sequence data, but has been
            inactive for too long, will drop the data (it will eventually
-           be retransmitted). */
+           be retransmitted). The OOSEQ retention budget is now in
+           microseconds and preserves the legacy 3-tick floor via
+           tcp_ooseq_timeout_us(). */
 #if TCP_QUEUE_OOSEQ
-        if (pcb->ooseq != NULL && (u32_t)tcp_ticks - pcb->tmr >= pcb->rto * TCP_OOSEQ_TIMEOUT) {
-            tcp_segs_free(pcb, pcb->ooseq);
-            pcb->ooseq = NULL;
-            LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_slowtmr: dropping OOSEQ queued data\n"));
+        if (pcb->ooseq != NULL) {
+            uint64_t slow_interval_us = (uint64_t)slow_tmr_interval * 1000U;
+            uint64_t ooseq_idle_us = ((uint64_t)(u32_t)(tcp_ticks - pcb->tmr)) * slow_interval_us;
+            if (ooseq_idle_us >= tcp_ooseq_timeout_us(pcb, slow_interval_us)) {
+                tcp_segs_free(pcb, pcb->ooseq);
+                pcb->ooseq = NULL;
+                LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_slowtmr: dropping OOSEQ queued data\n"));
+            }
         }
 #endif /* TCP_QUEUE_OOSEQ */
 
@@ -928,7 +947,6 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
 
     memset(pcb, 0, sizeof(*pcb));
     pcb->my_container = container;
-    pcb->is_last_seg_dropped = false;
     pcb->prio = prio;
     pcb->snd_scale = 0;
     pcb->rcv_scale = 0;
@@ -944,9 +962,7 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     pcb->mss = pcb->advtsd_mss;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
-    pcb->rto = tcp_initial_rto_ticks();
-    pcb->sa = 0;
-    pcb->sv = tcp_initial_rto_ticks();
+    tcp_rto_pcb_seed(pcb);
     pcb->rtime = -1;
 #if TCP_CC_ALGO_MOD
     switch (lwip_cc_algo_module) {
@@ -999,9 +1015,7 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     pcb->flags = 0;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
-    pcb->rto = tcp_initial_rto_ticks();
-    pcb->sa = 0;
-    pcb->sv = tcp_initial_rto_ticks();
+    tcp_rto_pcb_seed(pcb);
     pcb->nrtx = 0;
     pcb->dupacks = 0;
     pcb->rtime = -1;
@@ -1019,7 +1033,6 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     pcb->snd_sml_snt = 0;
     pcb->snd_sml_add = 0;
     pcb->tcp_timer = 0;
-    pcb->rttest = 0;
     pcb->recv = tcp_recv_null;
     pcb->keep_cnt_sent = 0;
     pcb->quickack = 0;
@@ -1212,9 +1225,12 @@ void tcp_pcb_purge(struct tcp_pcb *pcb)
         pcb->ooseq = NULL;
 #endif /* TCP_QUEUE_OOSEQ */
 
-        /* Stop the retransmission timer as it will expect data on unacked
-           queue if it fires */
-        pcb->rtime = -1;
+        /* No queued segment or RTT sample survives a purge. Stop all timer
+         * markers before releasing the queues so a diagnostic read cannot
+         * observe dead timing ownership. */
+        tcp_rto_timer_stop(pcb);
+        pcb->rttest_us = 0;
+        pcb->rtseq = 0;
 
         tcp_tx_segs_free(pcb, pcb->unsent);
         tcp_tx_segs_free(pcb, pcb->unacked);

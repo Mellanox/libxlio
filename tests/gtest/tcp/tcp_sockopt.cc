@@ -156,6 +156,323 @@ TEST_F(tcp_sockopt, ti_1_getsockopt_tcp_info)
 }
 
 /**
+ * @test tcp_sockopt.ti_1b_tcp_info_low_rtt_us
+ * @brief
+ *    TCP_INFO microsecond-precision RTT/RTO smoke after a real round trip.
+ * @details
+ *    Verifies the microsecond-precision TCP_INFO surface
+ *    (`tcpi_rto`, `tcpi_rtt`):
+ *      - `tcpi_rto >= 200000 us` under default configuration: a unit/scale
+ *        sanity floor. A lower value under the default would mean RTO is being
+ *        reported in the wrong unit/scale (raw ticks, ms instead of us, or a
+ *        bad divide). NOTE: this does NOT by itself prove the us path is live;
+ *        the old tick conversion also cleared 200000 us, so this is a scale
+ *        tripwire, not a tick-vs-us granularity check.
+ *      - `tcpi_rtt > 0` (sa_us >> 3 == SRTT in us): the ACK estimator
+ *        must have produced at least one sample. Zero would mean Karn
+ *        invalidated every sample or the RX refresh dropped the ack_now_us
+ *        capture - both regressions. Read is guarded by
+ *        HAVE_STRUCT_TCP_INFO_TCPI_RTT (older toolchains lack the field).
+ *
+ *    `tcpi_rttvar` is intentionally not asserted: it can legitimately be
+ *    zero on a perfect lab link and no useful regression signature lives
+ *    in its upper tail.
+ *    `tcpi_rto` is intentionally not upper-bounded in default gtest: loaded
+ *    or virtualized runners can legitimately inflate wall-clock RTT/RTTVAR.
+ *    Low-latency `<600000` legacy-sentinel checks belong in lab gates or
+ *    deterministic estimator tests with controlled timing.
+ *
+ *    The 1-byte reply path forces the client to recv() before reading
+ *    TCP_INFO, which guarantees ACK processing has run end-to-end through
+ *    the RX refresh + tcp_receive estimator update sequence under test.
+ */
+TEST_F(tcp_sockopt, ti_1b_tcp_info_low_rtt_us)
+{
+    auto test_lambda = [this]() {
+        int rc = EOK;
+        int pid = fork();
+
+        if (0 == pid) { /* I am the child (client) */
+            barrier_fork(pid);
+
+            int fd = tcp_base::sock_create();
+            ASSERT_LE(0, fd);
+
+            rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            /* Drive several small payloads so the ACK estimator gets
+             * exercised across more than the initial SYN-ACK round trip.
+             */
+            static const char payload[] = HELLO_STR;
+            for (int i = 0; i < 4; ++i) {
+                ssize_t len = send(fd, (void *)payload, sizeof(payload), 0);
+                EXPECT_EQ(static_cast<ssize_t>(sizeof(payload)), len);
+            }
+
+            /* Wait for the 1-byte reply. recv() returning is the
+             * synchronization edge that guarantees the sender's ACK-side
+             * estimator has produced at least one sample before TCP_INFO.
+             */
+            char reply = 0;
+            ssize_t got = recv(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), got);
+
+            struct tcp_info ti;
+            socklen_t optlen = sizeof(ti);
+            memset(&ti, 0, sizeof(ti));
+            rc = getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &optlen);
+            ASSERT_EQ(0, rc);
+            /* tcpi_state is intentionally NOT pinned to TCP_ESTABLISHED: under
+             * the kernel stack softirq/NAPI may not have advanced the FSM, while
+             * under XLIO inline CQ draining may have. Both are healthy.
+             *
+             * What we DO want to flag is TCP_CLOSE - a peer RST or stack abort
+             * mid-flow. The server blocks on a "done" byte (sent below) before
+             * it closes, so this read always runs while the connection is still
+             * up; seeing TCP_CLOSE here therefore means a genuine unexpected
+             * abort, not the benign teardown race. Without the sync, an abortive
+             * close under XLIO_TCP_ABORT_ON_CLOSE would RST us into TCP_CLOSE
+             * here and fail this assertion.
+             */
+            ASSERT_NE(TCP_CLOSE, ti.tcpi_state);
+
+            EXPECT_GE(ti.tcpi_rto, 200000U)
+                << "tcpi_rto below the common XLIO/Linux test lower bound";
+
+            /* tcpi_rtt / tcpi_rttvar are guarded by configure (AC_CHECK_MEMBERS)
+             * because pre-2.4-era kernel headers lacked the fields. Production
+             * code guards the WRITES; the test guards the READS so we compile
+             * cleanly on minimal toolchains. tcpi_rttvar is intentionally NOT
+             * upper-bounded: RTTVAR can legitimately be 0 on a perfectly stable
+             * link, and no useful regression signature lives in its upper tail.
+             */
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTT
+            EXPECT_GT(ti.tcpi_rtt, 0U) << "tcpi_rtt missing after real ACK";
+#endif
+
+            /* Tell the server we are done reading TCP_INFO so it does not close
+             * (and, under XLIO_TCP_ABORT_ON_CLOSE, RST) the connection before
+             * the read above. */
+            static const char done = 'D';
+            ssize_t done_sent = send(fd, &done, sizeof(done), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(done)), done_sent);
+
+            close(fd);
+            exit(testing::Test::HasFailure());
+        } else { /* I am the parent (server) */
+            struct sockaddr_storage peer_addr;
+            socklen_t socklen;
+            char buf[sizeof(HELLO_STR) * 8];
+
+            int l_fd = tcp_base::sock_create();
+            ASSERT_LE(0, l_fd);
+
+            rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = listen(l_fd, 5);
+            ASSERT_EQ(0, rc);
+
+            barrier_fork(pid);
+
+            socklen = sizeof(peer_addr);
+            int fd = accept(l_fd, (struct sockaddr *)&peer_addr, &socklen);
+            ASSERT_LE(0, fd);
+
+            /* Drain whatever the client sends; we only need the bytes
+             * out of the way so the client can block on the 1-byte reply.
+             */
+            ssize_t total = 0;
+            const ssize_t target = static_cast<ssize_t>(sizeof(HELLO_STR) * 4);
+            while (total < target) {
+                ssize_t len = recv(fd, buf, sizeof(buf), 0);
+                if (len <= 0) {
+                    break;
+                }
+                total += len;
+            }
+
+            char reply = 'X';
+            ssize_t sent = send(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), sent);
+
+            /* Wait for the client's "done" byte before closing so the client's
+             * TCP_INFO read happens while the connection is still ESTABLISHED.
+             * This keeps the test deterministic under XLIO_TCP_ABORT_ON_CLOSE,
+             * where close() sends an RST that would otherwise tear the client's
+             * socket down to TCP_CLOSE mid-read. */
+            char done = 0;
+            (void)recv(fd, &done, sizeof(done), 0);
+
+            close(fd);
+            close(l_fd);
+
+            ASSERT_EQ(0, wait_fork(pid));
+        }
+    };
+
+    test_lambda();
+}
+
+/**
+ * @test tcp_sockopt.ti_1c_tcp_info_handshake_seeded_rto
+ * @brief
+ *    TCP_INFO tcpi_rto is seeded from the SYN/SYN-ACK handshake RTT before any
+ *    data is sent, rather than left at the unseeded 1 s initial.
+ * @details
+ *    Reads TCP_INFO immediately after connect() returns - i.e. right after the
+ *    handshake, before the first data segment. With handshake-RTT seeding the
+ *    initial RTO reflects the (tiny, lab) handshake round trip clamped to the
+ *    stack's floor. XLIO defaults to 600 ms; Linux commonly uses 200 ms.
+ *    Without seeding either stack would retain the unseeded 1 s initial RTO.
+ *    The shared assertion `200000 <= tcpi_rto < 1000000` distinguishes a
+ *    seeded RTO from that unseeded value without requiring kernel and XLIO
+ *    defaults to match.
+ *
+ *    This is a stack-agnostic property: both XLIO (offloaded) and the Linux
+ *    kernel seed the initial RTO from the handshake (RFC 6298 2.2), so the test
+ *    passes whether the connection is offloaded or not.
+ *
+ *    A second read after a data round trip confirms the per-ACK recompute did
+ *    not clobber the value back to the 1 s initial before the first data sample
+ *    drives the estimator.
+ */
+TEST_F(tcp_sockopt, ti_1c_tcp_info_handshake_seeded_rto)
+{
+    auto test_lambda = [this]() {
+        int rc = EOK;
+        int pid = fork();
+
+        if (0 == pid) { /* I am the child (client) */
+            barrier_fork(pid);
+
+            int fd = tcp_base::sock_create();
+            ASSERT_LE(0, fd);
+
+            /* SO_REUSEADDR so this test can run back-to-back with the other
+             * connect tests on the same fixed port without tripping TIME_WAIT
+             * at bind(). */
+            int reuse = 1;
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+            rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            /* Read TCP_INFO BEFORE sending any data: rto_us must already be
+             * seeded from the handshake RTT, not the unseeded 1 s initial. */
+            struct tcp_info ti;
+            socklen_t optlen = sizeof(ti);
+            memset(&ti, 0, sizeof(ti));
+            rc = getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &optlen);
+            ASSERT_EQ(0, rc);
+            ASSERT_NE(TCP_CLOSE, ti.tcpi_state);
+
+            EXPECT_GE(ti.tcpi_rto, 200000U)
+                << "tcpi_rto below the common XLIO/Linux test lower bound";
+            EXPECT_LT(ti.tcpi_rto, 1000000U)
+                << "tcpi_rto looks like the unseeded 1 s initial; handshake seeding missing";
+
+            /* One data round trip, then re-read as a sanity check: by now the
+             * first data sample has seeded the estimator (sa_us != 0), so this
+             * verifies steady-state RTO is sane (at least the shared test lower
+             * bound, but not the 1 s initial) rather than the sa_us == 0
+             * clobber-gate itself - the pre-data read above is the assertion
+             * that exercises the seed directly. */
+            static const char payload[] = HELLO_STR;
+            ssize_t len = send(fd, (void *)payload, sizeof(payload), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(payload)), len);
+
+            char reply = 0;
+            ssize_t got = recv(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), got);
+
+            memset(&ti, 0, sizeof(ti));
+            optlen = sizeof(ti);
+            rc = getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &optlen);
+            ASSERT_EQ(0, rc);
+            ASSERT_NE(TCP_CLOSE, ti.tcpi_state);
+            EXPECT_GE(ti.tcpi_rto, 200000U);
+            EXPECT_LT(ti.tcpi_rto, 1000000U)
+                << "steady-state tcpi_rto looks like the 1 s initial after a round trip";
+
+            /* Tell the server we are done reading TCP_INFO. The server blocks on
+             * this byte before it closes, so the steady-state read above always
+             * runs while the connection is still ESTABLISHED. Without this the
+             * peer's teardown races the read: a graceful FIN leaves us in
+             * TCP_CLOSE_WAIT (benign), but an abortive close
+             * (XLIO_TCP_ABORT_ON_CLOSE) RSTs us into TCP_CLOSE and trips the
+             * ASSERT_NE(TCP_CLOSE) above. */
+            static const char done = 'D';
+            ssize_t done_sent = send(fd, &done, sizeof(done), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(done)), done_sent);
+
+            close(fd);
+            exit(testing::Test::HasFailure());
+        } else { /* I am the parent (server) */
+            struct sockaddr_storage peer_addr;
+            socklen_t socklen;
+            char buf[sizeof(HELLO_STR) * 8];
+
+            int l_fd = tcp_base::sock_create();
+            ASSERT_LE(0, l_fd);
+
+            /* SO_REUSEADDR so the listen bind succeeds even if a prior connect
+             * test left this port's 4-tuple in TIME_WAIT. */
+            int reuse = 1;
+            setsockopt(l_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+            rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = listen(l_fd, 5);
+            ASSERT_EQ(0, rc);
+
+            barrier_fork(pid);
+
+            socklen = sizeof(peer_addr);
+            int fd = accept(l_fd, (struct sockaddr *)&peer_addr, &socklen);
+            ASSERT_LE(0, fd);
+
+            ssize_t total = 0;
+            const ssize_t target = static_cast<ssize_t>(sizeof(HELLO_STR));
+            while (total < target) {
+                ssize_t len = recv(fd, buf, sizeof(buf), 0);
+                if (len <= 0) {
+                    break;
+                }
+                total += len;
+            }
+
+            char reply = 'X';
+            ssize_t sent = send(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), sent);
+
+            /* Wait for the client's "done" byte before closing so the client's
+             * steady-state TCP_INFO read happens while the connection is still
+             * ESTABLISHED. This keeps the test deterministic under
+             * XLIO_TCP_ABORT_ON_CLOSE, where close() sends an RST that would
+             * otherwise tear the client's socket down to TCP_CLOSE mid-read. */
+            char done = 0;
+            (void)recv(fd, &done, sizeof(done), 0);
+
+            close(fd);
+            close(l_fd);
+
+            ASSERT_EQ(0, wait_fork(pid));
+        }
+    };
+
+    test_lambda();
+}
+
+/**
  * @test tcp_sockopt.ti_2_tcp_congestion
  * @brief
  *    TCP_CONGESTION option to change and check congestion control mechanism.

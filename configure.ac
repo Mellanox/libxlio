@@ -345,6 +345,14 @@ AC_CHECK_FUNCS(__read_chk __recv_chk __recvfrom_chk __poll_chk __ppoll_chk)
 # Check for gettid(). The wrapper appeared in glibc-2.30
 AC_CHECK_FUNCS(gettid)
 
+# Optional struct tcp_info members for sub-millisecond RTT/RTO reporting.
+# Older toolchain headers may not expose tcpi_rtt / tcpi_rttvar; sockinfo_tcp
+# guards the writes with HAVE_STRUCT_TCP_INFO_TCPI_RTT and
+# HAVE_STRUCT_TCP_INFO_TCPI_RTTVAR so the field is set only when present.
+AC_CHECK_MEMBERS([struct tcp_info.tcpi_rtt, struct tcp_info.tcpi_rttvar], [], [], [[
+#include <netinet/tcp.h>
+]])
+
 AC_MSG_CHECKING([for SOF_TIMESTAMPING_SOFTWARE support])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   #include <linux/net_tstamp.h>

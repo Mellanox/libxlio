@@ -224,6 +224,12 @@ struct socket_stats_t {
     socket_tls_counters_t tls_counters;
 #endif /* DEFINED_UTLS */
     socket_listen_counters_t listen_counters;
+    /* TCP timer observability: socket-lifetime high-water mark of the
+     * consecutive trylock-miss streak from
+     * tcp_timers_collection::handle_timer_expired. The live streak resets
+     * after an acquired pass; this published maximum does not.
+     */
+    uint32_t n_tcp_timer_consecutive_skips_max;
 
     // Control Path
     std::bitset<MC_TABLE_SIZE> mc_grp_map;
@@ -264,6 +270,7 @@ struct socket_stats_t {
         bound_port = connected_port = (in_port_t)0;
         threadid_last_rx = threadid_last_tx = pid_t(0);
         n_rx_ready_pkt_count = n_rx_ready_byte_count = n_tx_ready_byte_count = 0;
+        n_tcp_timer_consecutive_skips_max = 0;
         memset(&counters, 0, sizeof(counters));
 #ifdef DEFINED_UTLS
         tls_tx_offload = tls_rx_offload = false;

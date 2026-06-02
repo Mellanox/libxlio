@@ -41,8 +41,12 @@
 #include "core/lwip/opt.h"
 
 #include "core/lwip/tcp_impl.h"
+#include "core/lwip/tcp_rto.h"
+#include "core/proto/xlio_time.h"
 
 #include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <errno.h>
 #include <assert.h>
 
@@ -1210,22 +1214,6 @@ err_t tcp_output(struct tcp_pcb *pcb)
                 ("tcp_output: snd_wnd %" U32_F ", cwnd %" U32_F ", wnd %" U32_F "\n", pcb->snd_wnd,
                  pcb->cwnd, wnd));
 
-    if (pcb->is_last_seg_dropped && pcb->unacked && !pcb->unacked->next) {
-        /* Forcibly retransmit segment from the unacked queue if it was dropped
-         * on the previous iteration.
-         * Disable the retransmission timer after the unacked queue is emptied.
-         */
-        pcb->is_last_seg_dropped = false;
-        pcb->unacked->next = pcb->unsent;
-        pcb->unsent = pcb->unacked;
-        pcb->unacked = NULL;
-        if (NULL == pcb->last_unsent) {
-            pcb->last_unsent = pcb->last_unacked;
-        }
-        pcb->last_unacked = NULL;
-        pcb->rtime = -1;
-        pcb->ticks_since_data_sent = -1;
-    }
     seg = pcb->unsent;
 
 #if TCP_OUTPUT_DEBUG
@@ -1319,16 +1307,12 @@ err_t tcp_output(struct tcp_pcb *pcb)
             }
 
             rc = tcp_output_segment(seg, pcb);
-            if (rc != ERR_OK && pcb->unacked) {
-                /* Transmission failed, skip moving the segment to unacked, so we
-                 * retry with the next tcp_output(). We must have at least one unacked
-                 * segment in this case or RTO would be broken otherwise. */
+            if (rc != ERR_OK) {
+                /* Transmission failed before the segment reached the wire. Keep it
+                 * on unsent so the next tcp_output() retry does not depend on a
+                 * fake unacked segment or an armed RTO deadline.
+                 */
                 break;
-            }
-            if (rc == ERR_WOULDBLOCK) {
-                /* Mark that the segment is dropped, so we can retransmit it during
-                 * the next iteration. */
-                pcb->is_last_seg_dropped = true;
             }
 
             pcb->unsent = seg->next;
@@ -1462,20 +1446,23 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
         LWIP_ASSERT("tcp_output_segment: need to find route to host", 0);
     }
 
-    /* Set retransmission timer running if it is not currently enabled */
-    if (pcb->rtime == -1) {
-        pcb->rtime = 0;
-    }
+    /* sample_started_here enforces Karn ownership: only the call that started
+     * the sample may clear it on a failed send.
+     */
+    bool sample_started_here = false;
+    int64_t tx_now_us = 0;
 
-    if (pcb->ticks_since_data_sent == -1) {
-        pcb->ticks_since_data_sent = 0;
-    }
-
-    if (pcb->rttest == 0) {
-        pcb->rttest = tcp_ticks;
+    if (tcp_rtt_sample_should_start(pcb, seg->seqno, seg->len,
+                                    (TCPH_FLAGS(seg->tcphdr) & TCP_SYN) != 0)) {
+        tx_now_us = clock_gettime_monotonic_us();
+        xlio_time_dbg_inc_tx_rtt_start();
+        pcb->rttest_us = tx_now_us;
         pcb->rtseq = seg->seqno;
+        sample_started_here = true;
 
-        LWIP_DEBUGF(TCP_RTO_DEBUG, ("tcp_output_segment: rtseq %" U32_F "\n", pcb->rtseq));
+        LWIP_DEBUGF(TCP_RTO_DEBUG,
+                    ("tcp_output_segment: rtseq %" U32_F " rttest_us %lld\n", pcb->rtseq,
+                     (long long)pcb->rttest_us));
     }
 
     LWIP_DEBUGF(TCP_OUTPUT_DEBUG,
@@ -1507,7 +1494,32 @@ static err_t tcp_output_segment(struct tcp_seg *seg, struct tcp_pcb *pcb)
     flags |= (TCP_SEQ_LT(seg->seqno, pcb->snd_nxt) ? TCP_WRITE_REXMIT : 0);
     flags |= seg->flags & TF_SEG_OPTS_ZEROCOPY;
 
-    return pcb->ip_output(p, seg, pcb, flags);
+    err_t rc = pcb->ip_output(p, seg, pcb, flags);
+
+    if (rc != ERR_OK) {
+        /* Karn: only the call that started the in-flight sample may clear it,
+         * so a failed send cannot erase an earlier call's still-valid sample.
+         */
+        if (sample_started_here) {
+            pcb->rttest_us = 0;
+        }
+    }
+
+    if (rc == ERR_OK) {
+        /* Arm rto_deadline_us only on success and only if currently 0.
+         * Reuse tx_now_us from the sample start; otherwise read it now (cold path - first segment
+         * after idle).
+         */
+        if (pcb->rto_deadline_us == 0) {
+            if (!sample_started_here) {
+                tx_now_us = clock_gettime_monotonic_us();
+                xlio_time_dbg_inc_tx_arm_idle();
+            }
+            tcp_rto_timer_start_if_needed(pcb, tx_now_us);
+        }
+    }
+
+    return rc;
 }
 
 /**
@@ -1618,14 +1630,29 @@ void tcp_rexmit_rto(struct tcp_pcb *pcb)
     pcb->unacked = NULL;
     pcb->last_unacked = NULL;
 
-    /* increment number of retransmissions */
-    ++pcb->nrtx;
+    /* Increment the retry count without allowing a long fast-retransmit
+     * episode to wrap and evade the retry limit. */
+    if (pcb->nrtx < UINT8_MAX) {
+        ++pcb->nrtx;
+    }
 
-    /* Don't take any RTT measurements after retransmitting. */
-    pcb->rttest = 0;
+    /* Karn's algorithm: do not use a retransmitted segment for RTT.
+     * rtseq is dead state when rttest_us == 0 (eligibility short-circuits
+     * on rttest_us in tcp_receive); not zeroed here because 0 is not a
+     * sentinel for rtseq.
+     */
+    pcb->rttest_us = 0;
 
     /* Do the actual retransmission */
     tcp_output(pcb);
+
+    if (pcb->unacked == NULL) {
+        /* No retransmitted segment reached the wire. The queue is parked on
+         * unsent, so it cannot own the deadline prepared by tcp_slowtmr().
+         * Clear that deadline; the eventual successful re-drive arms a fresh
+         * one from its actual transmit time. */
+        tcp_rto_deadline_clear(pcb);
+    }
 }
 
 /**
@@ -1664,10 +1691,16 @@ void tcp_rexmit(struct tcp_pcb *pcb)
         pcb->last_unsent = seg;
     }
 
-    ++pcb->nrtx;
+    if (pcb->nrtx < UINT8_MAX) {
+        ++pcb->nrtx;
+    }
 
-    /* Don't take any rtt measurements after retransmitting. */
-    pcb->rttest = 0;
+    /* Karn's algorithm: do not use a retransmitted segment for RTT.
+     * rtseq is dead state when rttest_us == 0 (eligibility short-circuits
+     * on rttest_us in tcp_receive); not zeroed here because 0 is not a
+     * sentinel for rtseq.
+     */
+    pcb->rttest_us = 0;
 }
 
 /**
