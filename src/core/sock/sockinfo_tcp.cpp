@@ -4869,7 +4869,8 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         case SO_XLIO_EXT_VLAN_TAG:
             if (__optlen == sizeof(int)) {
                 int tempval = *reinterpret_cast<const int *>(__optval);
-                if (tempval >= 0 && tempval <= UINT16_MAX) {
+                /* Option supports 12-bit VLAN ID part of the VLAN tag. */
+                if (tempval >= 0 && tempval < 4096) {
                     m_external_vlan_tag = static_cast<uint16_t>(tempval);
                     pass_to_os_cond = false;
                     si_tcp_logdbg("(SO_XLIO_EXT_VLAN_TAG) m_external_vlan_tag: %" PRIu16,

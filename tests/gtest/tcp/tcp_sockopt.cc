@@ -216,6 +216,165 @@ TEST_F(tcp_sockopt, ti_2_tcp_congestion)
     }
 }
 
+/**
+ * @test tcp_sockopt.ti_3_ext_vlan_tag
+ * @brief
+ *    setsockopt(SO_XLIO_EXT_VLAN_TAG) rejects values that don't fit in the
+ *    12-bit VLAN ID part of the VLAN tag.
+ * @details
+ */
+TEST_F(tcp_sockopt, ti_3_ext_vlan_tag)
+{
+    /* SO_XLIO_EXT_VLAN_TAG is XLIO specific and not recognized by the kernel. */
+    SKIP_TRUE(xlio_get_api(), "This test should be launched under libxlio.so");
+
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_LE(0, fd);
+
+    int val = 4095;
+    int rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &val, sizeof(val));
+    EXPECT_EQ(0, rc);
+
+    val = 4096;
+    rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &val, sizeof(val));
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(EINVAL, errno);
+
+    val = -1;
+    rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &val, sizeof(val));
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(EINVAL, errno);
+
+    short short_val = 1;
+    rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &short_val, sizeof(short_val));
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(EINVAL, errno);
+
+    close(fd);
+}
+
+/**
+ * @test tcp_sockopt.ti_4_ext_vlan_tag_connect_fail
+ * @brief
+ *    SO_XLIO_EXT_VLAN_TAG causes connect() to fail with ETIMEDOUT when the
+ *    tagged SYN packets are not received by the server.
+ * @details
+ */
+TEST_F(tcp_sockopt, ti_4_ext_vlan_tag_connect_fail)
+{
+    SKIP_TRUE(xlio_get_api(), "This test should be launched under libxlio.so");
+
+    int pid = fork();
+    ASSERT_GE(pid, 0);
+
+    if (pid == 0) { /* child - client */
+        barrier_fork(pid);
+
+        int fd = tcp_base::sock_create();
+        ASSERT_LE(0, fd);
+
+        int vlan_tag = 1;
+        int rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &vlan_tag, sizeof(vlan_tag));
+        ASSERT_EQ(0, rc);
+
+        unsigned int user_timeout_ms = 200U;
+        rc = setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms,
+                        sizeof(user_timeout_ms));
+        ASSERT_EQ(0, rc);
+
+        struct timespec ts_start, ts_end;
+        clock_gettime(CLOCK_MONOTONIC, &ts_start);
+
+        rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        EXPECT_EQ(-1, rc);
+        EXPECT_EQ(ETIMEDOUT, errno);
+
+        clock_gettime(CLOCK_MONOTONIC, &ts_end);
+        long elapsed_ms = (ts_end.tv_sec - ts_start.tv_sec) * 1000L +
+            (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000L;
+        EXPECT_GE(elapsed_ms, 200L);
+        EXPECT_LT(elapsed_ms, 1000L);
+
+        close(fd);
+        exit(testing::Test::HasFailure());
+    } else { /* parent - server */
+        int l_fd = tcp_base::sock_create();
+        ASSERT_LE(0, l_fd);
+
+        int rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
+
+        rc = listen(l_fd, 5);
+        ASSERT_EQ(0, rc);
+
+        barrier_fork(pid);
+
+        ASSERT_EQ(0, wait_fork(pid));
+        close(l_fd);
+    }
+}
+
+/**
+ * @test tcp_sockopt.ti_5_ext_vlan_tag_disable
+ * @brief
+ *    Setting SO_XLIO_EXT_VLAN_TAG to 0 after a non-zero value disables VLAN
+ *    tagging, and a subsequent connect() succeeds normally.
+ * @details
+ */
+TEST_F(tcp_sockopt, ti_5_ext_vlan_tag_disable)
+{
+    SKIP_TRUE(xlio_get_api(), "This test should be launched under libxlio.so");
+
+    int pid = fork();
+    ASSERT_GE(pid, 0);
+
+    if (pid == 0) { /* child - client */
+        barrier_fork(pid);
+
+        int fd = tcp_base::sock_create();
+        ASSERT_LE(0, fd);
+
+        int vlan_tag = 1;
+        int rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &vlan_tag, sizeof(vlan_tag));
+        ASSERT_EQ(0, rc);
+
+        vlan_tag = 0;
+        rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &vlan_tag, sizeof(vlan_tag));
+        ASSERT_EQ(0, rc);
+
+        unsigned int user_timeout_ms = 5000U;
+        rc = setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms,
+                        sizeof(user_timeout_ms));
+        ASSERT_EQ(0, rc);
+
+        rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        EXPECT_EQ(0, rc);
+
+        close(fd);
+        exit(testing::Test::HasFailure());
+    } else { /* parent - server */
+        int l_fd = tcp_base::sock_create();
+        ASSERT_LE(0, l_fd);
+
+        int rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
+
+        rc = listen(l_fd, 5);
+        ASSERT_EQ(0, rc);
+
+        barrier_fork(pid);
+
+        struct sockaddr_storage peer_addr;
+        socklen_t socklen = sizeof(peer_addr);
+        int fd = accept(l_fd, (struct sockaddr *)&peer_addr, &socklen);
+        ASSERT_LE(0, fd);
+
+        close(fd);
+        close(l_fd);
+        ASSERT_EQ(0, wait_fork(pid));
+    }
+}
+
 class tcp_set_get_sockopt : public ::testing::Test {
 protected:
     void SetUp() override
