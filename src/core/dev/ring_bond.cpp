@@ -410,6 +410,15 @@ void ring_bond::ack_cq_events()
     m_lock_ring_rx.unlock();
 }
 
+void ring_bond::drain_tx_for_poll_group_teardown()
+{
+    for (ring_slave *slave : m_bond_rings) {
+        if (slave) {
+            slave->drain_tx_for_poll_group_teardown();
+        }
+    }
+}
+
 void ring_bond::wait_for_notification_and_process_element(void *pv_fd_ready_array /*NULL*/)
 {
     m_lock_ring_rx.lock();

@@ -40,6 +40,7 @@ public:
     virtual void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
     virtual int drain_and_proccess() override;
     virtual void ack_cq_events() override;
+    virtual void drain_tx_for_poll_group_teardown() override;
     virtual void wait_for_notification_and_process_element(
         void *pv_fd_ready_array = nullptr) override;
     virtual int get_num_resources() const override { return m_bond_rings.size(); };
