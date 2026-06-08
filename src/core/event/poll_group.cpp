@@ -19,6 +19,7 @@
 #define grp_logerr   __log_err
 #define grp_logwarn  __log_warn
 #define grp_loginfo  __log_info
+#define grp_logdet   __log_details
 #define grp_logdbg   __log_dbg
 
 /*
@@ -64,13 +65,9 @@ poll_group::poll_group(const struct xlio_poll_group_attr &attr)
 // coverity[UNCAUGHT_EXCEPT]
 poll_group::~poll_group()
 {
-    //destroy all pending to remove sockets
-    while (!m_pending_to_remove_lst.empty()) {
-        sockinfo_tcp *si = m_pending_to_remove_lst.front();
-        m_pending_to_remove_lst.pop_front();
-        si->clean_socket_obj();
-    }
+    grp_logdbg("Polling group %p dtor started", this);
 
+    // Remove this poll group from the global list
     s_poll_groups_lock.lock();
     auto iter = std::find(s_poll_groups.begin(), s_poll_groups.end(), this);
     if (iter != std::end(s_poll_groups)) {
@@ -78,11 +75,40 @@ poll_group::~poll_group()
     }
     s_poll_groups_lock.unlock();
 
+    // Close all sockets in the socket list - might add sockets to m_pending_to_remove_lst
     while (!m_sockets_list.empty()) {
         sockinfo_tcp *si = dynamic_cast<sockinfo_tcp *>(m_sockets_list.front());
         if (likely(si)) {
+            // This may add the socket back to m_pending_to_remove_lst
             close_socket(si, true);
         }
+    }
+
+    // This is used by a gtest, do not modify the output format.
+    grp_logdet("UNITTEST: Polling group %p step 1: m_pending_to_remove_lst size=%zu", this,
+               m_pending_to_remove_lst.size());
+
+    // Drain TX buffers while rings still exist. ZC completion callbacks release
+    // socket pending-TX references, allowing sockets below to be safely cleaned.
+    for (ring *rng : m_rings) {
+        rng->drain_tx_for_poll_group_teardown();
+    }
+
+    // Destroy all pending to remove sockets after ring drain. This handles sockets
+    // that were already pending before destruction, and sockets added by close_socket().
+    while (!m_pending_to_remove_lst.empty()) {
+        sockinfo_tcp *si = m_pending_to_remove_lst.front();
+        // We expect that all ZC references are released.
+        assert(!si->has_pending_tx_express_zc());
+
+        // If ZC buffers were drained by drain_tx_for_poll_group_teardown for this socket,
+        // only now we can inform the app about the termination.
+        si->lock_tcp_con();
+        si->maybe_notify_terminated_locked();
+        si->unlock_tcp_con();
+
+        m_pending_to_remove_lst.pop_front();
+        si->clean_socket_obj();
     }
 
     // Release references to the rings that we take in add_ring()
