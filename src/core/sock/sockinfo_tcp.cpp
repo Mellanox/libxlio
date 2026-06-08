@@ -320,6 +320,8 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     m_parent = nullptr;
     m_iomux_ready_fd_array = nullptr;
 
+    m_tx_express_zc_pending.init(false);
+
     /* RCVBUF accounting */
     m_rcvbuff_max = safe_mce_sys().sysctl_reader.get_tcp_rmem()->default_value;
     m_rcvbuff_current = 0;
@@ -400,6 +402,7 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
 
     m_xlio_socket_userdata = attr->userdata_sq;
     m_p_group = reinterpret_cast<poll_group *>(attr->group);
+    m_tx_express_zc_pending.init(bool(m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE));
 
     m_ring_alloc_log_rx.set_ring_alloc_logic(RING_LOGIC_PER_USER_ID);
     m_ring_alloc_log_rx.set_user_id_key(reinterpret_cast<uint64_t>(m_p_group));
@@ -654,7 +657,9 @@ void sockinfo_tcp::xlio_socket_event(int event, int value)
 {
     // Before accept_cb on accepted children, suppress app events CBs
     if (is_xlio_socket() && is_xlio_app_callbacks_allowed()) {
-        /* poll_group::m_socket_event_cb must be always set. */
+        // m_p_group and poll_group::m_socket_event_cb must be set if
+        // is_xlio_app_callbacks_allowed() is true.
+        // coverity[deref_parm]  /* False positive: m_p_group */
         m_p_group->m_socket_event_cb(reinterpret_cast<xlio_socket_t>(this), m_xlio_socket_userdata,
                                      event, value);
     }
@@ -1767,6 +1772,33 @@ err_t sockinfo_tcp::ip_output_syn_ack(struct pbuf *p, struct tcp_seg *seg, void 
     return ERR_OK;
 }
 
+void sockinfo_tcp::maybe_notify_terminated_locked()
+{
+    ASSERT_LOCKED(m_tcp_con_lock);
+
+    if (!is_xlio_socket() || m_state != SOCKINFO_CLOSING || m_is_xlio_socket_terminated ||
+        has_pending_tx_express_zc()) {
+        return;
+    }
+
+    const enum tcp_state state = get_tcp_state(&m_pcb);
+    if (state == CLOSED || state == TIME_WAIT) {
+        // Set the flag before calling the app callback, so that if the app closes the
+        // socket, it does not trigger another (recursive) callback
+        m_is_xlio_socket_terminated = true;
+        xlio_socket_event(XLIO_SOCKET_EVENT_TERMINATED, 0);
+    }
+}
+
+void sockinfo_tcp::tx_express_zc_unref_underflow()
+{
+    // This func is called when we detect decrement to -1.
+
+    // Increment it back to 0
+    tx_express_zc_inc_ref();
+    si_tcp_logerr("express ZCOPY pending counter underflow");
+}
+
 /*static*/
 void sockinfo_tcp::tcp_state_observer(void *pcb_container, enum tcp_state new_state)
 {
@@ -1778,8 +1810,7 @@ void sockinfo_tcp::tcp_state_observer(void *pcb_container, enum tcp_state new_st
         }
         if ((new_state == CLOSED || new_state == TIME_WAIT) &&
             p_si_tcp->m_state == SOCKINFO_CLOSING && !p_si_tcp->m_is_xlio_socket_terminated) {
-            p_si_tcp->xlio_socket_event(XLIO_SOCKET_EVENT_TERMINATED, 0);
-            p_si_tcp->m_is_xlio_socket_terminated = true;
+            p_si_tcp->maybe_notify_terminated_locked();
         }
     }
     if (p_si_tcp->m_state == SOCKINFO_CLOSING && (new_state == CLOSED || new_state == TIME_WAIT)) {
@@ -5702,7 +5733,7 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
     }
     if (likely(p_desc) && p_desc->lwip_pbuf.type == PBUF_ZEROCOPY) {
         if (p_desc->lwip_pbuf.desc.attr == PBUF_DESC_EXPRESS) {
-            p_desc->m_flags |= mem_buf_desc_t::ZCOPY;
+            p_desc->m_flags |= mem_buf_desc_t::ZCOPY + mem_buf_desc_t::ZCOPY_PENDING;
             p_desc->tx.zc.callback = tcp_express_zc_callback;
             if (p_buff) {
                 mem_buf_desc_t *p_prev_desc = reinterpret_cast<mem_buf_desc_t *>(p_buff);
@@ -5710,6 +5741,7 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
             } else {
                 p_desc->tx.zc.ctx = reinterpret_cast<void *>(p_si_tcp);
             }
+            p_si_tcp->tx_express_zc_inc_ref();
         }
     }
     return (struct pbuf *)p_desc;
@@ -5760,6 +5792,11 @@ void sockinfo_tcp::tcp_express_zc_callback(mem_buf_desc_t *p_desc)
     if (opaque_op && si->m_p_group && si->m_p_group->m_socket_comp_cb) {
         si->m_p_group->m_socket_comp_cb(reinterpret_cast<xlio_socket_t>(si),
                                         si->m_xlio_socket_userdata, opaque_op);
+    }
+
+    if (p_desc->m_flags & mem_buf_desc_t::ZCOPY_PENDING) {
+        p_desc->m_flags &= ~mem_buf_desc_t::ZCOPY_PENDING;
+        si->tx_express_zc_dec_ref();
     }
 }
 
@@ -5912,6 +5949,7 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
             bool destroyable = false;
             if (!p_sock->is_cleaned()) {
                 p_sock->handle_timer_expired();
+                p_sock->maybe_notify_terminated_locked();
                 destroyable = p_sock->is_destroyable_no_lock();
             }
             p_sock->unlock_tcp_con();

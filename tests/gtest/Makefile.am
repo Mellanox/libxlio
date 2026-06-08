@@ -127,6 +127,7 @@ gtest_SOURCES = \
 	core/xlio_sockopt.cc \
 	\
 	xlio_ultra_api/xlio_socket.cc \
+	xlio_ultra_api/xlio_socket_close_while_pending_tx.cc \
 	xlio_ultra_api/xlio_socket_listen_connect.cc \
 	xlio_ultra_api/xlio_socket_migrate.cc \
 	xlio_ultra_api/xlio_socket_migrate_2.cc \

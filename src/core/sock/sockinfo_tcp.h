@@ -282,19 +282,20 @@ public:
     bool is_closable() override
     {
         return get_tcp_state(&m_pcb) == CLOSED && m_syn_received.empty() &&
-            m_accepted_conns.empty();
+            m_accepted_conns.empty() && !has_pending_tx_express_zc();
     }
     bool inline is_destroyable_lock()
     {
         bool state;
         m_tcp_con_lock.lock();
-        state = get_tcp_state(&m_pcb) == CLOSED && m_state == SOCKINFO_CLOSING;
+        state = is_destroyable_no_lock();
         m_tcp_con_lock.unlock();
         return state;
     }
     bool inline is_destroyable_no_lock()
     {
-        return get_tcp_state(&m_pcb) == CLOSED && m_state == SOCKINFO_CLOSING;
+        return get_tcp_state(&m_pcb) == CLOSED && m_state == SOCKINFO_CLOSING &&
+            !has_pending_tx_express_zc();
     }
     bool skip_os_select() override
     {
@@ -596,6 +597,34 @@ private:
 
     bool is_connected_and_ready_to_send();
 
+    // Increment ref count of pending ZC TX buffers.
+    inline void tx_express_zc_inc_ref() { m_tx_express_zc_pending.increment(); }
+
+    // Decrement ref count of pending ZC TX buffers.
+    inline void tx_express_zc_dec_ref()
+    {
+        uint32_t prev = m_tx_express_zc_pending.decrement_return_prev();
+        if (unlikely(prev == 0)) {
+            tx_express_zc_unref_underflow();
+            return;
+        }
+    }
+
+public:
+    // Check if there are any pending ZC TX buffers.
+    inline bool has_pending_tx_express_zc() const
+    {
+        return m_tx_express_zc_pending.get_value() != 0;
+    }
+
+    // Notify app about termination of the socket if conditions are right.
+    // Must be called with m_tcp_con_lock held.
+    void maybe_notify_terminated_locked();
+
+private:
+    // Helper function to report error
+    void tx_express_zc_unref_underflow();
+
     inline event_handler_manager *get_event_mgr();
 
 public:
@@ -666,6 +695,65 @@ private:
     static const unsigned TX_CONSECUTIVE_EAGAIN_THREASHOLD = 10;
     unsigned m_tx_consecutive_eagain_count;
     bool m_sysvar_rx_poll_on_tx_tcp;
+
+    // Amount of pending ZC TX buffers - socket cannot be destroyed until this goes down to 0.
+    // When socket group is created with XLIO_GROUP_FLAG_SAFE, we use an atomic variable.
+    // Otherwise, we use a regular variable to improve performance.
+    struct m_tx_express_zc_pending_t {
+        bool m_use_atomic;
+        union {
+            std::atomic<uint32_t> atomic;
+            uint32_t plain;
+        } data;
+
+        m_tx_express_zc_pending_t()
+        {
+            m_use_atomic = false;
+            data.plain = 0;
+        }
+
+        void init(bool use_atomic)
+        {
+            m_use_atomic = use_atomic;
+            if (m_use_atomic) {
+                // Make sure atomic ctor is called
+                new (&data.atomic) std::atomic<uint32_t>(0);
+            } else {
+                data.plain = 0;
+            }
+        }
+
+        void increment()
+        {
+            if (m_use_atomic) {
+                data.atomic.fetch_add(1, std::memory_order_relaxed);
+            } else {
+                data.plain++;
+            }
+        }
+
+        uint32_t decrement_return_prev()
+        {
+            uint32_t prev = 0;
+            if (m_use_atomic) {
+                prev = data.atomic.fetch_sub(1, std::memory_order_acq_rel);
+            } else {
+                prev = data.plain--;
+            }
+            return prev;
+        }
+
+        uint32_t get_value() const
+        {
+            if (m_use_atomic) {
+                return data.atomic.load(std::memory_order_acquire);
+            } else {
+                return data.plain;
+            }
+        }
+    };
+    m_tx_express_zc_pending_t m_tx_express_zc_pending;
+
     uint16_t m_external_vlan_tag = 0U;
     /*
      * XLIO Ultra API

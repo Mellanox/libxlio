@@ -45,6 +45,9 @@ public:
         TYPICAL = 0,
         ZCOPY = 0x02,
         HAD_CQE_ERROR = 0x04,
+        // Set if the buffer is pending ZC TX callback, counted by
+        // sockinfo_tcp::m_tx_express_zc_pending
+        ZCOPY_PENDING = 0x08,
     };
 
 public:
