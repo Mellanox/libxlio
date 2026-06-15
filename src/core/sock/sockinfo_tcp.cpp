@@ -679,7 +679,7 @@ err_t sockinfo_tcp::rx_lwip_cb_xlio_socket(void *arg, struct tcp_pcb *pcb, struc
         return err;
     }
 
-    tcp_recved(pcb, p->tot_len, true);
+    conn->rx_lwip_shrink_rcv_wnd_xlio_socket(p->tot_len);
 
     if (conn->m_p_group->m_socket_rx_cb) {
         struct pbuf *ptmp = p;
@@ -2143,6 +2143,17 @@ inline void sockinfo_tcp::rx_lwip_shrink_rcv_wnd(size_t pbuf_tot_len, int bytes_
         }
         m_rcvbuff_non_tcp_recved += non_tcp_receved_bytes_remaining - bytes_to_shrink;
     }
+}
+
+inline void sockinfo_tcp::rx_lwip_shrink_rcv_wnd_xlio_socket(size_t pbuf_tot_len)
+{
+    if (unlikely(m_pcb.rcv_wnd_max > m_pcb.rcv_wnd_max_desired)) {
+        const uint32_t bytes_to_shrink = std::min(m_pcb.rcv_wnd_max - m_pcb.rcv_wnd_max_desired,
+                                                  static_cast<uint32_t>(pbuf_tot_len));
+        m_pcb.rcv_wnd_max -= bytes_to_shrink;
+    }
+
+    tcp_recved(&m_pcb, static_cast<uint32_t>(pbuf_tot_len), true);
 }
 
 err_t sockinfo_tcp::rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)

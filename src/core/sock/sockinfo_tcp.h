@@ -482,6 +482,7 @@ private:
     void rx_lwip_cb_error(pbuf *p);
     inline void rx_lwip_process_chained_pbufs(pbuf *p);
     inline void rx_lwip_shrink_rcv_wnd(size_t pbuf_tot_len, int nbytes);
+    inline void rx_lwip_shrink_rcv_wnd_xlio_socket(size_t pbuf_tot_len);
     inline void save_packet_info_in_ready_list(pbuf *p);
     // Be sure that m_pcb is initialized
     void set_conn_properties_from_pcb();
