@@ -1,3 +1,23 @@
+Version 3.71.0-1:
+Date + Time 2026-06-22
+=============================================================
+Added:
+	- RM #4684689 Remove deprecated parameters, unused components, and broken cubic congestion control
+	- RM #4712119 Document and restrict SO_XLIO_EXT_VLAN_TAG to 12 bits
+	- RM #4995201 Add diagnostic log messages and improve xlio.h documentation
+
+Fixed:
+	- RM #4043157 Set TCP initial RTO to 1s per RFC 6298
+	- RM #4724535 Align TCP congestion startup with RFC behavior
+	- RM #4934380 Improve configuration reference and schema documentation accuracy
+	- RM #4962651 Fix "use xlio" keyword rejected by rules parser
+	- RM #4977472 Fix unsorted unsent queue after RTO causing IO hang
+	- RM #5006513 Prevent TCP cwnd growth from stalling
+	- RM #5020006 Sync stats file after fork for per-process monitor.stats.file_path
+	- RM #5029218 Stabilize UDP null-iov receive timeout
+	- RM #5042414 Lower TCP_ULP duplicate log to debug level
+	- RM #5088334 Ultra API SO_RCVBUF shrink support on connected sockets
+
 Version 3.70.3-1:
 Date + Time 2026-04-23
 =============================================================
