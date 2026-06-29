@@ -80,7 +80,8 @@ static void tcp_parseopt(struct tcp_pcb *pcb, tcp_in_data *in_data);
 static void tcp_listen_input(struct tcp_pcb *pcb, tcp_in_data *in_data);
 static err_t tcp_timewait_input(struct tcp_pcb *pcb, tcp_in_data *in_data);
 static s8_t tcp_quickack(struct tcp_pcb *pcb, tcp_in_data *in_data);
-static bool tcp_handle_syn_established(struct tcp_pcb *pcb, int64_t now_us);
+static bool __attribute__((noinline))
+tcp_handle_syn_established(struct tcp_pcb *pcb, int64_t now_us);
 
 /**
  * Send quickack if TCP_QUICKACK is enabled
@@ -97,7 +98,10 @@ s8_t tcp_quickack(struct tcp_pcb *pcb, tcp_in_data *in_data)
 #endif
 }
 
-static bool tcp_handle_syn_established(struct tcp_pcb *pcb, int64_t now_us)
+/* Keep handshake-only RTO initialization outside tcp_process()'s steady-state
+ * instruction footprint. */
+static bool __attribute__((noinline))
+tcp_handle_syn_established(struct tcp_pcb *pcb, int64_t now_us)
 {
     const bool syn_rto_rexmitted = (pcb->flags & TF_SYN_RTO_REXMITTED) != 0;
     const bool syn_retransmitted = syn_rto_rexmitted || pcb->nrtx > 0;
