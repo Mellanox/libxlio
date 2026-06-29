@@ -152,7 +152,8 @@ bool tcp_rto_deadline_elapsed(const struct tcp_pcb *pcb, int64_t timer_now_us)
         timer_now_us >= pcb->rto_deadline_us;
 }
 
-s32_t tcp_syn_fallback_rto_us(void)
+/* cold: only reached after a SYN/SYN-ACK RTO retransmission. */
+s32_t __attribute__((cold)) tcp_syn_fallback_rto_us(void)
 {
     return tcp_rto_clamp_us(TCP_RTO_FALLBACK_US);
 }

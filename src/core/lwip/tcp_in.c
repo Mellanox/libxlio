@@ -80,7 +80,10 @@ static void tcp_parseopt(struct tcp_pcb *pcb, tcp_in_data *in_data);
 static void tcp_listen_input(struct tcp_pcb *pcb, tcp_in_data *in_data);
 static err_t tcp_timewait_input(struct tcp_pcb *pcb, tcp_in_data *in_data);
 static s8_t tcp_quickack(struct tcp_pcb *pcb, tcp_in_data *in_data);
-static bool tcp_handle_syn_established(struct tcp_pcb *pcb, int64_t now_us);
+/* noinline: keep this once-per-connection helper out of the per-packet
+ * tcp_process() hot path - see the comment at its definition below. */
+static bool __attribute__((noinline))
+tcp_handle_syn_established(struct tcp_pcb *pcb, int64_t now_us);
 
 /**
  * Send quickack if TCP_QUICKACK is enabled
@@ -97,7 +100,14 @@ s8_t tcp_quickack(struct tcp_pcb *pcb, tcp_in_data *in_data)
 #endif
 }
 
-static bool tcp_handle_syn_established(struct tcp_pcb *pcb, int64_t now_us)
+/* Runs once per connection (closes the SYN->SYN-ACK RTT sample and seeds the
+ * initial RTO), but is called from the per-packet tcp_process(). Inlining it
+ * here bloats tcp_process()'s steady-state instruction footprint, which lowers
+ * IPC and connection-establishment rate on small-I-cache cores (measured ~7%
+ * CPS regression at 0KB Connection: close on BlueField-3). noinline keeps the
+ * seed code out-of-line and restores CPS to baseline; behavior is unchanged. */
+static bool __attribute__((noinline))
+tcp_handle_syn_established(struct tcp_pcb *pcb, int64_t now_us)
 {
     const bool syn_rto_rexmitted = (pcb->flags & TF_SYN_RTO_REXMITTED) != 0;
     const bool syn_retransmitted = syn_rto_rexmitted || pcb->nrtx > 0;
