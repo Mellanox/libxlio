@@ -575,9 +575,111 @@ const char *dbg_sprintf_fdset(char *buf, int buflen, int __nfds, fd_set *__fds)
    an event to occur; if TIMis -1, block until an event occurs.
    Returns the number of file descriptors with events, zero if timed out,
    or -1 for errors.  */
+// Drain gate. Bump inflight, seq_cst StoreLoad, THEN read the shutdown flag, so we
+// can't slip past free_libxlio_resources()'s store+fence. See sys_vars.h for the barrier itself.
+static inline bool offload_api_enter()
+{
+    g_xlio_api_inflight.fetch_add(1, std::memory_order_relaxed);
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    if (g_xlio_api_shutdown.load(std::memory_order_relaxed)) {
+        g_xlio_api_inflight.fetch_sub(1, std::memory_order_relaxed);
+        return false;
+    }
+    return true;
+}
+
+static inline void offload_api_leave()
+{
+    g_xlio_api_inflight.fetch_sub(1, std::memory_order_release);
+}
+
+// Per-socket gate: nulls the socket during shutdown so the existing "else SYSCALL" path falls
+// back to the kernel. No-op for non-offloaded fds (sock already null).
+class offload_shutdown_guard {
+public:
+    explicit offload_shutdown_guard(sockinfo *&sock)
+        : m_active(false)
+    {
+        if (!sock) {
+            return;
+        }
+        if (offload_api_enter()) {
+            m_active = true;
+        } else {
+            sock = nullptr;
+        }
+    }
+    ~offload_shutdown_guard()
+    {
+        if (m_active) {
+            offload_api_leave();
+        }
+    }
+    offload_shutdown_guard(const offload_shutdown_guard &) = delete;
+    offload_shutdown_guard &operator=(const offload_shutdown_guard &) = delete;
+
+private:
+    bool m_active;
+};
+
+// io_mux gate: no single socket to null, so callers check active() and bail EINTR during
+// shutdown instead of entering the being-torn-down io_mux path.
+class offload_iomux_guard {
+public:
+    offload_iomux_guard()
+        : m_active(offload_api_enter())
+    {
+    }
+    ~offload_iomux_guard()
+    {
+        if (m_active) {
+            offload_api_leave();
+        }
+    }
+    bool active() const { return m_active; }
+    offload_iomux_guard(const offload_iomux_guard &) = delete;
+    offload_iomux_guard &operator=(const offload_iomux_guard &) = delete;
+
+private:
+    bool m_active;
+};
+
+// During shutdown the offloaded io_mux path is unsafe (its epfd_info/socket state is being freed),
+// but a poll/select over only kernel fds is fine -> let it run on the kernel. These classify
+// without dereferencing the socket, so they are safe mid-teardown.
+static bool poll_fds_have_offloaded(const struct pollfd *fds, nfds_t nfds)
+{
+    for (nfds_t i = 0; i < nfds; ++i) {
+        if (fds[i].fd >= 0 && fd_collection_get_sockfd(fds[i].fd)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool select_fds_have_offloaded(int nfds, fd_set *r, fd_set *w, fd_set *e)
+{
+    for (int fd = 0; fd < nfds; ++fd) {
+        if (((r && FD_ISSET(fd, r)) || (w && FD_ISSET(fd, w)) || (e && FD_ISSET(fd, e))) &&
+            fd_collection_get_sockfd(fd)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static int poll_helper(struct pollfd *__fds, nfds_t __nfds, int __timeout,
                        const sigset_t *__sigmask = nullptr)
 {
+    offload_iomux_guard io_guard;
+    if (!io_guard.active()) {
+        if (poll_fds_have_offloaded(__fds, __nfds)) {
+            errno = EINTR;
+            return -1;
+        }
+        return SYSCALL(poll, __fds, __nfds, __timeout);
+    }
+
     int off_rfd_buffer[__nfds];
     io_mux_call::offloaded_mode_t off_modes_buffer[__nfds];
     int lookup_buffer[__nfds];
@@ -607,6 +709,15 @@ static int poll_helper(struct pollfd *__fds, nfds_t __nfds, int __timeout,
 static int select_helper(int __nfds, fd_set *__readfds, fd_set *__writefds, fd_set *__exceptfds,
                          struct timeval *__timeout, const sigset_t *__sigmask = nullptr)
 {
+    offload_iomux_guard io_guard;
+    if (!io_guard.active()) {
+        if (select_fds_have_offloaded(__nfds, __readfds, __writefds, __exceptfds)) {
+            errno = EINTR;
+            return -1;
+        }
+        return SYSCALL(select, __nfds, __readfds, __writefds, __exceptfds, __timeout);
+    }
+
     int off_rfds_buffer[__nfds];
     io_mux_call::offloaded_mode_t off_modes_buffer[__nfds];
 
@@ -665,6 +776,15 @@ static void xlio_epoll_create(int epfd, int size)
 inline int epoll_wait_helper(int __epfd, struct epoll_event *__events, int __maxevents,
                              int __timeout, const sigset_t *__sigmask = nullptr)
 {
+    offload_iomux_guard io_guard;
+    if (!io_guard.active()) {
+        if (fd_collection_get_epfd(__epfd)) {
+            errno = EINTR;
+            return -1;
+        }
+        return SYSCALL(epoll_wait, __epfd, __events, __maxevents, __timeout);
+    }
+
     if (__maxevents <= 0 || __maxevents > EP_MAX_EVENTS) {
         srdr_logdbg("invalid value for maxevents: %d", __maxevents);
         errno = EINVAL;
@@ -795,6 +915,14 @@ EXPORT_SYMBOL int XLIO_SYMBOL(close)(int __fd)
 
     srdr_logdbg_entry("fd=%d", __fd);
 
+    // Count this close against the shutdown drain so finalization waits for an in-flight
+    // handle_close() to finish before freeing sockets. Once shutting down, an offloaded socket is
+    // freed (and its fd closed) by the destructor / process exit, so don't race handle_close.
+    offload_iomux_guard offload_guard;
+    if (!offload_guard.active() && fd_collection_get_sockfd(__fd)) {
+        return 0;
+    }
+
     bool toclose = handle_close(__fd);
     int rc = toclose ? SYSCALL(close, __fd) : 0;
 
@@ -815,10 +943,15 @@ EXPORT_SYMBOL void XLIO_SYMBOL(__res_iclose)(res_state statp, bool free_addr)
        Assume that resolver doesn't use the above scenarios.  */
 
     srdr_logdbg_entry("");
-    for (int ns = 0; ns < statp->_u._ext.nscount; ns++) {
-        int sock = statp->_u._ext.nssocks[ns];
-        if (sock != -1) {
-            handle_close(sock);
+    // Count against the shutdown drain (same as close()). Once shutting down, the destructor frees
+    // any offloaded resolver socket; skip handle_close and let libc close the fds.
+    offload_iomux_guard offload_guard;
+    if (offload_guard.active()) {
+        for (int ns = 0; ns < statp->_u._ext.nscount; ns++) {
+            int sock = statp->_u._ext.nssocks[ns];
+            if (sock != -1) {
+                handle_close(sock);
+            }
         }
     }
     SYSCALL(__res_iclose, statp, free_addr);
@@ -838,6 +971,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(shutdown)(int __fd, int __how)
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         return p_socket_object->shutdown(__how);
     }
@@ -904,6 +1038,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
 
     if (p_socket_object) {
         // for verifying that the socket is really offloaded
@@ -935,6 +1070,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(accept)(int __fd, struct sockaddr *__addr, socklen
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         return p_socket_object->accept(__addr, __addrlen);
     }
@@ -949,6 +1085,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(accept4)(int __fd, struct sockaddr *__addr, sockle
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         return p_socket_object->accept4(__addr, __addrlen, __flags);
     }
@@ -980,6 +1117,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(bind)(int __fd, const struct sockaddr *__addr, soc
     int ret = 0;
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         ret = bind_internal(p_socket_object, __addr, __addrlen);
     } else {
@@ -1016,6 +1154,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(connect)(int __fd, const struct sockaddr *__to, so
 
     int ret = 0;
     sockinfo *p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (!p_socket_object) {
         srdr_logdbg_exit("Unable to get sock_fd_api");
         ret = SYSCALL(connect, __fd, __to, __tolen);
@@ -1071,6 +1210,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(setsockopt)(int __fd, int __level, int __optname,
     sockinfo *p_socket_object = nullptr;
 
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         VERIFY_PASSTROUGH_CHANGED(
             ret, p_socket_object->setsockopt(__level, __optname, __optval, __optlen));
@@ -1118,6 +1258,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getsockopt)(int __fd, int __level, int __optname, 
     int ret = 0;
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         VERIFY_PASSTROUGH_CHANGED(
             ret, p_socket_object->getsockopt(__level, __optname, __optval, __optlen));
@@ -1158,6 +1299,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(fcntl)(int __fd, int __cmd, ...)
     int ret = 0;
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->fcntl(__cmd, arg));
     } else {
@@ -1202,6 +1344,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(fcntl64)(int __fd, int __cmd, ...)
     int ret = 0;
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object && VALID_SYSCALL(fcntl64)) {
         VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->fcntl64(__cmd, arg));
     } else {
@@ -1247,6 +1390,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(ioctl)(int __fd, unsigned long int __request, ...)
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object && arg) {
         VERIFY_PASSTROUGH_CHANGED(res, p_socket_object->ioctl(__request, arg));
     } else {
@@ -1279,6 +1423,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getsockname)(int __fd, struct sockaddr *__name, so
     srdr_logdbg_entry("fd=%d", __fd);
 
     sockinfo *p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     int ret = p_socket_object ? p_socket_object->getsockname(__name, __namelen)
                               : SYSCALL(getsockname, __fd, __name, __namelen);
 
@@ -1295,6 +1440,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getpeername)(int __fd, struct sockaddr *__name, so
     int ret = 0;
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         ret = p_socket_object->getpeername(__name, __namelen);
     } else {
@@ -1322,6 +1468,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(read)(int __fd, void *__buf, size_t __nbytes)
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         struct iovec piov[1];
         piov[0].iov_base = __buf;
@@ -1350,6 +1497,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__read_chk)(int __fd, void *__buf, size_t __nb
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (__nbytes > __buflen) {
@@ -1382,6 +1530,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(readv)(int __fd, const struct iovec *iov, int 
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         struct iovec *piov = (struct iovec *)iov;
         int dummy_flags = 0;
@@ -1404,6 +1553,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recv)(int __fd, void *__buf, size_t __nbytes, 
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         struct iovec piov[1];
         piov[0].iov_base = __buf;
@@ -1431,6 +1581,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recv_chk)(int __fd, void *__buf, size_t __nb
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (__nbytes > __buflen) {
@@ -1467,6 +1618,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvmsg)(int __fd, struct msghdr *__msg, int _
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         __msg->msg_flags = 0;
         return p_socket_object->rx(RX_RECVMSG, __msg->msg_iov, __msg->msg_iovlen, &__flags,
@@ -1525,6 +1677,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
     }
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         int ret = 0;
         for (unsigned int i = 0; i < __vlen; i++) {
@@ -1584,6 +1737,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvfrom)(int __fd, void *__buf, size_t __nbyt
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         struct iovec piov[1];
         piov[0].iov_base = __buf;
@@ -1615,6 +1769,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recvfrom_chk)(int __fd, void *__buf, size_t 
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         BULLSEYE_EXCLUDE_BLOCK_START
         if (__nbytes > __buflen) {
@@ -1644,6 +1799,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(write)(int __fd, __const void *__buf, size_t _
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         struct iovec piov[1] = {{(void *)__buf, __nbytes}};
         xlio_tx_call_attr_t tx_arg;
@@ -1670,6 +1826,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(writev)(int __fd, const struct iovec *iov, int
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         xlio_tx_call_attr_t tx_arg;
 
@@ -1695,6 +1852,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(send)(int __fd, __const void *__buf, size_t __
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         struct iovec piov[1] = {{(void *)__buf, __nbytes}};
         xlio_tx_call_attr_t tx_arg;
@@ -1723,6 +1881,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendmsg)(int __fd, __const struct msghdr *__ms
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         return sendmsg_internal(p_socket_object, __msg, __flags);
     }
@@ -1752,6 +1911,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(sendmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         for (unsigned int i = 0; i < __vlen; i++) {
             xlio_tx_call_attr_t tx_arg;
@@ -1796,6 +1956,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendto)(int __fd, __const void *__buf, size_t 
 
     sockinfo *p_socket_object = nullptr;
     p_socket_object = fd_collection_get_sockfd(__fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (p_socket_object) {
         struct iovec piov[1] = {{(void *)__buf, __nbytes}};
         xlio_tx_call_attr_t tx_arg;
@@ -1821,6 +1982,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile)(int out_fd, int in_fd, off_t *offset
                           offset, offset ? *offset : 0, count);
 
     sockinfo *p_socket_object = fd_collection_get_sockfd(out_fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (!p_socket_object) {
         return SYSCALL(sendfile, out_fd, in_fd, offset, count);
     }
@@ -1837,6 +1999,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile64)(int out_fd, int in_fd, __off64_t *
                           offset, offset ? *offset : 0, count);
 
     sockinfo *p_socket_object = fd_collection_get_sockfd(out_fd);
+    offload_shutdown_guard offload_guard(p_socket_object);
     if (!p_socket_object) {
         return SYSCALL(sendfile64, out_fd, in_fd, offset, count);
     }
@@ -2043,6 +2206,17 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
                                          struct epoll_event *__event)
 {
     PROFILE_FUNC
+
+    offload_iomux_guard io_guard;
+    if (!io_guard.active()) {
+        // Only an XLIO epfd is unsafe (its epfd_info is being freed); a kernel epfd is fine.
+        if (fd_collection_get_epfd(__epfd)) {
+            errno = EINTR;
+            return -1;
+        }
+        return SYSCALL(epoll_ctl, __epfd, __op, __fd, __event);
+    }
+
     const static char *op_names[] = {"<null>", "ADD", "DEL", "MOD"};
     NOT_IN_USE(op_names); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
     if (__event) {

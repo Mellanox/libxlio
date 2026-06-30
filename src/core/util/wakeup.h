@@ -10,6 +10,7 @@
 /**
  * wakeup class that adds a wakeup functionality to socket (tcp and udp) and epoll.
  */
+#include <atomic>
 #include <sys/epoll.h>
 #include "utils/lock_wrapper.h"
 
@@ -25,7 +26,8 @@ public:
     void wakeup_set_epoll_fd(int epfd);
 
 protected:
-    int m_is_sleeping;
+    // Atomic: the shutdown drain reads this without the per-object lock.
+    std::atomic<int> m_is_sleeping;
     int m_wakeup_epfd;
     struct epoll_event m_ev;
 };

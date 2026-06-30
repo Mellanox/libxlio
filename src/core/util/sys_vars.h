@@ -7,6 +7,8 @@
 #ifndef SYS_VARS_H
 #define SYS_VARS_H
 
+#include <atomic>
+#include <cstdint>
 #include <experimental/optional>
 #include <netinet/in.h>
 #include <sched.h>
@@ -729,5 +731,13 @@ extern const mce_sys_var &safe_mce_sys();
 extern bool g_b_exit;
 extern bool g_is_forked_child;
 extern bool g_init_global_ctors_done;
+
+/*
+ * Process-shutdown barrier: g_xlio_api_shutdown blocks new offload-path entries;
+ * g_xlio_api_inflight counts threads currently in the offload RX/TX path. free_libxlio_resources
+ * sets the flag and waits for the count to hit zero before freeing the sockets/rings.
+ */
+extern std::atomic<bool> g_xlio_api_shutdown;
+extern std::atomic<uint64_t> g_xlio_api_inflight;
 
 #endif
