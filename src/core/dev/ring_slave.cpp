@@ -477,6 +477,14 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
         sock_addr rule_key(flow_spec_5t.get_family(), &flow_spec_5t.get_dst_ip(),
                            flow_spec_5t.get_dst_port());
         if (safe_mce_sys().tcp_3t_rules || safe_mce_sys().tcp_2t_rules) {
+            if (safe_mce_sys().tcp_2t_rules) {
+                // Mirror attach_flow(): the 2-tuple steering rule's reference counter is keyed by
+                // destination IP only (port zeroed). Without zeroing the port here the lookup
+                // misses, the shared rule's refcount is never decremented to 0, the rule is never
+                // destroyed and it keeps the TIR (and thus the RX RQ/CQ) alive, leaking the CQ
+                // buffer on every ring teardown (RM#5030951).
+                rule_key.set_in_port(0);
+            }
             auto dst_port_iter = m_ring.m_tcp_dst_port_attach_map.find(rule_key);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (dst_port_iter == m_ring.m_tcp_dst_port_attach_map.end()) {
