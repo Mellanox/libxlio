@@ -293,7 +293,12 @@ TEST_F(tcp_sockopt, ti_4_ext_vlan_tag_connect_fail)
         long elapsed_ms = (ts_end.tv_sec - ts_start.tv_sec) * 1000L +
             (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000L;
         EXPECT_GE(elapsed_ms, 200L);
-        EXPECT_LT(elapsed_ms, 1000L);
+        // TCP_USER_TIMEOUT is only evaluated at retransmission ticks. With the RFC 6298
+        // 1s initial RTO the abort lands at the first tick (~1s), not at 200ms, so the
+        // upper bound must sit above the initial RTO yet below the next retransmit at
+        // initial + fallback RTO (~4s), proving the timeout fired early instead of
+        // running the full retry chain.
+        EXPECT_LT(elapsed_ms, 3000L);
 
         close(fd);
         exit(testing::Test::HasFailure());
@@ -309,8 +314,9 @@ TEST_F(tcp_sockopt, ti_4_ext_vlan_tag_connect_fail)
 
         barrier_fork(pid);
 
-        ASSERT_EQ(0, wait_fork(pid));
+        int wait_rc = wait_fork(pid);
         close(l_fd);
+        ASSERT_EQ(0, wait_rc);
     }
 }
 
