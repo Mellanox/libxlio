@@ -1609,9 +1609,9 @@ err_t sockinfo_tcp_ops_tls::rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct p
 uint64_t sockinfo_tcp_ops_tls::find_recno(uint32_t seqno)
 {
     while (!m_recno_tcp_seq.empty()) {
-        auto item = m_recno_tcp_seq.front();
+        const auto &item = m_recno_tcp_seq.front();
         if (item.second == seqno) {
-            m_recno_tcp_seq.pop_front();
+            // Don't drop the item here, because we need for the retry if SQ is full.
             return item.first;
         }
 
@@ -1660,8 +1660,7 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
                         utls->m_p_tx_ring->tls_resync_rx(utls->m_p_tir, &utls->m_tls_info_rx,
                                                          resync_seqno);
                         utls->rx_resync_success();
-                    } else { // No TX credits - We will retry RX resync with the next incoming
-                             // packet.
+                    } else { // No TX credits - We will retry RX resync with the next RX packet.
                         utls->m_pending_resync_seqno = true;
                         vlog_printf(VLOG_DEBUG, "Skip TLS RX resync due to full SQ\n");
                     }
