@@ -13,70 +13,98 @@
 #include <errno.h>
 #include <sys/socket.h>
 
-// ------------------------------------------------------------------------------------------------
-// HW TLS RX Resync
-// ------------------------------------------------------------------------------------------------
-// HW TLS RX Resync happnes when HW looses tracking of the TLS records. It can be due to out of
-// order packets or retransmissions. HW generates a resync flag on the CQE of the packet where
-// it lost tracking. Once HW lost tracking it moves to a Searching mode where it looks for next
-// TLS record magic number.
-// Once HW finds that magic number it stores the found TCP seq no in the static HW TLS RX context.
-// Application should fetch that TCP seq no via get-psv WQE and read that TCP seq.
-// Application should verify if that TCP seq no belongs to a TLS record and approve that via
-// set-psv WQE. However, it is not enough just to approve the TCP seq no, in the set-psv WQE
-// the application should also state what is the correct TLS record number that belongs to that
-// TCP seq no. HW will try to authenticate next record using the record number. And only if it
-// succedes it will resume offloading.
-// HW context contains two parameters:
-// MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE:
-// - MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_START -
-//   The state at the beggining of the TLS session - Set by a progress WQE.
-// - MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_TRACKING -
-//   HW is locked on the TLS stream while offloading or not. In the resync process
-//   HW may find the next record magic number but untill we approve it and it can authenticate
-//   the next record it will not offload bubt continue tracking.
-// - MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_SEARCHING -
-//   HW lost tracking of the TLS stream and is now searching for next record magic number.
-//   In this state HW is not offloading.
-// MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE
-// - MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_NO_OFFLOAD -
-//   HW is not offloading whether it is now tracking, searching or starting.
-// - MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_OFFLOAD -
-//   HW is offloading. And obviously tracking (The desired state).
-// - MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_AUTHENTICATION -
-//   We approved the HW found TCP seqno but the HW now in process of authenticating the next record.
-//   No offload at this stage. If authentication succeeds, HW will move to Offload state.
-//   If it fails, it will not offload (Not described in PRM).
-// Resync special cases:
-// HW generates resync request then we generate get-psv WQE
-// Case 1 - HW is still searching (MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_SEARCHING)
-//          Nothing to do at this stage. We should generate another get-psv to try again.
-// Case 2 - HW is tracking
-// Case 2.1 HW returns the found seqno that belongs to a record that we alrady have parsed
-//          We approve the HW with static param WQE.
-// Case 2.2 HW returns a TCP seqno that does not belong to a known record
-// - Case 2.2.1 We still didn't parse/read to that record - We will try to recheck when we parse
-//              to that TCP seq no.
-// - Case 2.2.2 We already parsed beyond the given TCP seqno. We retry with another get-psv
-//              (Not described well in PRM).
-// Case 2.3 Multi-Resync (Not described in PRM - From Observations)
-// - Case 2.3.1 HW completes the get-psv wqe with info but immediately looses tracking again
-//              before we could read the result. HW should generate another resync request (Not
-//              described in PRM). Once we receive the result, we still do not know that it lost
-//              tracking again, we should procced as normal. We will approve with outdated TCP seqno
-//              which will not match the HW context.
-// - Case 2.3.2 HW looses tracking and finds new magic number before it completes out first get-psv.
-//              Since get-psv is performed on the TX queue, there is n o sync between get-psv and RX
-//              packets. HW will generate a resync and complete out get-psv with the new TCP seqno.
-//              We will receive the new TCPseq no and approve. But then we get another resync
-//              request. We send get-psv and will receive TRACKING and OFFLOAD state as result. We
-//              should igonre this result as the HW already offloads.
-// - Case 2.3.3 Same as 2.3.2, but our second get-psv returns AUTHENTICATION state, since the HW
-//              may still be in trying to authenticate next record. We should ignore this result
-//              and if auth fails, we should get another resync request eventually, being HW
-//              sending another resync if TCP seqno match but auth fails or being it loosing
-//              tracking eventually.
-// ------------------------------------------------------------------------------------------------
+/* ------------------------------------------------------------------------------------------------
+ * HW TLS RX Resync
+ * ------------------------------------------------------------------------------------------------
+ * HW TLS RX Resync happens when HW looses tracking of the TLS records. It can be due to out of
+ * order packets or retransmissions. HW generates a resync flag on the CQE of the packet where
+ * it lost tracking. Once HW lost tracking it moves to a Searching mode where it looks for next
+ * TLS record magic number.
+ * Once HW finds that magic number it stores the found TCP seq no in the static HW TLS RX context.
+ * Application should fetch that TCP seq no via get-psv WQE and read that TCP seq.
+ * Application should verify if that TCP seq no belongs to a TLS record and approve that via
+ * set-psv WQE. However, it is not enough just to approve the TCP seq no, in the set-psv WQE
+ * the application should also state what is the correct TLS record number that belongs to that
+ * TCP seq no. HW will try to authenticate next record using the record number. And only if it
+ * succeeds it will resume offloading.
+ *
+ * HW context contains two parameters:
+ * MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE:
+ * - MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_START -
+ *   The state at the beggining of the TLS session - Set by a progress WQE.
+ * - MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_TRACKING -
+ *   HW is locked on the TLS stream while offloading or not. In the resync process
+ *   HW may find the next record magic number but until we approve it and it can authenticate
+ *   the next record it will not offload but continue tracking.
+ * - MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_SEARCHING -
+ *   HW lost tracking of the TLS stream and is now searching for next record magic number.
+ *   In this state HW is not offloading.
+ * MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE
+ * - MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_NO_OFFLOAD -
+ *   HW is not offloading whether it is now tracking, searching or starting.
+ * - MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_OFFLOAD -
+ *   HW is offloading. And obviously tracking (The desired state).
+ * - MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_AUTHENTICATION -
+ *   We approved the HW found TCP seqno but the HW now in process of authenticating the next record.
+ *   No offload at this stage. If authentication succeeds, HW will move to Offload state.
+ *   If it fails, it will not offload (Not described in PRM).
+ *
+ * Resync special cases:
+ * HW generates resync request then we generate get-psv WQE
+ * Case 1 - HW is still searching (MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_SEARCHING)
+ *          Nothing to do at this stage. We should generate another get-psv to try again.
+ * Case 2 - HW is tracking
+ * Case 2.1 HW returns the found seqno that belongs to a record that we already have parsed
+ *          We approve the HW with static params WQE.
+ * Case 2.2 HW returns a TCP seqno that does not belong to a known record
+ * Case 2.2.1 We still didn't parse/read to that record - We will try to recheck when we parse
+ *            to that TCP seq no.
+ * Case 2.2.2 We already parsed beyond the given TCP seqno. We retry with another get-psv
+ *            (Not described well in PRM).
+ * Case 2.3 Multi-Resync (Not described in PRM - From Observations)
+ * Case 2.3.1 HW completes the get-psv wqe with info but immediately looses tracking again
+ *            before we could read the result. HW should generate another resync request (Not
+ *            described in PRM). Once we receive the result, we still do not know that it lost
+ *            tracking again, we should proceed as normal. We will approve with outdated TCP seqno
+ *            which will not match the HW context.
+ * Case 2.3.2 HW loses tracking and finds new magic number before it completes the first get-psv.
+ *            Since get-psv is performed on the TX queue, there is no sync between get-psv and RX
+ *            packets. HW will generate a resync and complete the first get-psv with the new TCP
+ *            seqno. We will receive the new TCP seqno and approve. But then we get another resync
+ *            request. We send get-psv and will receive TRACKING and OFFLOAD state as result. We
+ *            should ignore this result as the HW already offloads.
+ * Case 2.3.3 Same as 2.3.2, but our second get-psv returns AUTHENTICATION state, since the HW
+ *            may still be in trying to authenticate next record. We should ignore this result
+ *            and if auth fails, we should get another resync request eventually, being HW
+ *            sending another resync if TCP seqno match but auth fails or being it loosing
+ *            tracking eventually.
+ *
+ * ------------------------------------------------------------------------------------------------
+ * Counter bookkeeping (m_tls_rx_need_resync)
+ * ------------------------------------------------------------------------------------------------
+ * m_tls_rx_need_resync counts the HW resync requests we still owe a GET_PSV/approval cycle.
+ * - Increment: once per TLS_RX_RESYNC CQE. The flag is edge-triggered - HW raises it once per
+ *   resync request and then continues with TLS_RX_ENCRYPTED CQEs while searching.
+ * - Decrement: once per GET_PSV completion that finds the HW back in TRACKING - either because
+ *   we posted an approving resync (record found) or because the HW is already offloading/
+ *   authenticating (multi-resync reconciliation, cases 2.3.x). recv() keeps issuing GET_PSV
+ *   WQEs, one at a time while the counter is non-zero.
+ *
+ * Convergence: recv() keeps issuing GET_PSVs while the counter is non-zero, and every outcome
+ * is either a decrement or a non-destructive retry, so the flow drains to 0 in a finite number
+ * of RX CQEs once the HW returns to TRACKING. The non-decrementing outcomes lose no state:
+ * find_recno() only peeks the matched record and the entry is consumed (pop_front) after the
+ * resync has been posted, so a searching/start, record-not-yet-parsed, record-parsed-beyond, or
+ * no-SQ-credits result re-derives the same record on a later GET_PSV instead of stranding the
+ * request. The only non-converging case is the HW never re-locking (persistent loss), there
+ * records keep decrypting on the SW fallback by design.
+ *
+ * Initial value: the counter is armed to 1 right after the RX TLS context is programmed (see
+ * setsockopt()). This is a deliberate simplification: it costs one extra "startup" resync per
+ * connection, in return the same TCP seqno tracking path is reused from the very first offloaded
+ * record. HW TLS RX offload begins in an un-synchronized state, so tracking must run from the
+ * beginning.
+ */
 
 #define MODULE_NAME "si_ulp"
 
@@ -1675,7 +1703,7 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
                     // We still have not parsed to the point of HW reported TCP-seq.
                     utls->m_pending_resync_seqno = true;
                 } else {
-                    // Wrong TCP Seq was found by the HW, since we parsed bayond the reported TCP
+                    // Wrong TCP Seq was found by the HW, since we parsed beyond the reported TCP
                     // seq. See comment at top of this file.
                     IF_STATS_OB(utls->m_p_sock,
                                 ++(TLS_STATS(utls->m_p_sock).n_tls_rx_resync_retry));
@@ -1688,10 +1716,11 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
                 utls->rx_resync_success();
             }
         } else {
-            // TLS_TRACKER_SEARCHING - HW still didnt find the Magic number.
-            // TLS_TRACKER_START - Should happen only upon session start but observed also later in
-            // the connection randomly. We have nothing to do in this case but to retry the psv
-            // until HW locks on a TLS record. See comment at top of this file.
+            /* TLS_TRACKER_SEARCHING - HW still didn't find the Magic number.
+             * TLS_TRACKER_START - Should happen only upon session start but observed also later in
+             * the connection randomly. We have nothing to do in this case but to retry the psv
+             * until HW locks on a TLS record. See comment at top of this file.
+             */
             IF_STATS_OB(utls->m_p_sock, ++(TLS_STATS(utls->m_p_sock).n_tls_rx_resync_long));
             vlog_printf(VLOG_DEBUG, "TLS RX Not Tracking T: %d, A: %d\n", tracker, auth);
         }

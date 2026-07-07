@@ -2679,7 +2679,10 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     sockinfo_tcp *sock = (sockinfo_tcp *)pcb->my_container;
 
 #ifdef DEFINED_UTLS
-    // We must keep the TLS RX Resync indication even if the stack rejects the packet.
+    /* We must keep the TLS RX Resync indication even if the stack rejects the packet.
+     * Note, TLS offload is not possible for a child socket here, because it's not accepted yet.
+     * We don't have to handle the child lock. Ultra API doesn't support HW TLS offload yet.
+     */
     if (p_rx_pkt_mem_buf_desc_info->rx.tls_decrypted == TLS_RX_RESYNC) {
         sock->get_ops()->incr_tls_rx_need_resync();
     }
