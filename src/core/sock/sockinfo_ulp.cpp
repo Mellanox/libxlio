@@ -430,6 +430,7 @@ sockinfo_tcp_ops_tls::sockinfo_tcp_ops_tls(sockinfo_tcp *sock)
     m_rx_offset = 0;
     m_rx_rec_len = 0;
     m_rx_rec_rcvd = 0;
+    m_rx_next_rec_tcp_seq = 0;
     m_rx_sm = TLS_RX_SM_HEADER;
     m_refused_data = nullptr;
     m_rx_rule = nullptr;
@@ -702,6 +703,12 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
                 } else {
                     m_rx_next_rec_tcp_seq = next_seqno_rx;
                     m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
+                    /* See the "Initial value:" paragraph in the "Counter bookkeeping" section
+                     * at the top. Set the initial value here instead of the constructor, because
+                     * tls_rx_consume_ready_packets() during setsockopt() can interfere with the
+                     * resync flow otherwise.
+                     */
+                    m_tls_rx_need_resync = 1U;
                     si_ulp_logdbg("TLS RX initial record num: %" PRIu64 " TCP sqeno %" PRIu32,
                                   m_next_recno_rx, m_rx_next_rec_tcp_seq);
                 }

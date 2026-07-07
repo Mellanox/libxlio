@@ -175,8 +175,10 @@ private:
     rfs_rule *m_rx_rule;
     /* Buffer to hold GET_PSV data during resync. */
     mem_buf_desc_t *m_rx_psv_buf;
-    /* Track requested TLS RX resyncs */
-    uint16_t m_tls_rx_need_resync = 1U;
+    /* Track requested TLS RX resyncs. Armed to 1 in setsockopt() after the RX context is
+     * programmed (see top-of-file comment); left 0 here so tls_rx_consume_ready_packets() doesn't
+     * call sockinfo_tcp_ops_tls::recv() before the context and record-tracking seed exist. */
+    uint16_t m_tls_rx_need_resync = 0U;
     /* HW TCP resync seqno for pending parsing */
     bool m_pending_resync_seqno = false;
     /* Whether offload is configured. */
