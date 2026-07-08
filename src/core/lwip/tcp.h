@@ -306,6 +306,13 @@ struct tcp_pcb {
     u8_t tcp_timer; /* Timer counter to handle calling slow-timer from tcp_tmr() */
     u32_t tmr;
 
+    /* tcp_ticks at the last forward progress: in-sequence data received or new
+     * data acknowledged. Unlike tmr, it is NOT advanced by keepalive-probe
+     * replies (bare dup-ACKs that neither carry data nor acknowledge new data),
+     * so it is the correct reference for the TCP_USER_TIMEOUT keepalive abort
+     * (mirrors Linux tcp_keepalive_timer(), which measures from rcv_tstamp). */
+    u32_t last_progress_tmr;
+
     /* Retransmission timer. */
     s16_t rtime;
 
@@ -379,10 +386,8 @@ struct tcp_pcb {
 
     /* idle time before KEEPALIVE is sent */
     u32_t keep_idle;
-#if LWIP_TCP_KEEPALIVE
     u32_t keep_intvl;
     u32_t keep_cnt;
-#endif /* LWIP_TCP_KEEPALIVE */
 
     /* Persist timer counter */
     u32_t persist_cnt;
