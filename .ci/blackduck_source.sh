@@ -1,5 +1,9 @@
 #!/bin/bash -Exel
 
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=safe.directory
+export GIT_CONFIG_VALUE_0="${WORKSPACE}"
+
 topdir=$(git rev-parse --show-toplevel)
 cd "$topdir"
 
