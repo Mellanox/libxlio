@@ -1,3 +1,11 @@
+Version 3.71.1-1:
+Date + Time 2026-07-09
+=============================================================
+Fixed:
+	- RM #4548076 Correct disabled periodic drain parameter reporting
+	- RM #5030951 Fix TCP 2-tuple steering rule refcount leak on detach
+	- RM #5128171 Stabilize SO_XLIO_EXT_VLAN_TAG connection timeout test
+
 Version 3.71.0-1:
 Date + Time 2026-06-22
 =============================================================
