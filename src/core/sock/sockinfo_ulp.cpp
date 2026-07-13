@@ -1645,13 +1645,14 @@ err_t sockinfo_tcp_ops_tls::rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct p
     return sockinfo_tcp::rx_lwip_cb(arg, tpcb, p, err);
 }
 
-uint64_t sockinfo_tcp_ops_tls::find_recno(uint32_t seqno)
+bool sockinfo_tcp_ops_tls::find_recno(uint32_t seqno, uint64_t &recno)
 {
     while (!m_recno_tcp_seq.empty()) {
         const auto &item = m_recno_tcp_seq.front();
         if (item.second == seqno) {
             // Don't drop the item here, because we need for the retry if SQ is full.
-            return item.first;
+            recno = item.first;
+            return true;
         }
 
         if (TCP_SEQ_LT(item.second, seqno)) {
@@ -1661,7 +1662,7 @@ uint64_t sockinfo_tcp_ops_tls::find_recno(uint32_t seqno)
         }
     }
 
-    return 0U;
+    return false;
 }
 
 void sockinfo_tcp_ops_tls::rx_resync_success()
@@ -1692,9 +1693,10 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
         if (tracker == TLS_TRACKER_TRACKING) {
             // The HW is tracking the stream (TLS record Magic number found)
             if (auth == TLS_AUTH_NO_OFFLOAD) { // The HW not offloading yet.
-                uint64_t recno_be64 = htobe64(utls->find_recno(resync_seqno));
-                if (recno_be64) { // We found a TLS record for the reported TCP sequence
+                uint64_t recno = 0;
+                if (utls->find_recno(resync_seqno, recno)) {
                     if (utls->m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_RESYNC)) {
+                        uint64_t recno_be64 = htobe64(recno);
                         memcpy(utls->m_tls_info_rx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
                         utls->m_p_tx_ring->tls_resync_rx(utls->m_p_tir, &utls->m_tls_info_rx,
                                                          resync_seqno);

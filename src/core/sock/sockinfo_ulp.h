@@ -92,7 +92,7 @@ private:
     int tls_rx_decrypt(struct pbuf *plist);
     int tls_rx_encrypt(struct pbuf *plist);
 
-    uint64_t find_recno(uint32_t seqno);
+    bool find_recno(uint32_t seqno, uint64_t &recno);
 
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
     static void rx_comp_callback(void *arg);
