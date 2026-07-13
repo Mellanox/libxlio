@@ -1384,13 +1384,17 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_GET_PSV)) {
         /* If we fail to request credits we will retry resync flow with the next incoming packet. */
         m_rx_psv_buf = m_p_sock->tcp_tx_mem_buf_alloc(PBUF_RAM);
-        m_rx_psv_buf->lwip_pbuf.payload =
-            (void *)(((uintptr_t)m_rx_psv_buf->p_buffer + 63U) >> 6U << 6U);
-        uint8_t *payload = (uint8_t *)m_rx_psv_buf->lwip_pbuf.payload;
-        // We always should have sz_buffer bigger than 64 since it must be at least MTU.
-        memset(m_rx_psv_buf->lwip_pbuf.payload, 0, 64);
-        m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_TX_DEFAULT);
-        IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_resync_attempt));
+        if (m_rx_psv_buf) {
+            m_rx_psv_buf->lwip_pbuf.payload =
+                (void *)(((uintptr_t)m_rx_psv_buf->p_buffer + 63U) >> 6U << 6U);
+            uint8_t *payload = (uint8_t *)m_rx_psv_buf->lwip_pbuf.payload;
+            // We always should have sz_buffer bigger than 64 since it must be at least MTU.
+            memset(m_rx_psv_buf->lwip_pbuf.payload, 0, 64);
+            m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_TX_DEFAULT);
+            IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_resync_attempt));
+        } else {
+            m_p_tx_ring->credits_return(SQ_CREDITS_TLS_RX_GET_PSV);
+        }
     }
 
     err_t err;
