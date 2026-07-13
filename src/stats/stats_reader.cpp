@@ -85,9 +85,8 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define FORMAT_STATS_double  "%-20s %.1f\n"
 #define FORMAT_RING_PACKETS  "%-20s %zu / %zu [kilobytes/packets] %-3s\n"
 #define FORMAT_LRO_PACKETS                                                                         \
-    "%-20s %" PRIu64 " / %" PRIu64 " / %" PRIu64 " [avg-bytes/packets/%%total] %-3s\n"
-#define FORMAT_GRO_PACKETS                                                                         \
-    "%-20s %" PRIu64 " / %.1f / %" PRIu64 " [avg-bytes/avg-frags/%%total] %-3s\n"
+    "%-20s %" PRIu64 " / %" PRIu64 " / %.0f%% [avg-bytes/packets/%%total] %-3s\n"
+#define FORMAT_GRO_PACKETS     "%-20s %" PRIu64 " / %.1f / %.0f%% [avg-bytes/avg-frags/%%total] %-3s\n"
 #define FORMAT_RING_STRIDES    "%-20s %zu / %zu / %zu [total/max-per-packet/packets-per-rwqe] %-3s\n"
 #define FORMAT_RING_INTERRUPT  "%-20s %zu / %zu [requests/received] %-3s\n"
 #define FORMAT_RING_MODERATION "%-20s %u / %u [frames/usec period] %-3s\n"
@@ -603,24 +602,25 @@ void print_cq_stats(cq_instance_block_t *p_cq_inst_arr)
             printf(FORMAT_STATS_32bit, "Max strides/packet:",
                    static_cast<uint32_t>(p_cq_stats->n_rx_max_stirde_per_packet));
             printf(FORMAT_STATS_double, "Avg strides/packet:",
-                   p_cq_stats->n_rx_stride_count /
-                       static_cast<double>(p_cq_stats->n_rx_packet_count + 1U));
+                   xlio_stats_ratio(p_cq_stats->n_rx_stride_count, p_cq_stats->n_rx_packet_count));
             printf(FORMAT_STATS_double, "Avg packets/rwqe:",
-                   p_cq_stats->n_rx_packet_count /
-                       static_cast<double>(p_cq_stats->n_rx_consumed_rwqe_count + 1U));
+                   xlio_stats_ratio(p_cq_stats->n_rx_packet_count,
+                                    p_cq_stats->n_rx_consumed_rwqe_count));
             if (p_cq_stats->n_rx_lro_packets) {
-                printf(FORMAT_LRO_PACKETS,
-                       "Rx LRO:", p_cq_stats->n_rx_lro_bytes / p_cq_stats->n_rx_lro_packets,
-                       p_cq_stats->n_rx_lro_packets,
-                       (p_cq_stats->n_rx_lro_packets * 100U) / p_cq_stats->n_rx_packet_count,
-                       post_fix);
+                printf(
+                    FORMAT_LRO_PACKETS, "Rx LRO:",
+                    xlio_stats_ratio_u64(p_cq_stats->n_rx_lro_bytes, p_cq_stats->n_rx_lro_packets),
+                    p_cq_stats->n_rx_lro_packets,
+                    xlio_stats_percent(p_cq_stats->n_rx_lro_packets, p_cq_stats->n_rx_packet_count),
+                    post_fix);
             }
             if (p_cq_stats->n_rx_gro_packets) {
                 printf(
-                    FORMAT_GRO_PACKETS,
-                    "Rx GRO:", p_cq_stats->n_rx_gro_bytes / p_cq_stats->n_rx_gro_packets,
-                    static_cast<double>(p_cq_stats->n_rx_gro_frags) / p_cq_stats->n_rx_gro_packets,
-                    (p_cq_stats->n_rx_gro_frags * 100U) / p_cq_stats->n_rx_packet_count, post_fix);
+                    FORMAT_GRO_PACKETS, "Rx GRO:",
+                    xlio_stats_ratio_u64(p_cq_stats->n_rx_gro_bytes, p_cq_stats->n_rx_gro_packets),
+                    xlio_stats_ratio(p_cq_stats->n_rx_gro_frags, p_cq_stats->n_rx_gro_packets),
+                    xlio_stats_percent(p_cq_stats->n_rx_gro_packets, p_cq_stats->n_rx_packet_count),
+                    post_fix);
             }
             if (p_cq_stats->n_rx_tls_resync) {
                 printf("%-20s %u\n", "HW TLS RX Resync:", p_cq_stats->n_rx_tls_resync);
@@ -997,13 +997,11 @@ void print_full_iomux_stats(const char *func_name, iomux_func_stats_t *p_iomux_s
                    p_iomux_stats->n_iomux_rx_ready, post_fix);
         }
         if (p_iomux_stats->n_iomux_poll_miss + p_iomux_stats->n_iomux_poll_hit) {
-            double iomux_poll_hit = (double)p_iomux_stats->n_iomux_poll_hit;
-            double iomux_poll_hit_percentage =
-                (iomux_poll_hit / (iomux_poll_hit + (double)p_iomux_stats->n_iomux_poll_miss)) *
-                100;
             printf("Polls [miss/hit]%s: %u / %u (%2.2f%%)\n", post_fix,
                    p_iomux_stats->n_iomux_poll_miss, p_iomux_stats->n_iomux_poll_hit,
-                   iomux_poll_hit_percentage);
+                   xlio_stats_percent(p_iomux_stats->n_iomux_poll_hit,
+                                      static_cast<uint64_t>(p_iomux_stats->n_iomux_poll_hit) +
+                                          p_iomux_stats->n_iomux_poll_miss));
             if (p_iomux_stats->n_iomux_timeouts) {
                 printf("Timeouts%s: %u\n", post_fix, p_iomux_stats->n_iomux_timeouts);
             }

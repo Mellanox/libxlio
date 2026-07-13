@@ -604,4 +604,25 @@ void print_netstat_like(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info
                         int pid);
 void print_netstat_like_headers(FILE *file);
 
+// Returns number of 'a' units per 'b' on average. Example: number of strides per packet.
+static inline double xlio_stats_ratio(uint64_t a, uint64_t b)
+{
+    return (b == 0) ? 0.0 : static_cast<double>(a) / static_cast<double>(b);
+}
+
+// Returns number of 'a' units per 'b' on average. Example: bytes per packet.
+static inline uint64_t xlio_stats_ratio_u64(uint64_t a, uint64_t b)
+{
+    return (b == 0) ? 0 : a / b;
+}
+
+// Returns percentage of 'a' units out of 'b'. Example: percentage of LRO packets.
+static inline double xlio_stats_percent(uint64_t a, uint64_t b)
+{
+    if (b == 0) {
+        return 0.0;
+    }
+    return static_cast<double>(a) * 100.0 / static_cast<double>(b);
+}
+
 #endif // XLIO_STATS_H
