@@ -168,7 +168,7 @@ runs_on_dockers:
      limits: '{memory: 3Gi, cpu: 2000m}',
      requests: '{memory: 3Gi, cpu: 2000m}'
     }
-  - {name: 'secret-scan', url: '${registry_host}/toolbox/secret_scan:0.0.27', arch: 'x86_64', tag: '0.0.27', category: 'tool', limits: '{memory: 3Gi, cpu: 2000m}', requests: '{memory: 3Gi, cpu: 2000m}'}
+  - {name: 'secret-scan', url: '${registry_host}/swx-storage/tools/secret_scan:devops-stable', arch: 'x86_64', tag: 'devops-stable', category: 'tool', limits: '{memory: 3Gi, cpu: 2000m}', requests: '{memory: 3Gi, cpu: 2000m}'}
   - {
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
      arch: 'x86_64',
