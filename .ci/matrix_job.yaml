@@ -147,7 +147,7 @@ runs_on_dockers:
      category: 'tool',
      build_args: '--no-cache --target build',
     }
-  - {name: 'secret-scan', url: '${registry_host}/toolbox/secret_scan:0.0.27', arch: 'x86_64', tag: '0.0.27', category: 'tool'}
+  - {name: 'secret-scan', url: '${registry_host}/swx-storage/tools/secret_scan:devops-stable', arch: 'x86_64', tag: 'devops-stable', category: 'tool'}
 
   - {
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
