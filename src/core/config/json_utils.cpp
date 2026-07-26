@@ -34,7 +34,7 @@ json_object *try_get_field(json_object *obj, const char *field_name)
     }
 
     json_object *field = nullptr;
-    if (json_object_object_get_ex(obj, field_name, &field)) {
+    if (doca_third_party_json_object_object_get_ex(obj, field_name, &field)) {
         return field;
     }
 
@@ -55,7 +55,7 @@ std::experimental::any to_any_value(json_object *obj)
         {json_type_object, convert_object},
         {json_type_array, convert_array}};
 
-    const json_type type = json_object_get_type(obj);
+    const json_type type = doca_third_party_json_object_get_type(obj);
     const auto converter = type_converters.find(type);
 
     if (converter == type_converters.end()) {
@@ -94,7 +94,7 @@ void validate_type(json_object *obj, json_type expected_type, const std::string 
         throw_xlio_exception("JSON object is null in context: " + context);
     }
 
-    json_type actual_type = json_object_get_type(obj);
+    json_type actual_type = doca_third_party_json_object_get_type(obj);
     if (actual_type != expected_type) {
         throw_xlio_exception("Type mismatch in " + context + ": expected " +
                              get_type_name(expected_type) + ", got " + get_type_name(actual_type));
@@ -104,24 +104,24 @@ void validate_type(json_object *obj, json_type expected_type, const std::string 
 // Converter function implementations
 static std::experimental::any convert_boolean(json_object *obj)
 {
-    return bool(json_object_get_boolean(obj));
+    return bool(doca_third_party_json_object_get_boolean(obj));
 }
 
 static std::experimental::any convert_integer(json_object *obj)
 {
-    return json_object_get_int64(obj);
+    return doca_third_party_json_object_get_int64(obj);
 }
 
 static std::experimental::any convert_string(json_object *obj)
 {
-    const char *s = json_object_get_string(obj);
+    const char *s = doca_third_party_json_object_get_string(obj);
     return std::string(s ? s : config_strings::misc::EMPTY_STRING);
 }
 
 static std::experimental::any convert_object(json_object *obj)
 {
     std::map<std::string, std::experimental::any> obj_map;
-    json_object_object_foreach(obj, key, val)
+    doca_third_party_json_object_object_foreach(obj, key, val)
     {
         obj_map[key] = to_any_value(val);
     }
@@ -131,11 +131,11 @@ static std::experimental::any convert_object(json_object *obj)
 static std::experimental::any convert_array(json_object *obj)
 {
     std::vector<std::experimental::any> array_values;
-    const int array_length = json_object_array_length(obj);
+    const int array_length = doca_third_party_json_object_array_length(obj);
     array_values.reserve(array_length); // Optimize memory allocation
 
     for (int i = 0; i < array_length; i++) {
-        json_object *item = json_object_array_get_idx(obj, i);
+        json_object *item = doca_third_party_json_object_array_get_idx(obj, i);
         array_values.push_back(to_any_value(item));
     }
     return array_values;
@@ -149,13 +149,13 @@ template <> std::vector<int64_t> extract_enum_values<int64_t>(json_object *enum_
         return values;
     }
 
-    const int enum_length = json_object_array_length(enum_field);
+    const int enum_length = doca_third_party_json_object_array_length(enum_field);
     values.reserve(enum_length); // Optimize memory allocation
 
     for (int i = 0; i < enum_length; i++) {
-        json_object *enum_value = json_object_array_get_idx(enum_field, i);
-        if (enum_value && json_object_get_type(enum_value) == json_type_int) {
-            values.push_back(json_object_get_int64(enum_value));
+        json_object *enum_value = doca_third_party_json_object_array_get_idx(enum_field, i);
+        if (enum_value && doca_third_party_json_object_get_type(enum_value) == json_type_int) {
+            values.push_back(doca_third_party_json_object_get_int64(enum_value));
         }
     }
     return values;
@@ -168,13 +168,13 @@ template <> std::vector<std::string> extract_enum_values<std::string>(json_objec
         return values;
     }
 
-    const int enum_length = json_object_array_length(enum_field);
+    const int enum_length = doca_third_party_json_object_array_length(enum_field);
     values.reserve(enum_length); // Optimize memory allocation
 
     for (int i = 0; i < enum_length; i++) {
-        json_object *enum_value = json_object_array_get_idx(enum_field, i);
-        if (enum_value && json_object_get_type(enum_value) == json_type_string) {
-            const char *str_val = json_object_get_string(enum_value);
+        json_object *enum_value = doca_third_party_json_object_array_get_idx(enum_field, i);
+        if (enum_value && doca_third_party_json_object_get_type(enum_value) == json_type_string) {
+            const char *str_val = doca_third_party_json_object_get_string(enum_value);
             if (str_val) {
                 values.emplace_back(str_val);
             }
