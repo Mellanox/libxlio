@@ -265,6 +265,7 @@ struct tcp_pcb {
     /** TCP specific PCB members */
 
     enum tcp_state private_state; /* TCP state - should only be touched thru get/set functions */
+    u8_t nrtx; /* number of retransmissions */
     u8_t prio;
     void *callback_arg;
     void *my_container;
@@ -317,10 +318,7 @@ struct tcp_pcb {
     u16_t mss; /* maximum segment size */
     u16_t advtsd_mss; /* advertised maximum segment size */
 
-    /* RTT (round trip time) estimation variables, microsecond domain.
-     * rttest_us == 0 means "no RTT sample in flight".
-     */
-    int64_t rttest_us; /* absolute monotonic usec when RTT sample started */
+    /* RTT (round trip time) estimation variables, microsecond domain. */
     u32_t rtseq; /* sequence number being timed */
     u32_t user_timeout_ms; /* timeout in milliseconds */
     s32_t ticks_since_data_sent;
@@ -331,7 +329,10 @@ struct tcp_pcb {
     s32_t sv_us; /* 4 * RTTVAR in microseconds */
 
     s32_t rto_us; /* retransmission timeout in microseconds */
-    u8_t nrtx; /* number of retransmissions */
+    /* Absolute monotonic time at which the in-flight RTT sample started.
+     * Zero means that no sample is in flight.
+     */
+    int64_t rttest_us;
 
     /* fast retransmit/recovery */
     u32_t lastack; /* Highest acknowledged seqno. */
@@ -362,6 +363,8 @@ struct tcp_pcb {
     /* These are ordered by sequence number: */
     struct tcp_seg *unsent; /* Unsent (queued) segments. */
     struct tcp_seg *last_unsent; /* Last unsent (queued) segment. */
+    struct tcp_seg *unacked; /* Sent but unacknowledged segments. */
+    struct tcp_seg *last_unacked; /* Last element in unacknowledged segments list. */
 
     /* Absolute deadline (CLOCK_MONOTONIC microseconds) at which the next
      * RTO retransmission is due. 0 means "no deadline armed". Co-located
@@ -370,8 +373,6 @@ struct tcp_pcb {
      * static_assert below enforces the layout invariant.
      */
     int64_t rto_deadline_us;
-    struct tcp_seg *unacked; /* Sent but unacknowledged segments. */
-    struct tcp_seg *last_unacked; /* Last element in unacknowledged segments list. */
 #if TCP_QUEUE_OOSEQ
     struct tcp_seg *ooseq; /* Received out of sequence segments. */
 #endif /* TCP_QUEUE_OOSEQ */
@@ -436,6 +437,28 @@ struct tcp_pcb {
         u32_t max_send_sge;
     } tso;
 };
+
+/* The four TX queue heads form one traversal unit in tcp_output(), ACK
+ * processing, retransmission, and teardown.
+ * Keep them contiguous so queue walks do not interleave unrelated timer state.
+ */
+#if defined(__cplusplus)
+static_assert(offsetof(struct tcp_pcb, last_unacked) - offsetof(struct tcp_pcb, unsent) ==
+                  3 * sizeof(struct tcp_seg *),
+              "TCP TX queue heads must remain contiguous");
+static_assert(!TCP_CC_ALGO_MOD ||
+                  offsetof(struct tcp_pcb, unsent) / CACHELINE_SIZE ==
+                      offsetof(struct tcp_pcb, last_unacked) / CACHELINE_SIZE,
+              "TCP TX queue heads must share a cache window in the default build");
+#else
+_Static_assert(offsetof(struct tcp_pcb, last_unacked) - offsetof(struct tcp_pcb, unsent) ==
+                   3 * sizeof(struct tcp_seg *),
+               "TCP TX queue heads must remain contiguous");
+_Static_assert(!TCP_CC_ALGO_MOD ||
+                   offsetof(struct tcp_pcb, unsent) / CACHELINE_SIZE ==
+                       offsetof(struct tcp_pcb, last_unacked) / CACHELINE_SIZE,
+               "TCP TX queue heads must share a cache window in the default build");
+#endif
 
 /* Intra-struct cache-line co-location of rto_deadline_us with unacked.
  * tcp_slowtmr()'s per-PCB hot read of (rto_deadline_us, unacked-head)
