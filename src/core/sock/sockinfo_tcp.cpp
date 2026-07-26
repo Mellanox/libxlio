@@ -1371,6 +1371,7 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     int32_t prev_sndbuf = m_snd_buf.fetch_sub(bytes_to_send);
     if (prev_sndbuf <= 0) {
         m_snd_buf += bytes_to_send;
+        bytes_to_send = 0;
         goto exit;
     }
     if (prev_sndbuf < static_cast<int32_t>(bytes_to_send)) {
@@ -1415,6 +1416,9 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     }
 
 exit:
+    /* Restore send credit reserved for data that could not be copied into a TX buffer. */
+    m_snd_buf += bytes_to_send;
+
     if (unlikely(sent_bytes == 0)) {
         // Only user thread increments the EAGAIN counter, so no need to lock
         stats_update_tx_errors(EAGAIN);
