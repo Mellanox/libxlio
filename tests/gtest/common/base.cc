@@ -13,6 +13,56 @@ uint16_t test_base::m_port = 0;
 int test_base::m_family = PF_INET;
 int test_base::m_break_signal = 0;
 
+/* Pid of the process that runs the test binary. Set by fork_guard_init(). */
+static pid_t g_main_pid;
+
+/*
+ * Terminates a forked child that escaped its test body. Doesn't touch the gtest state and
+ * doesn't use stdio, both belong to the parent process.
+ */
+static void fork_escape_exit(const char *test_case_name, const char *test_name)
+{
+    char buf[256];
+    int len = snprintf(buf, sizeof(buf),
+                       "[  FORK  ] pid %d escaped its test body and reached %s.%s, terminating\n",
+                       static_cast<int>(getpid()), test_case_name, test_name);
+
+    if (len > 0) {
+        size_t n =
+            (static_cast<size_t>(len) < sizeof(buf) ? static_cast<size_t>(len) : sizeof(buf) - 1);
+        ssize_t ret = write(STDERR_FILENO, buf, n);
+        UNREFERENCED_PARAMETER(ret);
+    }
+    _exit(GTEST_FORK_ESCAPE_STATUS);
+}
+
+class fork_escape_guard : public testing::EmptyTestEventListener {
+    virtual void OnTestStart(const testing::TestInfo &test_info)
+    {
+        if (getpid() == g_main_pid) {
+            return;
+        }
+        /* The event is delivered before the fixture of the next test is constructed, so the
+         * child is stopped before it touches a socket, a port or a counter. */
+        fork_escape_exit(test_info.test_case_name(), test_info.name());
+    }
+    virtual void OnTestProgramEnd(const testing::UnitTest &unit_test)
+    {
+        UNREFERENCED_PARAMETER(unit_test);
+        if (getpid() != g_main_pid) {
+            /* A child that escaped on the last test of the run. Terminate it before the
+             * reporting listeners overwrite the TAP and XML output files of the parent. */
+            fork_escape_exit("", "end of the test program");
+        }
+    }
+};
+
+void fork_guard_init(void)
+{
+    g_main_pid = getpid();
+    testing::UnitTest::GetInstance()->listeners().Append(new fork_escape_guard());
+}
+
 static void convert_and_copy_address(const sockaddr_store_t &source, sockaddr_store_t &dest,
                                      sa_family_t target_family)
 {
@@ -258,7 +308,11 @@ int test_base::wait_fork(int pid)
     }
     if (WIFEXITED(status)) {
         const int exit_status = WEXITSTATUS(status);
-        if (exit_status != 0) {
+        if (exit_status == GTEST_FORK_ESCAPE_STATUS) {
+            log_error("child process %d escaped its test body, likely a fatal assertion "
+                      "returned from the test body and skipped the exit() call\n",
+                      pid);
+        } else if (exit_status != 0) {
             log_trace("non-zero exit status: %d from waitpid() errno: %s\n", exit_status,
                       strerror(errno));
         }

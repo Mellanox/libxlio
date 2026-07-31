@@ -36,6 +36,23 @@
 
 #define SOCK_STR(x) sockaddr2str(reinterpret_cast<const sockaddr *>(&x), sizeof(x)).c_str()
 
+/*
+ * Exit status of a forked child that escaped its test body, see fork_guard_init(). It must not
+ * collide with the exit(testing::Test::HasFailure()) statuses used by the child processes.
+ */
+#define GTEST_FORK_ESCAPE_STATUS 111
+
+/*
+ * Safety net for the forked tests. Records the pid of the main process and appends a listener
+ * that terminates any process which starts a test it doesn't own, i.e. a child that returned
+ * from its test body instead of calling exit().
+ *
+ * Call it from main() after all the reporting listeners are appended and before
+ * RUN_ALL_TESTS(): the End events are delivered in the reverse order of registration, so the
+ * guard must be the last listener to be notified before the reporting ones.
+ */
+void fork_guard_init(void);
+
 class test_base_sock {
 public:
     virtual int get_sock_type() const = 0;
