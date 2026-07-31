@@ -146,15 +146,22 @@ TEST_F(ultra_api_socket_migrate, ti_1)
             xlio_api->xlio_poll_group_poll(group);
             xlio_api->xlio_poll_group_poll(group_2);
             if (do_migrate) {
-                xlio_api->xlio_socket_detach_group(accepted_sockets.back());
-                xlio_api->xlio_socket_attach_group(accepted_sockets.back(), group_2);
+                EXPECT_FALSE(accepted_sockets.empty());
+                if (accepted_sockets.empty()) {
+                    break;
+                }
+                rc = xlio_api->xlio_socket_detach_group(accepted_sockets.back());
+                ASSERT_EQ(0, rc);
+                rc = xlio_api->xlio_socket_attach_group(accepted_sockets.back(), group_2);
+                ASSERT_EQ(0, rc);
                 do_migrate = false;
             }
         }
 
         base_wait_for_delayed_acks(group);
 
-        ASSERT_EQ(data_received, data_bytes_to_be_sent);
+        // EXPECT to let the child reach exit() below and report its verdict via wait_fork().
+        EXPECT_EQ(data_received, data_bytes_to_be_sent);
 
         barrier_fork(pid, true);
 
@@ -207,7 +214,7 @@ TEST_F(ultra_api_socket_migrate, ti_1)
 
         destroy_poll_group(group);
 
-        wait_fork(pid);
+        EXPECT_EQ(0, wait_fork(pid));
     }
 }
 
@@ -256,14 +263,20 @@ TEST_F(ultra_api_socket_migrate, ti_2)
             xlio_api->xlio_poll_group_poll(group_2);
             // add timer to attach after 10 seconds of detach
             if (do_migrate) {
+                EXPECT_FALSE(accepted_sockets.empty());
+                if (accepted_sockets.empty()) {
+                    break;
+                }
                 if (!is_detached) {
                     clock_gettime(CLOCK_MONOTONIC, &start_time_detach);
-                    xlio_api->xlio_socket_detach_group(accepted_sockets.back());
+                    rc = xlio_api->xlio_socket_detach_group(accepted_sockets.back());
+                    ASSERT_EQ(0, rc);
                     is_detached = true;
                 }
                 clock_gettime(CLOCK_MONOTONIC, &start_time_now);
                 if (start_time_now.tv_sec - start_time_detach.tv_sec > MIGRATE_AFTER_SECONDS) {
-                    xlio_api->xlio_socket_attach_group(accepted_sockets.back(), group_2);
+                    rc = xlio_api->xlio_socket_attach_group(accepted_sockets.back(), group_2);
+                    ASSERT_EQ(0, rc);
                     do_migrate = false;
                 }
             }
@@ -271,7 +284,8 @@ TEST_F(ultra_api_socket_migrate, ti_2)
 
         base_wait_for_delayed_acks(group);
 
-        ASSERT_EQ(data_received, data_bytes_to_be_sent);
+        // EXPECT to let the child reach exit() below and report its verdict via wait_fork().
+        EXPECT_EQ(data_received, data_bytes_to_be_sent);
 
         barrier_fork(pid, true);
 
@@ -325,7 +339,7 @@ TEST_F(ultra_api_socket_migrate, ti_2)
 
         destroy_poll_group(group);
 
-        wait_fork(pid);
+        EXPECT_EQ(0, wait_fork(pid));
     }
 }
 

@@ -129,8 +129,11 @@ public:
         UNREFERENCED_PARAMETER(sock);
         UNREFERENCED_PARAMETER(userdata_sq);
         rx_cb_counter++;
-        if (memcmp(data, data_to_send, len) != 0) {
-            GTEST_FAIL();
+        // The tests send a single short message, so the entire payload is expected in one
+        // callback. Check the length before memcmp() to not read past data_to_send.
+        EXPECT_EQ(strlen(data_to_send), len);
+        if (len == strlen(data_to_send) && memcmp(data, data_to_send, len) != 0) {
+            ADD_FAILURE() << "Received data doesn't match the sent data";
         }
         xlio_api->xlio_socket_buf_free(sock, buf);
     }
@@ -257,7 +260,7 @@ TEST_F(ultra_api_socket_send_receive, ti_1)
 
         destroy_poll_group(group);
 
-        wait_fork(pid);
+        EXPECT_EQ(0, wait_fork(pid));
     }
 }
 
@@ -341,7 +344,7 @@ TEST_F(ultra_api_socket_send_receive, ti_2)
 
         destroy_poll_group(group);
 
-        wait_fork(pid);
+        EXPECT_EQ(0, wait_fork(pid));
     }
 }
 
@@ -448,7 +451,7 @@ TEST_F(ultra_api_socket_send_receive, ti_3)
 
         destroy_poll_group(group);
 
-        wait_fork(pid);
+        EXPECT_EQ(0, wait_fork(pid));
     }
 }
 
