@@ -53,6 +53,14 @@
  */
 void fork_guard_init(void);
 
+/*
+ * Upper bound for a single barrier_fork() wait. Deliberately generous: tests can be slow
+ * (TIME_WAIT, drains, migrate pacing). The death of the peer is detected within a tick, the
+ * deadline only backstops a peer which is alive but wedged.
+ */
+#define TEST_BARRIER_TIMEOUT_SEC 120
+#define TEST_BARRIER_TICK_MSEC   100
+
 class test_base_sock {
 public:
     virtual int get_sock_type() const = 0;
@@ -79,6 +87,7 @@ public:
     static int sock_noblock(int fd);
     static int event_wait(struct epoll_event *event);
     static int wait_fork(int pid);
+    static int kill_fork(int pid);
     static void handle_signal(int signo);
 
 protected:
@@ -88,7 +97,8 @@ protected:
     virtual void cleanup();
     virtual void init();
     bool barrier();
-    void barrier_fork(int pid = 0, bool sync_parent = false);
+    /* Returns false if the peer was lost, i.e. it died or missed the deadline. */
+    bool barrier_fork(int pid, bool sync_parent = false);
     bool child_fork_exit() { return m_break_signal; }
     bool test_mapped_ipv4() const;
 
@@ -103,6 +113,9 @@ protected:
 
 private:
     static void *thread_func(void *arg);
+    bool barrier_fork_wait(int pid);
+    bool barrier_read();
+    static bool peer_alive(pid_t pid);
 
     pthread_barrier_t m_barrier;
     int m_efd;
