@@ -158,7 +158,9 @@ TEST_F(ultra_api_socket_migrate, ti_1)
             }
         }
 
-        base_wait_for_delayed_acks(group);
+        // The accepted socket has been migrated to group_2 and the pending ACKs of the
+        // data connection can be flushed only by this group.
+        base_wait_for_delayed_acks(group_2);
 
         // EXPECT to let the child reach exit() below and report its verdict via wait_fork().
         EXPECT_EQ(data_received, data_bytes_to_be_sent);
@@ -169,6 +171,7 @@ TEST_F(ultra_api_socket_migrate, ti_1)
         base_cleanup_accepted_sockets(accepted_sockets);
         while (terminated_counter < 1) {
             xlio_api->xlio_poll_group_poll(group);
+            xlio_api->xlio_poll_group_poll(group_2);
         }
 
         if (mr_buf) {
@@ -282,7 +285,9 @@ TEST_F(ultra_api_socket_migrate, ti_2)
             }
         }
 
-        base_wait_for_delayed_acks(group);
+        // The accepted socket has been migrated to group_2 and the pending ACKs of the
+        // data connection can be flushed only by this group.
+        base_wait_for_delayed_acks(group_2);
 
         // EXPECT to let the child reach exit() below and report its verdict via wait_fork().
         EXPECT_EQ(data_received, data_bytes_to_be_sent);
@@ -293,6 +298,7 @@ TEST_F(ultra_api_socket_migrate, ti_2)
         base_cleanup_accepted_sockets(accepted_sockets);
         while (terminated_counter < 1) {
             xlio_api->xlio_poll_group_poll(group);
+            xlio_api->xlio_poll_group_poll(group_2);
         }
 
         if (mr_buf) {
