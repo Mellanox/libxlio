@@ -40,7 +40,6 @@ mapping_t::mapping_t(file_uid_t &uid, mapping_cache *cache, ib_ctx_handler *p_ib
     m_uid = uid;
     m_addr = nullptr;
     m_size = 0;
-    m_ref = 0;
     m_owners = 0;
     m_ib_ctx = p_ib_ctx;
     p_cache = cache;
@@ -173,23 +172,32 @@ bool mapping_t::memory_belongs(uintptr_t addr, size_t size)
 
 void mapping_t::get(void)
 {
-    lock();
-    ++m_ref;
-    unlock();
+    m_ref.get();
+}
+
+bool mapping_t::put_locked(void)
+{
+    return m_ref.put_locked();
 }
 
 void mapping_t::put(void)
 {
-    p_cache->lock();
-    lock();
+    mapping_cache *cache = p_cache;
 
-    --m_ref;
-    if (m_ref == 0) {
-        p_cache->release_mapping(this);
+    if (m_ref.put_fast()) {
+        return;
     }
 
-    unlock();
-    p_cache->unlock();
+    /*
+     * The zero-reference transition must remain serialized with cache lookup
+     * and LRU handling. A concurrent get() may raise the count while this
+     * thread waits for the write lock, so decrement only after taking it.
+     */
+    cache->lock_wr();
+    if (put_locked()) {
+        cache->release_mapping_unlocked(this);
+    }
+    cache->unlock();
 }
 
 int mapping_t::duplicate_fd(int fd, bool &rw)
@@ -234,9 +242,9 @@ int mapping_t::duplicate_fd(int fd, bool &rw)
 }
 
 mapping_cache::mapping_cache(size_t threshold)
-    : lock_spin("mapping_cache_lock")
-    , m_cache_uid()
+    : m_cache_uid()
     , m_cache_fd()
+    , m_hot_list()
     , m_lru_list()
 {
     memset(&m_stats, 0, sizeof(m_stats));
@@ -254,6 +262,14 @@ mapping_cache::~mapping_cache()
         handle_close(fd_map_iter->first);
     }
 
+    while (!m_hot_list.empty()) {
+        mapping = m_hot_list.get_and_pop_front();
+        if (!demote_mapping_unlocked(mapping)) {
+            map_logerr("Mapping %p is still referenced during cache destruction: ref=%u", mapping,
+                       (unsigned)mapping->m_ref.value());
+        }
+    }
+
     while (!m_lru_list.empty()) {
         mapping = m_lru_list.get_and_pop_front();
         evict_mapping_unlocked(mapping);
@@ -263,7 +279,7 @@ mapping_cache::~mapping_cache()
     for (uid_map_iter = m_cache_uid.begin(); uid_map_iter != m_cache_uid.end(); ++uid_map_iter) {
         mapping = uid_map_iter->second;
         map_loginfo("Cache not empty: fd=%d ref=%u owners=%u", mapping->m_fd,
-                    (unsigned)mapping->m_ref, (unsigned)mapping->m_owners);
+                    (unsigned)mapping->m_ref.value(), (unsigned)mapping->m_owners);
     }
 }
 
@@ -274,18 +290,32 @@ mapping_t *mapping_cache::get_mapping(int local_fd, void *p_ctx)
     file_uid_t uid;
     struct stat st;
     ib_ctx_handler *p_ib_ctx = (ib_ctx_handler *)p_ctx;
+    bool ref_acquired = false;
 
-    lock();
+    // coverity[check_return]
+    lock_rd();
+    iter = m_cache_fd.find(local_fd);
+    if (iter != m_cache_fd.end() && iter->second->m_state == MAPPING_STATE_MAPPED) {
+        mapping = iter->second;
+        if (mapping->m_ref.try_get()) {
+            if (mapping->m_hot_ref.is_retained()) {
+                mapping->m_hot_ref.touch();
+            }
+            unlock();
+            return mapping;
+        }
+        mapping = nullptr;
+    }
+    unlock();
 
+    // coverity[check_return]
+    lock_wr();
+
+    /* Another thread may have populated the FD cache while we changed locks. */
     iter = m_cache_fd.find(local_fd);
     if (iter != m_cache_fd.end()) {
         mapping = iter->second;
-        if (mapping->is_free() && mapping->m_state == MAPPING_STATE_MAPPED) {
-            m_lru_list.erase(mapping);
-        }
-    }
-
-    if (!mapping) {
+    } else {
         if (fstat(local_fd, &st) != 0) {
             map_logerr("fstat() errno=%d (%s)", errno, strerror(errno));
             goto quit;
@@ -302,30 +332,45 @@ mapping_t *mapping_cache::get_mapping(int local_fd, void *p_ctx)
     }
 
 quit:
-    if (mapping) {
+    if (mapping && mapping->m_state != MAPPING_STATE_FAILED) {
+        if (mapping->m_state == MAPPING_STATE_MAPPED) {
+            promote_mapping_unlocked(mapping);
+        }
+
         mapping->get();
+        ref_acquired = true;
 
         /* Mapping object may be unmapped, call mmap() in this case */
         if (mapping->m_state == MAPPING_STATE_UNMAPPED) {
             mapping->map(local_fd);
+            if (mapping->m_state == MAPPING_STATE_MAPPED) {
+                promote_mapping_unlocked(mapping);
+            }
         }
+    } else if (mapping) {
+        mapping = nullptr;
     }
 
     unlock();
 
     if (mapping && mapping->m_state == MAPPING_STATE_FAILED) {
-        mapping->put();
+        if (ref_acquired) {
+            mapping->put();
+        }
         mapping = nullptr;
     }
     return mapping;
 }
 
-void mapping_cache::release_mapping(mapping_t *mapping)
+void mapping_cache::release_mapping_unlocked(mapping_t *mapping)
 {
     assert(mapping->is_free());
+    assert(!mapping->m_hot_ref.is_retained());
 
-    /* TODO Rework */
-    if (mapping->m_state == MAPPING_STATE_FAILED) {
+    if (mapping->m_state != MAPPING_STATE_MAPPED) {
+        if (mapping->m_owners == 0 && mapping->m_state != MAPPING_STATE_UNKNOWN) {
+            destroy_mapping_unlocked(mapping);
+        }
         return;
     }
 
@@ -337,20 +382,18 @@ void mapping_cache::handle_close(int local_fd)
     mapping_t *mapping;
     mapping_fd_map_iter_t iter;
 
-    lock();
+    lock_wr();
     iter = m_cache_fd.find(local_fd);
     if (iter != m_cache_fd.end()) {
         mapping = iter->second;
         assert(mapping->m_owners > 0);
-        --mapping->m_owners;
-        if (mapping->m_owners == 0 &&
-            (mapping->m_state != MAPPING_STATE_MAPPED &&
-             mapping->m_state != MAPPING_STATE_UNKNOWN)) {
-            m_cache_uid.erase(mapping->m_uid);
-            mapping->m_state = MAPPING_STATE_UNKNOWN;
-            delete mapping;
-        }
         m_cache_fd.erase(iter);
+        --mapping->m_owners;
+
+        if (mapping->m_owners == 0 && mapping->is_free() &&
+            mapping->m_state != MAPPING_STATE_MAPPED) {
+            release_mapping_unlocked(mapping);
+        }
     }
     unlock();
 }
@@ -387,9 +430,6 @@ mapping_t *mapping_cache::get_mapping_by_uid_unlocked(file_uid_t &uid, ib_ctx_ha
     iter = m_cache_uid.find(uid);
     if (iter != m_cache_uid.end()) {
         mapping = iter->second;
-        if (mapping->is_free() && mapping->m_state == MAPPING_STATE_MAPPED) {
-            m_lru_list.erase(mapping);
-        }
     }
 
     if (!mapping) {
@@ -402,17 +442,99 @@ mapping_t *mapping_cache::get_mapping_by_uid_unlocked(file_uid_t &uid, ib_ctx_ha
     return mapping;
 }
 
+void mapping_cache::promote_mapping_unlocked(mapping_t *mapping)
+{
+    assert(mapping->m_state == MAPPING_STATE_MAPPED);
+
+    if (mapping->m_hot_ref.is_retained()) {
+        mapping->m_hot_ref.touch();
+        return;
+    }
+
+    if (mapping->is_free()) {
+        m_lru_list.erase(mapping);
+    }
+
+    mapping->m_hot_ref.retain(mapping->m_ref);
+    m_hot_list.push_back(mapping);
+}
+
+bool mapping_cache::demote_mapping_unlocked(mapping_t *mapping)
+{
+    /* Precondition: caller has already removed mapping from m_hot_list. */
+    assert(mapping->m_state == MAPPING_STATE_MAPPED);
+    assert(mapping->m_hot_ref.is_retained());
+
+    bool evictable = mapping->m_hot_ref.release(mapping->m_ref);
+    if (evictable) {
+        release_mapping_unlocked(mapping);
+    }
+    return evictable;
+}
+
+bool mapping_cache::demote_hot_mappings_unlocked()
+{
+    size_t scan = m_hot_list.size();
+    mapping_t *mapping;
+
+    /*
+     * First demote candidates that have already consumed their second chance.
+     * An active candidate does not become evictable immediately, so keep
+     * scanning instead of failing while another candidate may be idle.
+     */
+    while (scan-- > 0) {
+        mapping = m_hot_list.get_and_pop_front();
+        if (unlikely(!mapping)) {
+            return false;
+        }
+        if (mapping->m_hot_ref.consume_recent()) {
+            m_hot_list.push_back(mapping);
+            continue;
+        }
+
+        if (demote_mapping_unlocked(mapping)) {
+            return true;
+        }
+    }
+
+    /*
+     * Only second-chance candidates remain. Their recent bits were cleared by
+     * the first pass; demote them oldest-first until one is evictable or the
+     * bounded candidate set is exhausted.
+     */
+    scan = m_hot_list.size();
+    while (scan-- > 0) {
+        mapping = m_hot_list.get_and_pop_front();
+        if (unlikely(!mapping)) {
+            return false;
+        }
+        if (demote_mapping_unlocked(mapping)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void mapping_cache::destroy_mapping_unlocked(mapping_t *mapping)
+{
+    assert(mapping->m_owners == 0);
+    assert(mapping->m_state != MAPPING_STATE_UNKNOWN);
+
+    m_cache_uid.erase(mapping->m_uid);
+    mapping->m_state = MAPPING_STATE_UNKNOWN;
+    delete mapping;
+}
+
 void mapping_cache::evict_mapping_unlocked(mapping_t *mapping)
 {
     assert(mapping->is_free());
+    assert(!mapping->m_hot_ref.is_retained());
 
     if (mapping->m_state == MAPPING_STATE_MAPPED) {
         mapping->unmap();
     }
     if (mapping->m_owners == 0 && (mapping->m_state != MAPPING_STATE_UNKNOWN)) {
-        m_cache_uid.erase(mapping->m_uid);
-        mapping->m_state = MAPPING_STATE_UNKNOWN;
-        delete mapping;
+        destroy_mapping_unlocked(mapping);
     }
 }
 
@@ -424,10 +546,14 @@ bool mapping_cache::cache_evict_unlocked(size_t toFree)
     map_logdbg("Evicting cache, LRU list size=%zu", m_lru_list.size());
 
     while (freed < toFree) {
-        if (m_lru_list.empty()) {
+        if (m_lru_list.empty() && !demote_hot_mappings_unlocked()) {
             return false;
         }
+        /* coverity[NULL_RETURNS] */
         mapping = m_lru_list.get_and_pop_front();
+        // No need to check if mapping==nullptr. A true demotion result means a mapping was put
+        // in the LRU, so if we are here, it is not empty.
+        /* coverity[NULL_RETURNS][var_deref_op]*/
         freed += mapping->m_size;
         evict_mapping_unlocked(mapping);
         ++m_stats.n_evicts;

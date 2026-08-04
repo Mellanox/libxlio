@@ -724,7 +724,10 @@ Memory limit for the zero-copy mapping cache used by sendfile().
 **How it works:**
 Files sent via sendfile() are mmap'd, registered with RDMA hardware (ibv_reg_mr), and cached
 by file identity (device + inode). Different file descriptors to the same file share one mapping.
-When the cache exceeds this limit, LRU eviction removes oldest unused mappings.
+Frequently used mappings retain one cache-owned reference so sendfile and TX completion avoid
+exclusive cache locking. Retention is bounded by this byte limit. When space is needed, the cache
+evicts zero-reference mappings first, then uses a second-chance policy to demote and evict older
+hot mappings. Open file descriptors do not prevent an idle mapping from being evicted.
 
 **Tradeoffs:**
 
