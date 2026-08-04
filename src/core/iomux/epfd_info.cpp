@@ -845,11 +845,11 @@ void epfd_info_entity_context_events::remove_epoll_ready_socket(sockinfo *si)
 
 void epfd_info_entity_context_events::move_epoll_ready_events(ep_ready_fd_list_t &out)
 {
+    std::lock_guard<decltype(m_epoll_ready_sockets_lock)> lock(m_epoll_ready_sockets_lock);
     if (m_epoll_ready_sockets.empty()) {
         return;
     }
 
-    std::lock_guard<decltype(m_epoll_ready_sockets_lock)> lock(m_epoll_ready_sockets_lock);
     sockinfo *si = m_epoll_ready_sockets.front();
     while (si) {
         si->set_epoll_event_flags(si->get_epoll_event_flags() | si->get_epoll_event_flags_thread());
