@@ -68,6 +68,7 @@ libgtest_la_SOURCES = \
 unit_tests_LDADD = libgtest.la $(LIBJSON_LIBS)
 
 unit_tests_CPPFLAGS = \
+	-DXLIO_STATIC_BUILD \
 	-I$(top_srcdir)/ \
 	-I$(top_builddir)/ \
 	-I$(top_srcdir)/src \
@@ -96,6 +97,7 @@ unit_tests_SOURCES = \
 	config/parameter_descriptor.cpp \
 	config/schema_analyzer.cpp \
 	job_queue/job_queue_test.cpp \
+	proto/mapping_test.cpp \
 	tcp/tcp_in.cpp \
 	tcp/tcp_output.cpp \
 	tcp/tcp_rto.cpp \
@@ -108,6 +110,7 @@ unit_tests_SOURCES = \
 	$(top_builddir)/src/core/lwip/tcp_out.c \
 	$(top_builddir)/src/core/lwip/tcp_rto.c \
 	$(top_builddir)/src/core/proto/xlio_time.cpp \
+	$(top_builddir)/src/core/proto/mapping.cpp \
 	$(top_builddir)/src/core/config/loaders/inline_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/json_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/key_resolver.cpp \
