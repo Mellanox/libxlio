@@ -108,6 +108,27 @@ static inline u32_t tcp_calc_slow_start_increment(u32_t acked, u16_t mss)
     return LWIP_MIN(acked, max_increment);
 }
 
+/* Congestion window validation (RFC 2861 Section 3): cwnd may be increased
+ * only if the window was full when the ACK arrived, i.e. the sender is
+ * cwnd-limited. Prevents unbounded per-ACK growth on flows that never use
+ * their window (application- or receive-window-limited). Same rule Linux
+ * enforces via tcp_is_cwnd_limited(); conservative w.r.t. RFC 7661. */
+static inline int tcp_cwnd_may_grow(u32_t flightsize, u32_t cwnd)
+{
+    return flightsize >= cwnd;
+}
+
+/* Reconstruct the in-flight bytes as of BEFORE this ACK. lwip_ack_received runs
+ * after lastack has advanced by acked, so (snd_nxt - lastack) understates the
+ * flightsize outstanding when the ACK arrived by exactly acked; adding it back
+ * yields the pre-ACK in-flight that the utilization gate must test. Wrap-safe:
+ * the window is bounded well under 2^31, so the unsigned subtraction is a small
+ * non-negative distance even across a seqno wrap. */
+static inline u32_t tcp_inflight_pre_ack(u32_t snd_nxt, u32_t lastack, u32_t acked)
+{
+    return (snd_nxt - lastack) + acked;
+}
+
 /** Function prototype for tcp accept callback functions. Called when a new
  * connection can be accepted on a listening pcb.
  *
