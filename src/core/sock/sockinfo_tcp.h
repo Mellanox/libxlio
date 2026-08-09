@@ -240,6 +240,8 @@ public:
         return static_cast<unsigned>(std::max(m_snd_buf.load(), 0));
     }
 
+    inline void sndbuf_reserve(uint32_t bytes) { m_snd_buf -= static_cast<int32_t>(bytes); }
+
     inline unsigned get_mss() { return m_pcb.mss; }
 
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;

@@ -78,11 +78,16 @@ public:
     void incr_tls_rx_need_resync() override { ++m_tls_rx_need_resync; }
     void get_record_buf(mem_buf_desc_t *&buf, uint8_t *&data, bool is_zerocopy);
     void tls_setup_entity_context(int optname);
+    ssize_t tx_thread_commit(mem_buf_desc_t *store, uint32_t offset, uint32_t size,
+                             const tx_call_ctx &tx_ctx);
+    bool is_tls_tx_enabled() const { return m_is_tls_tx; }
 
 private:
     inline bool is_tx_tls13() { return m_tls_info_tx.tls_version == TLS_1_3_VERSION; }
     inline bool is_rx_tls13() { return m_tls_info_rx.tls_version == TLS_1_3_VERSION; }
     void tls_setup_tx_context();
+    uint8_t get_record_type(const xlio_tx_call_attr_t &tx_arg) const;
+    ssize_t tx_internal(xlio_tx_call_attr_t &tx_arg);
 
     int send_alert(uint8_t alert_type);
     void terminate_session_fatal(uint8_t alert_type);
@@ -186,6 +191,16 @@ private:
     /* Whether offload is configured. */
     bool m_is_tls_tx;
     bool m_is_tls_rx;
+};
+
+class sockinfo_tcp_ops_tls_thread final : public sockinfo_tcp_ops_tls {
+public:
+    explicit sockinfo_tcp_ops_tls_thread(sockinfo_tcp *sock)
+        : sockinfo_tcp_ops_tls(sock)
+    {
+    }
+
+    ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
 };
 
 #endif /* DEFINED_UTLS */

@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <endian.h>
 #include <errno.h>
+#include <new>
 #include <sys/socket.h>
 
 /* ------------------------------------------------------------------------------------------------
@@ -260,6 +261,49 @@ static inline uint8_t get_alert_level(uint8_t alert_type)
  * tls_record
  */
 
+/*
+ * Reference counted owner of a worker TX store buffer. Lets a tls_record reference the
+ * committed plaintext region zero-copy and releases the store buffer with the last record.
+ */
+class tls_store_owner : public mem_desc {
+public:
+    explicit tls_store_owner(mem_buf_desc_t *store)
+        : m_store(store)
+    {
+        atomic_set(&m_ref, 1);
+    }
+
+    void get() override { (void)atomic_fetch_and_inc(&m_ref); }
+
+    void put() override
+    {
+        int ref = atomic_fetch_and_dec(&m_ref);
+        if (ref == 1) {
+            m_store->p_desc_owner->mem_buf_tx_release(m_store, true);
+            delete this;
+        }
+    }
+
+    uint32_t get_lkey(mem_buf_desc_t *desc, ib_ctx_handler *ib_ctx, const void *addr,
+                      size_t len) override
+    {
+        NOT_IN_USE(desc);
+        NOT_IN_USE(ib_ctx);
+
+        const uintptr_t start = reinterpret_cast<uintptr_t>(m_store->p_buffer);
+        const uintptr_t end = start + m_store->sz_buffer;
+        const uintptr_t data = reinterpret_cast<uintptr_t>(addr);
+        if (unlikely(data < start || data > end || len > end - data)) {
+            return LKEY_ERROR;
+        }
+        return m_store->lkey;
+    }
+
+private:
+    atomic_t m_ref;
+    mem_buf_desc_t *m_store;
+};
+
 enum : size_t {
     TLS_RECORD_HDR_LEN = 5U,
     TLS_RECORD_IV_LEN = TLS_AES_GCM_IV_LEN,
@@ -289,6 +333,7 @@ public:
         m_record_number = record_number;
         m_size = TLS_RECORD_HDR_LEN + TLS_RECORD_TAG_LEN;
         m_p_data = nullptr;
+        m_p_zc_owner = nullptr;
         tls_sock->get_record_buf(m_p_buf, m_p_data, zc_owner);
         if (likely(m_p_buf && m_p_data)) {
             if (iv) {
@@ -303,10 +348,15 @@ public:
             m_p_data[2] = 0x3;
             m_p_data[3] = 0;
             m_p_data[4] = m_size - TLS_RECORD_HDR_LEN;
-        }
-        m_p_zc_owner = zc_owner;
-        if (m_p_zc_owner) {
-            m_p_zc_owner->get();
+            /*
+             * Reference the store owner only once the record is usable. A record that failed
+             * to get a buffer is destroyed right away by the caller and must not touch the
+             * owner's reference count.
+             */
+            m_p_zc_owner = zc_owner;
+            if (m_p_zc_owner) {
+                m_p_zc_owner->get();
+            }
         }
         m_p_zc_data = nullptr;
     }
@@ -470,7 +520,7 @@ sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
 {
     /* Destroy TLS object under TCP connection lock. */
 
-    if (m_is_tls_tx) {
+    if (m_p_tis) {
         m_p_tx_ring->tls_release_tis(m_p_tis);
         m_p_tis = nullptr;
         if (m_zc_stor) {
@@ -697,6 +747,7 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         if (m_p_sock->get_entity_context()) {
             /* Worker thread mode: the setup stage runs on the owning entity context. FIFO order
              * of the job queue guarantees it completes before any later TX job of this socket.
+             * That job is the sole plaintext-to-TLS transition and sets m_is_tls_tx.
              */
             si_ulp_logdbg("Queueing TLS_SETUP job: direction=TX sock=%p", m_p_sock);
             m_p_sock->get_entity_context()->add_job(entity_context::job_desc {
@@ -804,6 +855,13 @@ void sockinfo_tcp_ops_tls::tls_setup_tx_context()
 void sockinfo_tcp_ops_tls::tls_setup_entity_context(int optname)
 {
     if (optname == TLS_TX) {
+        /*
+         * Transmit the data queued before the TLS context, such as the software handshake
+         * flight. It doesn't belong to the TLS stream, so it must neither share a TCP segment
+         * with a TLS record nor be covered by m_expected_seqno. Threads mode batches TX and
+         * can still hold this data unsent.
+         */
+        m_p_sock->flush();
         /* All TX jobs queued before this one are processed, so the next TCP sequence number
          * is the first byte that goes out as a TLS record.
          */
@@ -854,7 +912,37 @@ err_t sockinfo_tcp_ops_tls::tls_rx_consume_ready_packets()
     return ret;
 }
 
+/* Extract the TLS record type from a sendmsg() control message. */
+uint8_t sockinfo_tcp_ops_tls::get_record_type(const xlio_tx_call_attr_t &tx_arg) const
+{
+    uint8_t tls_type = TLS_APPLICATION_DATA;
+
+    if (tx_arg.opcode == TX_SENDMSG && tx_arg.attr.hdr) {
+        const struct msghdr *msg = tx_arg.attr.hdr;
+        if (msg->msg_controllen != 0) {
+            for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(msg); cmsg;
+                 cmsg = CMSG_NXTHDR(const_cast<struct msghdr *>(msg), cmsg)) {
+                if (cmsg->cmsg_level == SOL_TLS && cmsg->cmsg_type == TLS_SET_RECORD_TYPE) {
+                    tls_type = *CMSG_DATA(cmsg);
+                }
+            }
+        }
+    }
+
+    return tls_type;
+}
+
 ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
+{
+    return tx_internal(tx_arg);
+}
+
+ssize_t sockinfo_tcp_ops_tls_thread::tx(xlio_tx_call_attr_t &tx_arg)
+{
+    return m_p_sock->tcp_tx_thread(tx_arg);
+}
+
+ssize_t sockinfo_tcp_ops_tls::tx_internal(xlio_tx_call_attr_t &tx_arg)
 {
     /*
      * TODO This method must be called under socket lock to avoid situation
@@ -870,9 +958,11 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
     ssize_t ret;
     size_t pos;
     int errno_save;
-    bool block_this_run = BLOCK_THIS_RUN(m_p_sock->is_blocking(), tx_arg.attr.flags);
+    const bool worker_mode = safe_mce_sys().is_threads_mode();
+    const uint8_t tls_type = get_record_type(tx_arg);
+    bool block_this_run =
+        !worker_mode && BLOCK_THIS_RUN(m_p_sock->is_blocking(), tx_arg.attr.flags);
     bool is_zerocopy = tx_arg.attr.flags & MSG_ZEROCOPY;
-    uint8_t tls_type = 0x17;
 
     if (!m_is_tls_tx) {
         return m_p_sock->tcp_tx(tx_arg);
@@ -890,19 +980,6 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
     last_recno = m_next_recno_tx;
     ret = 0;
 
-    /* Control sendmsg() support */
-    if (tx_arg.opcode == TX_SENDMSG && tx_arg.attr.hdr) {
-        struct msghdr *__msg = (struct msghdr *)tx_arg.attr.hdr;
-        struct cmsghdr *cmsg;
-        if (__msg->msg_controllen != 0) {
-            for (cmsg = CMSG_FIRSTHDR(__msg); cmsg; cmsg = CMSG_NXTHDR(__msg, cmsg)) {
-                if (cmsg->cmsg_level == SOL_TLS && cmsg->cmsg_type == TLS_SET_RECORD_TYPE) {
-                    tls_type = *CMSG_DATA(cmsg);
-                }
-            }
-        }
-    }
-
     uint8_t *iv = is_tx_tls13() ? nullptr : m_tls_info_tx.iv;
     mem_desc *zc_owner = is_zerocopy ? reinterpret_cast<mem_desc *>(tx_arg.priv.mdesc) : nullptr;
     for (ssize_t i = 0; i < tx_arg.attr.sz_iov; ++i) {
@@ -912,7 +989,7 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
             ssize_t ret2;
             size_t tosend = std::min<size_t>(p_iov[i].iov_len - pos, TLS_RECORD_MAX);
 
-            if (m_p_sock->sndbuf_available() == 0U && !block_this_run) {
+            if (!worker_mode && m_p_sock->sndbuf_available() == 0U && !block_this_run) {
                 if (ret == 0) {
                     errno = EAGAIN;
                     ret = -1;
@@ -955,10 +1032,14 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
         retry:
             if (!block_this_run) {
                 m_p_sock->rx_poll_on_tx_if_needed();
-                ret2 = m_p_sock->tcp_tx_express(
-                    tls_arg.attr.iov, tls_arg.attr.sz_iov, 0,
-                    XLIO_EXPRESS_OP_TYPE_FILE_ZEROCOPY | XLIO_EXPRESS_MSG_SND_BUF,
-                    reinterpret_cast<void *>(rec));
+                /*
+                 * Records go out immediately in both modes. Send credit in threads mode is
+                 * already reserved by tcp_tx_thread(), so MSG_SND_BUF must not be set there.
+                 */
+                unsigned express_flags = XLIO_EXPRESS_OP_TYPE_FILE_ZEROCOPY |
+                    (worker_mode ? 0U : XLIO_EXPRESS_MSG_SND_BUF);
+                ret2 = m_p_sock->tcp_tx_express(tls_arg.attr.iov, tls_arg.attr.sz_iov, 0,
+                                                express_flags, reinterpret_cast<void *>(rec));
             } else {
                 ret2 = m_p_sock->tcp_tx(tls_arg);
             }
@@ -1008,6 +1089,17 @@ ssize_t sockinfo_tcp_ops_tls::tx(xlio_tx_call_attr_t &tx_arg)
     }
 done:
 
+    if (worker_mode && m_next_recno_tx != last_recno) {
+        const uint32_t worker_record_overhead =
+            static_cast<uint32_t>(is_tx_tls13() ? TLS_13_RECORD_OVERHEAD : TLS_12_RECORD_OVERHEAD);
+        /*
+         * The app thread reserves only plaintext bytes, while ACK processing restores the full
+         * TLS record size. Charge the successfully queued records in one shared-credit update.
+         */
+        m_p_sock->sndbuf_reserve(
+            static_cast<uint32_t>((m_next_recno_tx - last_recno) * worker_record_overhead));
+    }
+
     /* Statistics */
     if (ret > 0) {
         errno = errno_save;
@@ -1020,15 +1112,69 @@ done:
     return ret;
 }
 
+/*
+ * Build TLS records from the plaintext committed to a worker TX store buffer.
+ * Runs on the owning entity context, after the TLS setup job configured the context.
+ */
+ssize_t sockinfo_tcp_ops_tls::tx_thread_commit(mem_buf_desc_t *store, uint32_t offset,
+                                               uint32_t size, const tx_call_ctx &tx_ctx)
+{
+    struct iovec iov = {
+        .iov_base = store->p_buffer + offset,
+        .iov_len = size,
+    };
+    struct msghdr msg = {};
+    xlio_tx_call_attr_t tx_arg = {};
+
+    tx_arg.opcode = TX_SEND;
+    tx_arg.attr.iov = &iov;
+    tx_arg.attr.sz_iov = 1;
+    tx_arg.attr.flags = MSG_ZEROCOPY | MSG_DONTWAIT;
+
+    if (tx_ctx.get_opcode() == TX_SENDMSG) {
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+        if (tx_ctx.get_controllen() != 0U) {
+            msg.msg_control = const_cast<void *>(tx_ctx.get_control());
+            msg.msg_controllen = tx_ctx.get_controllen();
+        }
+        tx_arg.opcode = TX_SENDMSG;
+        tx_arg.attr.flags |= tx_ctx.get_flags();
+        tx_arg.attr.hdr = &msg;
+    }
+
+    si_ulp_logdbg("Committing TLS TX job: store=%p offset=%u size=%u", store, offset, size);
+    tls_store_owner *owner = new (std::nothrow) tls_store_owner(store);
+    if (unlikely(!owner)) {
+        si_ulp_logerr("Failed to allocate TLS TX store owner: offset=%u size=%u", offset, size);
+        store->p_desc_owner->mem_buf_tx_release(store, true);
+        return -1;
+    }
+
+    tx_arg.priv.mdesc = owner;
+
+    ssize_t ret = tx_internal(tx_arg);
+    owner->put();
+    return ret;
+}
+
 int sockinfo_tcp_ops_tls::postrouting(struct pbuf *p, struct tcp_seg *seg, xlio_send_attr &attr)
 {
     if (m_is_tls_tx && seg && p->type != PBUF_RAM) {
         if (seg->len != 0) {
+            /*
+             * Data sent before the TLS context was configured is not part of the TLS stream.
+             * In threads mode it is zerocopy as well, so only the pbuf descriptor tells it
+             * apart from a TLS record. Such a segment must go out as is, without a TIS and
+             * without advancing the expected seqno.
+             */
+            if (unlikely(!p->next || p->next->desc.attr != PBUF_DESC_MDESC)) {
+                return 0;
+            }
             if (unlikely(seg->seqno != m_expected_seqno)) {
 
                 /* For zerocopy the 1st pbuf is always a TCP header and the pbuf is on stack */
                 assert(p->type == PBUF_STACK); /* TCP header pbuf */
-                assert(p->next && p->next->desc.attr == PBUF_DESC_MDESC);
                 tls_record *rec = dynamic_cast<tls_record *>((mem_desc *)p->next->desc.mdesc);
                 if (unlikely(!rec)) {
                     return ERR_RTE;

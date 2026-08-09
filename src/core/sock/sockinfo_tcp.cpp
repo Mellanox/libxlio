@@ -1452,8 +1452,6 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32
     const struct iovec iov = {.iov_base = buf->p_buffer + offset, .iov_len = size};
     int rc;
 
-    NOT_IN_USE(tx_ctx);
-
     // To suppress clang analyzer warning about buf->lkey dereference.
     if (unlikely(!buf)) {
         return;
@@ -1471,6 +1469,16 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32
     if (!(flags & entity_context::JOB_FLAG_TX_LAST_CHUNK)) {
         ++buf->lwip_pbuf.ref;
     }
+
+#ifdef DEFINED_UTLS
+    auto *tls_ops = dynamic_cast<sockinfo_tcp_ops_tls *>(m_ops);
+    if (unlikely(tls_ops && tls_ops->is_tls_tx_enabled())) {
+        (void)tls_ops->tx_thread_commit(buf, offset, size, tx_ctx);
+        return;
+    }
+#else
+    NOT_IN_USE(tx_ctx);
+#endif /* DEFINED_UTLS */
 
     rc = tcp_tx_express(&iov, 1, buf->lkey, XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE, buf);
     if (rc < 0) {
@@ -4651,7 +4659,11 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                         ret = -1;
                         break;
                     }
-                    ops = new sockinfo_tcp_ops_tls(this);
+                    if (get_entity_context()) {
+                        ops = new sockinfo_tcp_ops_tls_thread(this);
+                    } else {
+                        ops = new sockinfo_tcp_ops_tls(this);
+                    }
 
                     if (unlikely(!ops)) {
                         errno = ENOMEM;
