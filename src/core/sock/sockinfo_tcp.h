@@ -386,7 +386,23 @@ public:
     tcp_timers_collection *get_tcp_timer_collection();
     bool is_cleaned() const { return m_is_cleaned; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    /*
+     * Deliver received data with the callback matching the socket ownership model.
+     * Keep this dispatch inline because the ownership mode is stable for the socket lifetime.
+     */
+    static inline err_t rx_lwip_cb_dispatch(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
+                                            err_t err)
+    {
+        sockinfo_tcp *conn = static_cast<sockinfo_tcp *>(arg);
+
+        if (conn->m_entity_context && likely(err == ERR_OK)) {
+            return rx_lwip_cb_entity_context(arg, tpcb, p, err);
+        }
+
+        return rx_lwip_cb(arg, tpcb, p, err);
+    }
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    void reuse_buffer(mem_buf_desc_t *buff);
 
     int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey, unsigned flags,
                        void *opaque_op);
@@ -526,7 +542,6 @@ private:
     // it can't help callers
     inline void return_pending_rx_buffs();
     inline void return_pending_tx_buffs();
-    inline void reuse_buffer(mem_buf_desc_t *buff);
     mem_buf_desc_t *get_next_desc(mem_buf_desc_t *p_desc) override;
     mem_buf_desc_t *get_next_desc_peek(mem_buf_desc_t *p_desc, int &rx_pkt_ready_list_idx) override;
     timestamps_t *get_socket_timestamps() override;

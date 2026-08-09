@@ -195,7 +195,7 @@ inline void sockinfo_tcp::return_pending_tx_buffs()
 
 // todo inline void sockinfo_tcp::return_pending_tcp_segs()
 
-inline void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
+void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
 {
     /* Special case when ZC buffers are used in RX path. */
     if (buff->lwip_pbuf.type == PBUF_ZEROCOPY) {

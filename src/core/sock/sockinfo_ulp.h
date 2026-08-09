@@ -86,6 +86,7 @@ private:
     inline bool is_tx_tls13() { return m_tls_info_tx.tls_version == TLS_1_3_VERSION; }
     inline bool is_rx_tls13() { return m_tls_info_rx.tls_version == TLS_1_3_VERSION; }
     void tls_setup_tx_context();
+    void tls_setup_rx_context();
     uint8_t get_record_type(const xlio_tx_call_attr_t &tx_arg) const;
     ssize_t tx_internal(xlio_tx_call_attr_t &tx_arg);
 

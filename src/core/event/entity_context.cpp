@@ -161,12 +161,37 @@ void entity_context::add_incoming_socket(sockinfo *sock)
     }
 }
 
+void entity_context::release_rx_buffers(const job_desc &job)
+{
+    if (!job.buf) {
+        return;
+    }
+
+    if (job.buf->lwip_pbuf.type == PBUF_ZEROCOPY &&
+        job.buf->lwip_pbuf.desc.attr == PBUF_DESC_TLS_RX) {
+        /* Zerocopy wrappers produced by the TLS receive path reference the ring buffers
+         * that hold the encrypted record. Return them through reuse_buffer(), which
+         * unwraps them and releases the underlying buffers to the ring.
+         */
+        sockinfo_tcp *sock = reinterpret_cast<sockinfo_tcp *>(job.sock);
+        mem_buf_desc_t *buf = job.buf;
+
+        do {
+            mem_buf_desc_t *next = buf->p_next_desc;
+            buf->p_next_desc = nullptr;
+            sock->reuse_buffer(buf);
+            buf = next;
+        } while (buf);
+        return;
+    }
+
+    /* coverity[check_return] */
+    job.buf->p_desc_owner->reclaim_recv_buffers(job.buf);
+}
+
 void entity_context::rx_data_recvd_job(const job_desc &job)
 {
-    if (job.buf) {
-        /* coverity[check_return] */
-        job.buf->p_desc_owner->reclaim_recv_buffers(job.buf);
-    }
+    release_rx_buffers(job);
 
     if (job.sock) {
         job.sock->rx_data_recvd(job.tot_size);
