@@ -9,6 +9,7 @@
 
 #include <list>
 #include <vector>
+#include "utils/lock_wrapper.h"
 #include "dev/xlio_ti.h"
 #include "dev/cq_mgr_tx.h"
 #include "dev/cq_mgr_rx.h"
@@ -80,10 +81,16 @@ public:
     void dm_release_data(mem_buf_desc_t *buff) { m_dm_mgr.release_data(buff); }
 
 #ifdef DEFINED_UTLS
-    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info);
+    /* Reservation stage: acquire HW objects (firmware commands only, no send queue access).
+     * A reserved TIS/TIR carries its DEK and is returned with tls_release_tis()/tls_release_tir()
+     * if not used. The setup stage below only posts configuration WQEs and cannot fail.
+     */
+    xlio_tis *tls_reserve_tis(const xlio_tls_info *info);
+    int tls_reserve_rx_dek(xlio_tir *tir, const xlio_tls_info *info);
+    void tls_context_setup_tx(const xlio_tls_info *info, xlio_tis *tis);
     xlio_tir *tls_create_tir(bool cached);
-    int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
-                             xlio_comp_cb_t callback, void *callback_arg);
+    void tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
+                              xlio_comp_cb_t callback, void *callback_arg);
     void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static);
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn);
     void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey);
@@ -264,7 +271,11 @@ private:
     bool m_dm_enabled = false;
     dm_mgr m_dm_mgr;
 
-    // TIS cache. Protected by ring tx lock. TODO Move to ring.
+    /* TLS TIS/DEK caches. List operations are protected by m_tls_cache_lock, so objects can be
+     * reserved without holding the ring tx lock. Firmware commands run outside the lock on
+     * exclusively owned objects. Lock order: ring tx lock -> m_tls_cache_lock, never reversed.
+     */
+    lock_spin m_tls_cache_lock;
     std::vector<xlio_tis *> m_tls_tis_cache;
 
 #if defined(DEFINED_UTLS)

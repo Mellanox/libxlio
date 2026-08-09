@@ -143,26 +143,40 @@ public:
 #ifdef DEFINED_UTLS
     virtual bool tls_tx_supported(void) { return false; }
     virtual bool tls_rx_supported(void) { return false; }
-    virtual xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
+    /* Reservation stage: acquire HW objects with firmware commands only, the send queue is not
+     * touched. The setup stage only posts configuration WQEs on pre-reserved objects and cannot
+     * fail.
+     */
+    virtual xlio_tis *tls_reserve_tis(const xlio_tls_info *info)
     {
         NOT_IN_USE(info);
         return NULL;
+    }
+    virtual int tls_reserve_rx_dek(xlio_tir *tir, const xlio_tls_info *info)
+    {
+        NOT_IN_USE(tir);
+        NOT_IN_USE(info);
+        return -1;
+    }
+    virtual void tls_context_setup_tx(const xlio_tls_info *info, xlio_tis *tis)
+    {
+        NOT_IN_USE(info);
+        NOT_IN_USE(tis);
     }
     virtual xlio_tir *tls_create_tir(bool cached)
     {
         NOT_IN_USE(cached);
         return NULL;
     }
-    virtual int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
-                                     uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
-                                     void *callback_arg)
+    virtual void tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
+                                      uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
+                                      void *callback_arg)
     {
         NOT_IN_USE(tir);
         NOT_IN_USE(info);
         NOT_IN_USE(next_record_tcp_sn);
         NOT_IN_USE(callback);
         NOT_IN_USE(callback_arg);
-        return -1;
     }
     virtual rfs_rule *tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_tir *tir)
     {

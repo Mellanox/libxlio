@@ -675,21 +675,26 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         (base_info->version == TLS_1_2_VERSION) ? TLS_12_RECORD_OVERHEAD : TLS_13_RECORD_OVERHEAD;
 
     if (__optname == TLS_TX) {
+        /* Reserve HW resources (SQ credits, TIS, DEK) before the TLS setup. */
         if (!m_p_tx_ring->credits_get(SQ_CREDITS_TLS_TX_CONTEXT)) {
             si_ulp_logdbg("No available space in SQ to create TLS TX context");
             errno = ENOPROTOOPT;
             return -1;
         }
-        m_expected_seqno = m_p_sock->get_next_tcp_seqno();
-        m_next_recno_tx = be64toh(recno_be64);
-        m_p_tis = m_p_tx_ring->tls_context_setup_tx(&m_tls_info_tx);
-        /* We don't need key for TX anymore. */
+        m_p_tis = m_p_tx_ring->tls_reserve_tis(&m_tls_info_tx);
+        /* We don't need key for TX anymore, it is stored in the DEK. */
         memset(m_tls_info_tx.key, 0, keylen);
         if (unlikely(!m_p_tis)) {
+            si_ulp_logdbg("Failed to reserve TLS TX hardware context (TIS/DEK)");
             m_p_tx_ring->credits_return(SQ_CREDITS_TLS_TX_CONTEXT);
             errno = ENOPROTOOPT;
             return -1;
         }
+
+        /* Reservation succeeded - the TLS setup below cannot fail. */
+        m_expected_seqno = m_p_sock->get_next_tcp_seqno();
+        m_next_recno_tx = be64toh(recno_be64);
+        m_p_tx_ring->tls_context_setup_tx(&m_tls_info_tx, m_p_tis);
         m_is_tls_tx = true;
         if (m_p_sock->get_sock_stats()) {
             m_p_sock->get_sock_stats()->tls_tx_offload = true;
@@ -702,59 +707,53 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
             return -1;
         }
 
-        m_next_recno_rx = be64toh(recno_be64);
-        m_is_tls_rx = true;
-
-        /*
+        /* Reserve HW resources (TIR, DEK, SQ credits) before the TLS setup.
+         *
          * First, get TIR from the TX ring cache. Create new one in
          * the RX ring if the cache is empty.
          */
         m_p_tir = m_p_tx_ring->tls_create_tir(true) ?: m_p_rx_ring->tls_create_tir(false);
-
-        m_p_sock->lock_tcp_con();
-        if (m_p_tir) {
-            err_t err = tls_rx_consume_ready_packets();
-            if (unlikely(err != ERR_OK)) {
-                si_ulp_logdbg("Cannot consume ready packets, TLS RX offload will likely fail.");
-            }
+        if (m_p_tir && unlikely(m_p_tx_ring->tls_reserve_rx_dek(m_p_tir, &m_tls_info_rx) != 0)) {
+            m_p_tx_ring->tls_release_tir(m_p_tir);
+            m_p_tir = nullptr;
         }
-
-        if (m_p_tir) {
-            uint32_t next_seqno_rx = m_p_sock->get_next_tcp_seqno_rx();
-            int rc = -1;
-
-            if (m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_CONTEXT)) {
-                rc = m_p_tx_ring->tls_context_setup_rx(m_p_tir, &m_tls_info_rx, next_seqno_rx,
-                                                       &rx_comp_callback, this);
-                if (unlikely(rc != 0)) {
-                    m_p_tx_ring->credits_return(SQ_CREDITS_TLS_RX_CONTEXT);
-                } else {
-                    m_rx_next_rec_tcp_seq = next_seqno_rx;
-                    m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
-                    /* See the "Initial value:" paragraph in the "Counter bookkeeping" section
-                     * at the top. Set the initial value here instead of the constructor, because
-                     * tls_rx_consume_ready_packets() during setsockopt() can interfere with the
-                     * resync flow otherwise.
-                     */
-                    m_tls_rx_need_resync = 1U;
-                    si_ulp_logdbg("TLS RX initial record num: %" PRIu64 " TCP sqeno %" PRIu32,
-                                  m_next_recno_rx, m_rx_next_rec_tcp_seq);
-                }
-            } else {
-                si_ulp_logdbg("No available space in SQ to create TLS RX context");
-            }
-            if (unlikely(rc != 0)) {
-                m_p_tx_ring->tls_release_tir(m_p_tir);
-                m_p_tir = nullptr;
-            }
+        if (m_p_tir && unlikely(!m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_CONTEXT))) {
+            si_ulp_logdbg("No available space in SQ to create TLS RX context");
+            /* The DEK is destroyed together with the TIR. */
+            m_p_tx_ring->tls_release_tir(m_p_tir);
+            m_p_tir = nullptr;
         }
         if (unlikely(!m_p_tir)) {
+            g_tls_api->EVP_CIPHER_CTX_free(reinterpret_cast<EVP_CIPHER_CTX *>(m_p_cipher_ctx));
+            m_p_cipher_ctx = nullptr;
             si_ulp_logdbg("TLS RX offload setup failed");
-            m_is_tls_rx = false;
-            m_p_sock->unlock_tcp_con();
             errno = ENOPROTOOPT;
             return -1;
         }
+
+        /* Reservation succeeded - the TLS setup below cannot fail. */
+        m_next_recno_rx = be64toh(recno_be64);
+        m_is_tls_rx = true;
+
+        m_p_sock->lock_tcp_con();
+        err_t err = tls_rx_consume_ready_packets();
+        if (unlikely(err != ERR_OK)) {
+            si_ulp_logdbg("Cannot consume ready packets, TLS RX offload will likely fail.");
+        }
+
+        uint32_t next_seqno_rx = m_p_sock->get_next_tcp_seqno_rx();
+        m_p_tx_ring->tls_context_setup_rx(m_p_tir, &m_tls_info_rx, next_seqno_rx,
+                                          &rx_comp_callback, this);
+        m_rx_next_rec_tcp_seq = next_seqno_rx;
+        m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
+        /* See the "Initial value:" paragraph in the "Counter bookkeeping" section
+         * at the top. Set the initial value here instead of the constructor, because
+         * tls_rx_consume_ready_packets() during setsockopt() can interfere with the
+         * resync flow otherwise.
+         */
+        m_tls_rx_need_resync = 1U;
+        si_ulp_logdbg("TLS RX initial record num: %" PRIu64 " TCP sqeno %" PRIu32, m_next_recno_rx,
+                      m_rx_next_rec_tcp_seq);
 
         tcp_recv(m_p_sock->get_pcb(), sockinfo_tcp_ops_tls::rx_lwip_cb);
         if (m_p_sock->get_sock_stats()) {
