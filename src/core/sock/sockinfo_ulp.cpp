@@ -795,35 +795,28 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         m_next_recno_rx = be64toh(recno_be64);
         m_is_tls_rx = true;
 
-        if (m_p_sock->get_entity_context()) {
-            /* Worker thread mode: the setup stage runs on the owning entity context. */
+        entity_context *context = m_p_sock->get_entity_context();
+        /*
+         * Consume ciphertext already queued on the socket and switch the receive callback
+         * immediately. In worker mode records arriving before the queued HW setup are handled
+         * by the regular software resync-gap path.
+         */
+        m_p_sock->lock_tcp_con();
+        err_t err = tls_rx_consume_ready_packets();
+        if (unlikely(err != ERR_OK)) {
+            si_ulp_logdbg("Cannot consume ready packets, TLS RX offload will likely fail.");
+        }
+        if (!context) {
+            tls_setup_rx_context();
+        }
+        tcp_recv(m_p_sock->get_pcb(), sockinfo_tcp_ops_tls::rx_lwip_cb);
+        m_p_sock->unlock_tcp_con();
+
+        if (context) {
             si_ulp_logdbg("Queueing TLS_SETUP job: direction=RX sock=%p", m_p_sock);
-            m_p_sock->get_entity_context()->add_job(entity_context::job_desc {
-                entity_context::JOB_TYPE_SOCK_TLS_SETUP, entity_context::JOB_FLAG_TLS_RX, m_p_sock,
-                nullptr, 0, 0});
-        } else {
-            m_p_sock->lock_tcp_con();
-            err_t err = tls_rx_consume_ready_packets();
-            if (unlikely(err != ERR_OK)) {
-                si_ulp_logdbg("Cannot consume ready packets, TLS RX offload will likely fail.");
-            }
-
-            uint32_t next_seqno_rx = m_p_sock->get_next_tcp_seqno_rx();
-            m_p_tx_ring->tls_context_setup_rx(m_p_tir, &m_tls_info_rx, next_seqno_rx,
-                                              &rx_comp_callback, this);
-            m_rx_next_rec_tcp_seq = next_seqno_rx;
-            m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
-            /* See the "Initial value:" paragraph in the "Counter bookkeeping" section
-             * at the top. Set the initial value here instead of the constructor, because
-             * tls_rx_consume_ready_packets() during setsockopt() can interfere with the
-             * resync flow otherwise.
-             */
-            m_tls_rx_need_resync = 1U;
-            si_ulp_logdbg("TLS RX initial record num: %" PRIu64 " TCP sqeno %" PRIu32,
-                          m_next_recno_rx, m_rx_next_rec_tcp_seq);
-
-            tcp_recv(m_p_sock->get_pcb(), sockinfo_tcp_ops_tls::rx_lwip_cb);
-            m_p_sock->unlock_tcp_con();
+            context->add_job(entity_context::job_desc {entity_context::JOB_TYPE_SOCK_TLS_SETUP,
+                                                       entity_context::JOB_FLAG_TLS_RX, m_p_sock,
+                                                       nullptr, 0, 0});
         }
         if (m_p_sock->get_sock_stats()) {
             m_p_sock->get_sock_stats()->tls_rx_offload = true;
@@ -848,6 +841,30 @@ void sockinfo_tcp_ops_tls::tls_setup_tx_context()
     m_is_tls_tx = true;
 }
 
+void sockinfo_tcp_ops_tls::tls_setup_rx_context()
+{
+    /* Called with the TCP connection lock held. */
+    /*
+     * TCP rcv_nxt follows all accepted bytes. If software processing stopped mid-record,
+     * subtract the retained bytes to anchor the HW context at that record's start.
+     */
+    const uint32_t next_seqno_rx = m_p_sock->get_next_tcp_seqno_rx() - m_rx_rec_rcvd;
+    m_p_tx_ring->tls_context_setup_rx(m_p_tir, &m_tls_info_rx, next_seqno_rx, &rx_comp_callback,
+                                      this);
+    m_rx_next_rec_tcp_seq = next_seqno_rx;
+    /*
+     * Seed immediately at a record boundary. Mid-record, recv() publishes the next boundary
+     * after that record completes.
+     */
+    if (m_rx_rec_rcvd == 0U) {
+        m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
+    }
+    /* See the "Initial value:" paragraph in the "Counter bookkeeping" section at the top. */
+    m_tls_rx_need_resync = 1U;
+    si_ulp_logdbg("TLS RX initial record num: %" PRIu64 " TCP sqeno %" PRIu32, m_next_recno_rx,
+                  m_rx_next_rec_tcp_seq);
+}
+
 /*
  * The TLS setup stage for worker thread mode. Runs on the owning entity context after
  * setsockopt() reserved all HW resources on the application thread, so it cannot fail.
@@ -868,15 +885,7 @@ void sockinfo_tcp_ops_tls::tls_setup_entity_context(int optname)
         tls_setup_tx_context();
     } else {
         m_p_sock->lock_tcp_con();
-        uint32_t next_seqno_rx = m_p_sock->get_next_tcp_seqno_rx();
-        m_p_tx_ring->tls_context_setup_rx(m_p_tir, &m_tls_info_rx, next_seqno_rx, &rx_comp_callback,
-                                          this);
-        m_rx_next_rec_tcp_seq = next_seqno_rx;
-        m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
-        /* See the "Initial value:" paragraph in the "Counter bookkeeping" section at the top. */
-        m_tls_rx_need_resync = 1U;
-        si_ulp_logdbg("TLS RX initial record num: %" PRIu64 " TCP sqeno %" PRIu32, m_next_recno_rx,
-                      m_rx_next_rec_tcp_seq);
+        tls_setup_rx_context();
         m_p_sock->unlock_tcp_con();
     }
 }
@@ -1594,8 +1603,8 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
 
     err_t err;
     if (unlikely(m_refused_data)) {
-        err =
-            sockinfo_tcp::rx_lwip_cb((void *)m_p_sock, m_p_sock->get_pcb(), m_refused_data, ERR_OK);
+        err = sockinfo_tcp::rx_lwip_cb_dispatch((void *)m_p_sock, m_p_sock->get_pcb(),
+                                                m_refused_data, ERR_OK);
         if (unlikely(err != ERR_OK)) {
             /*
              * We queue all incoming packets and never return an error.
@@ -1788,7 +1797,8 @@ check_single_record:
     tcp_recved(m_p_sock->get_pcb(), m_tls_rec_overhead, true);
     if (likely(pres)) {
         assert(pres->tot_len == (m_rx_rec_len - m_tls_rec_overhead));
-        err = sockinfo_tcp::rx_lwip_cb((void *)m_p_sock, m_p_sock->get_pcb(), pres, ERR_OK);
+        err =
+            sockinfo_tcp::rx_lwip_cb_dispatch((void *)m_p_sock, m_p_sock->get_pcb(), pres, ERR_OK);
         if (err != ERR_OK) {
             /* Underlying buffers are held by 'pres', we can free them below. */
             m_refused_data = pres;
@@ -1837,7 +1847,7 @@ err_t sockinfo_tcp_ops_tls::rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct p
     if (likely(p && err == ERR_OK)) {
         return ops->recv(p);
     }
-    return sockinfo_tcp::rx_lwip_cb(arg, tpcb, p, err);
+    return sockinfo_tcp::rx_lwip_cb_dispatch(arg, tpcb, p, err);
 }
 
 bool sockinfo_tcp_ops_tls::find_recno(uint32_t seqno, uint64_t &recno)
