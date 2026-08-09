@@ -95,6 +95,9 @@ void entity_context::process()
         case JOB_TYPE_SOCK_RX_DATA_RECVD:
             rx_data_recvd_job(job);
             break;
+        case JOB_TYPE_SOCK_TLS_SETUP:
+            tls_setup_job(job);
+            break;
         case JOB_TYPE_SOCK_CLOSE:
             close_socket_job(job);
             break;
@@ -182,6 +185,20 @@ void entity_context::listen_socket_job(const job_desc &job)
     } else {
         ctx_logdbg("Unsupported socket protocol %hd for Threads mode", sock->get_protocol());
     }
+}
+
+void entity_context::tls_setup_job(const job_desc &job)
+{
+#ifdef DEFINED_UTLS
+    sockinfo_tcp *sock = reinterpret_cast<sockinfo_tcp *>(job.sock);
+    assert(sock);
+    sockinfo_tcp_ops_tls *tls_ops = reinterpret_cast<sockinfo_tcp_ops_tls *>(sock->get_ops());
+
+    int optname = (job.flags & JOB_FLAG_TLS_TX) ? TLS_TX : TLS_RX;
+    tls_ops->tls_setup_entity_context(optname);
+#else
+    NOT_IN_USE(job);
+#endif /* DEFINED_UTLS */
 }
 
 void entity_context::close_socket_job(const job_desc &job)

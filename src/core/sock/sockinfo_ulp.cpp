@@ -6,6 +6,7 @@
 
 #include "sockinfo_tcp.h"
 #include "sockinfo_ulp.h"
+#include "event/entity_context.h"
 
 #include <algorithm>
 #include <assert.h>
@@ -692,10 +693,18 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         }
 
         /* Reservation succeeded - the TLS setup below cannot fail. */
-        m_expected_seqno = m_p_sock->get_next_tcp_seqno();
         m_next_recno_tx = be64toh(recno_be64);
-        m_p_tx_ring->tls_context_setup_tx(&m_tls_info_tx, m_p_tis);
-        m_is_tls_tx = true;
+        if (m_p_sock->get_entity_context()) {
+            /* Worker thread mode: the setup stage runs on the owning entity context. FIFO order
+             * of the job queue guarantees it completes before any later TX job of this socket.
+             */
+            si_ulp_logdbg("Queueing TLS_SETUP job: direction=TX sock=%p", m_p_sock);
+            m_p_sock->get_entity_context()->add_job(entity_context::job_desc {
+                entity_context::JOB_TYPE_SOCK_TLS_SETUP, entity_context::JOB_FLAG_TLS_TX, m_p_sock,
+                nullptr, 0, 0});
+        } else {
+            tls_setup_tx_context();
+        }
         if (m_p_sock->get_sock_stats()) {
             m_p_sock->get_sock_stats()->tls_tx_offload = true;
         }
@@ -735,31 +744,39 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
         m_next_recno_rx = be64toh(recno_be64);
         m_is_tls_rx = true;
 
-        m_p_sock->lock_tcp_con();
-        err_t err = tls_rx_consume_ready_packets();
-        if (unlikely(err != ERR_OK)) {
-            si_ulp_logdbg("Cannot consume ready packets, TLS RX offload will likely fail.");
+        if (m_p_sock->get_entity_context()) {
+            /* Worker thread mode: the setup stage runs on the owning entity context. */
+            si_ulp_logdbg("Queueing TLS_SETUP job: direction=RX sock=%p", m_p_sock);
+            m_p_sock->get_entity_context()->add_job(entity_context::job_desc {
+                entity_context::JOB_TYPE_SOCK_TLS_SETUP, entity_context::JOB_FLAG_TLS_RX, m_p_sock,
+                nullptr, 0, 0});
+        } else {
+            m_p_sock->lock_tcp_con();
+            err_t err = tls_rx_consume_ready_packets();
+            if (unlikely(err != ERR_OK)) {
+                si_ulp_logdbg("Cannot consume ready packets, TLS RX offload will likely fail.");
+            }
+
+            uint32_t next_seqno_rx = m_p_sock->get_next_tcp_seqno_rx();
+            m_p_tx_ring->tls_context_setup_rx(m_p_tir, &m_tls_info_rx, next_seqno_rx,
+                                              &rx_comp_callback, this);
+            m_rx_next_rec_tcp_seq = next_seqno_rx;
+            m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
+            /* See the "Initial value:" paragraph in the "Counter bookkeeping" section
+             * at the top. Set the initial value here instead of the constructor, because
+             * tls_rx_consume_ready_packets() during setsockopt() can interfere with the
+             * resync flow otherwise.
+             */
+            m_tls_rx_need_resync = 1U;
+            si_ulp_logdbg("TLS RX initial record num: %" PRIu64 " TCP sqeno %" PRIu32,
+                          m_next_recno_rx, m_rx_next_rec_tcp_seq);
+
+            tcp_recv(m_p_sock->get_pcb(), sockinfo_tcp_ops_tls::rx_lwip_cb);
+            m_p_sock->unlock_tcp_con();
         }
-
-        uint32_t next_seqno_rx = m_p_sock->get_next_tcp_seqno_rx();
-        m_p_tx_ring->tls_context_setup_rx(m_p_tir, &m_tls_info_rx, next_seqno_rx,
-                                          &rx_comp_callback, this);
-        m_rx_next_rec_tcp_seq = next_seqno_rx;
-        m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
-        /* See the "Initial value:" paragraph in the "Counter bookkeeping" section
-         * at the top. Set the initial value here instead of the constructor, because
-         * tls_rx_consume_ready_packets() during setsockopt() can interfere with the
-         * resync flow otherwise.
-         */
-        m_tls_rx_need_resync = 1U;
-        si_ulp_logdbg("TLS RX initial record num: %" PRIu64 " TCP sqeno %" PRIu32, m_next_recno_rx,
-                      m_rx_next_rec_tcp_seq);
-
-        tcp_recv(m_p_sock->get_pcb(), sockinfo_tcp_ops_tls::rx_lwip_cb);
         if (m_p_sock->get_sock_stats()) {
             m_p_sock->get_sock_stats()->tls_rx_offload = true;
         }
-        m_p_sock->unlock_tcp_con();
     }
 
     if (m_p_sock->get_sock_stats()) {
@@ -771,6 +788,39 @@ int sockinfo_tcp_ops_tls::setsockopt(int __level, int __optname, const void *__o
                   base_info->version == TLS_1_2_VERSION ? "1.2" : "1.3",
                   __optname == TLS_TX ? "TX" : "RX", keylen);
     return 0;
+}
+
+void sockinfo_tcp_ops_tls::tls_setup_tx_context()
+{
+    m_expected_seqno = m_p_sock->get_next_tcp_seqno();
+    m_p_tx_ring->tls_context_setup_tx(&m_tls_info_tx, m_p_tis);
+    m_is_tls_tx = true;
+}
+
+/*
+ * The TLS setup stage for worker thread mode. Runs on the owning entity context after
+ * setsockopt() reserved all HW resources on the application thread, so it cannot fail.
+ */
+void sockinfo_tcp_ops_tls::tls_setup_entity_context(int optname)
+{
+    if (optname == TLS_TX) {
+        /* All TX jobs queued before this one are processed, so the next TCP sequence number
+         * is the first byte that goes out as a TLS record.
+         */
+        tls_setup_tx_context();
+    } else {
+        m_p_sock->lock_tcp_con();
+        uint32_t next_seqno_rx = m_p_sock->get_next_tcp_seqno_rx();
+        m_p_tx_ring->tls_context_setup_rx(m_p_tir, &m_tls_info_rx, next_seqno_rx, &rx_comp_callback,
+                                          this);
+        m_rx_next_rec_tcp_seq = next_seqno_rx;
+        m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
+        /* See the "Initial value:" paragraph in the "Counter bookkeeping" section at the top. */
+        m_tls_rx_need_resync = 1U;
+        si_ulp_logdbg("TLS RX initial record num: %" PRIu64 " TCP sqeno %" PRIu32, m_next_recno_rx,
+                      m_rx_next_rec_tcp_seq);
+        m_p_sock->unlock_tcp_con();
+    }
 }
 
 err_t sockinfo_tcp_ops_tls::tls_rx_consume_ready_packets()

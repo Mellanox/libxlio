@@ -51,11 +51,14 @@ public:
         JOB_TYPE_SOCK_TX,
         JOB_TYPE_SOCK_RX_DATA_RECVD,
         JOB_TYPE_SOCK_ADD_AND_LISTEN,
+        JOB_TYPE_SOCK_TLS_SETUP,
         JOB_TYPE_SOCK_CLOSE
     };
 
     enum job_flag {
         JOB_FLAG_TX_LAST_CHUNK = 0x0001,
+        JOB_FLAG_TLS_TX = 0x0002,
+        JOB_FLAG_TLS_RX = 0x0004,
     };
 
     struct job_desc {
@@ -96,6 +99,7 @@ private:
     void tx_data_job(const job_desc &job);
     void rx_data_recvd_job(const job_desc &job);
     void listen_socket_job(const job_desc &job);
+    void tls_setup_job(const job_desc &job);
     void close_socket_job(const job_desc &job);
 
     static void entity_context_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq,
