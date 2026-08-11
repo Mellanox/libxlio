@@ -1317,6 +1317,7 @@ extern "C" int xlio_init(void)
     get_orig_funcs();
 #endif /* XLIO_STATIC_BUILD */
     safe_mce_sys();
+    xlio_sigint_init();
 
     g_init_xlio_init_done = true;
 
@@ -1346,6 +1347,12 @@ extern "C" EXPORT_SYMBOL int xlio_exit(void)
     int rc = 0;
 
     PROFILE_FUNC
+
+    // SIGINT can be intercepted before the global constructors run, therefore the restoration
+    // is gated by the signal initialization state and not by the resource cleanup state.
+    if (g_init_xlio_init_done) {
+        xlio_sigint_exit();
+    }
 
     if (g_init_global_ctors_done) {
         rc = free_libxlio_resources();

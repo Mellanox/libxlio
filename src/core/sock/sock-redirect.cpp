@@ -61,7 +61,6 @@ using namespace std;
 
 #define EP_MAX_EVENTS (int)((INT_MAX / sizeof(struct epoll_event)))
 struct sigaction g_act_prev;
-sighandler_t g_sighandler = nullptr;
 class ring_simple;
 
 template <typename T> void assign_dlsym(T &ptr, const char *name)
@@ -697,34 +696,44 @@ inline int epoll_wait_helper(int __epfd, struct epoll_event *__events, int __max
     }
 }
 
-static void handler_intr(int sig)
+static void dispatch_sigint_action(int sig, siginfo_t *info, void *context)
 {
-    switch (sig) {
-    case SIGINT:
-        g_b_exit = true;
-        srdr_logdbg("Catch Signal: SIGINT (%d)", sig);
-        break;
-    default:
-        srdr_logdbg("Catch Signal: %d", sig);
-        break;
+    /* NOTE:
+     * 1. Don't print logs in the signal handlers, XLIO logs aren't async-signal-safe.
+     * 2. XLIO mustn't change errno.
+     * 3. XLIO mustn't restore errno changed by the application handler, this is the native
+     *    behavior without the trampoline.
+     */
+
+    g_b_exit = true;
+
+    struct sigaction action = g_act_prev;
+
+    if ((action.sa_flags & SA_RESETHAND) != 0) {
+        g_act_prev.sa_handler = SIG_DFL;
     }
 
-    if (g_act_prev.sa_handler) {
-        g_act_prev.sa_handler(sig);
+    // sa_handler and sa_sigaction share the same storage, so the special dispositions must
+    // be excluded before the calling convention is selected.
+    if (action.sa_handler == SIG_DFL || action.sa_handler == SIG_IGN ||
+        action.sa_handler == SIG_ERR) {
+        return;
+    }
+    if ((action.sa_flags & SA_SIGINFO) != 0) {
+        action.sa_sigaction(sig, info, context);
+    } else {
+        action.sa_handler(sig);
     }
 }
 
-static void handle_signal(int signum)
+static void handler_sigint(int sig)
 {
-    srdr_logdbg_entry("Caught signal! signum=%d", signum);
+    dispatch_sigint_action(sig, nullptr, nullptr);
+}
 
-    if (signum == SIGINT) {
-        g_b_exit = true;
-    }
-
-    if (g_sighandler) {
-        g_sighandler(signum);
-    }
+static void handler_sigint_siginfo(int sig, siginfo_t *info, void *context)
+{
+    dispatch_sigint_action(sig, info, context);
 }
 
 int sigaction_internal(int signum, const struct sigaction *act, struct sigaction *oldact)
@@ -733,52 +742,72 @@ int sigaction_internal(int signum, const struct sigaction *act, struct sigaction
 
     PROFILE_FUNC
 
-    if (safe_mce_sys().handle_sigintr) {
-        srdr_logdbg_entry("signum=%d, act=%p, oldact=%p", signum, act, oldact);
+    srdr_logdbg_entry("signum=%d, act=%p, oldact=%p", signum, act, oldact);
 
-        switch (signum) {
-        case SIGINT:
-            if (oldact && g_act_prev.sa_handler) {
-                *oldact = g_act_prev;
-            }
-            if (act) {
-                struct sigaction xlio_action;
-                xlio_action.sa_handler = handler_intr;
-                xlio_action.sa_flags = 0;
-                sigemptyset(&xlio_action.sa_mask);
+    if (signum == SIGINT && safe_mce_sys().handle_sigintr) {
+        srdr_logdbg("SIGINT is intercepted by XLIO");
 
-                ret = SYSCALL(sigaction, SIGINT, &xlio_action, nullptr);
+        if (oldact) {
+            *oldact = g_act_prev;
+        }
+        if (act) {
+            struct sigaction xlio_action = *act;
+            // SIG_ERR isn't a callback, but the kernel installs it as a regular handler and
+            // jumps to it. Install it as is, so the process faults on delivery exactly as it
+            // does without XLIO.
+            bool special_action = act->sa_handler == SIG_DFL || act->sa_handler == SIG_IGN ||
+                act->sa_handler == SIG_ERR;
 
-                if (ret < 0) {
-                    srdr_logdbg("Failed to register SIGINT handler, calling to original sigaction "
-                                "handler");
-                    break;
+            if (!special_action) {
+                if ((act->sa_flags & SA_SIGINFO) != 0) {
+                    xlio_action.sa_sigaction = handler_sigint_siginfo;
+                } else {
+                    xlio_action.sa_handler = handler_sigint;
                 }
-                srdr_logdbg("Registered SIGINT handler");
+            }
+            ret = SYSCALL(sigaction, SIGINT, &xlio_action, nullptr);
+            if (ret == 0) {
                 g_act_prev = *act;
             }
-            if (ret >= 0) {
-                srdr_logdbg_exit("returned with %d", ret);
-            } else {
-                srdr_logdbg_exit("failed (errno=%d %m)", errno);
-            }
-
-            return ret;
-            break;
-        default:
-            break;
         }
+    } else {
+        ret = SYSCALL(sigaction, signum, act, oldact);
     }
-    ret = SYSCALL(sigaction, signum, act, oldact);
 
-    if (safe_mce_sys().handle_sigintr) {
-        if (ret >= 0) {
-            srdr_logdbg_exit("returned with %d", ret);
-        } else {
-            srdr_logdbg_exit("failed (errno=%d %m)", errno);
-        }
-    }
+    srdr_logdbg_exit("ret=%d (errno=%d)", ret, errno);
     return ret;
+}
+
+static bool is_xlio_sigint_action(const struct sigaction &action)
+{
+    return ((action.sa_flags & SA_SIGINFO) != 0 && action.sa_sigaction == handler_sigint_siginfo) ||
+        (action.sa_handler == handler_sigint);
+}
+
+void xlio_sigint_init()
+{
+    struct sigaction oldact = {};
+
+    if (SYSCALL(sigaction, SIGINT, nullptr, &oldact) != 0) {
+        oldact = {};
+        oldact.sa_handler = SIG_DFL;
+        sigemptyset(&oldact.sa_mask);
+    }
+
+    // SIGINT may be intercepted before initialization, g_act_prev already holds the application
+    // action in this case.
+    if (!is_xlio_sigint_action(oldact)) {
+        g_act_prev = oldact;
+    }
+}
+
+void xlio_sigint_exit()
+{
+    // Check whether XLIO has registered own SIGINT handler and replace it with the user handler.
+    struct sigaction oldact = {};
+    if (SYSCALL(sigaction, SIGINT, nullptr, &oldact) == 0 && is_xlio_sigint_action(oldact)) {
+        SYSCALL(sigaction, SIGINT, &g_act_prev, nullptr);
+    }
 }
 
 extern "C" {
@@ -2447,16 +2476,21 @@ EXPORT_SYMBOL sighandler_t XLIO_SYMBOL(signal)(int signum, sighandler_t handler)
 {
     PROFILE_FUNC
 
-    if (safe_mce_sys().handle_sigintr) {
-        srdr_logdbg_entry("signum=%d, handler=%p", signum, handler);
-
-        if (handler && handler != SIG_ERR && handler != SIG_DFL && handler != SIG_IGN) {
-            // Only SIGINT is supported for now
-            if (signum == SIGINT) {
-                g_sighandler = handler;
-                return SYSCALL(signal, SIGINT, &handle_signal);
-            }
+    if (signum == SIGINT && safe_mce_sys().handle_sigintr) {
+        if (handler == SIG_ERR) {
+            errno = EINVAL;
+            return SIG_ERR;
         }
+
+        struct sigaction action = {};
+        struct sigaction old_action = {};
+        action.sa_handler = handler;
+        sigemptyset(&action.sa_mask);
+        action.sa_flags = SA_RESTART;
+        if (sigaction_internal(signum, &action, &old_action) < 0) {
+            return SIG_ERR;
+        }
+        return old_action.sa_handler;
     }
 
     return SYSCALL(signal, signum, handler);
