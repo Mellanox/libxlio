@@ -415,15 +415,21 @@ int io_mux_call::call()
         // 1st scenario
         timer_update();
         wait_os(false);
-        if (g_b_exit || is_sig_pending()) {
+        m_p_stats->n_iomux_os_rx_ready += m_n_ready_rfds; // TODO: check
+
+        int num_all_offloaded_fds = *m_p_num_all_offloaded_fds;
+
+        // wake up mechanism can bring up events of later joined offloaded sockets
+        if (num_all_offloaded_fds) {
+            check_all_offloaded_sockets();
+        }
+
+        if (m_n_all_ready_fds == 0 && (g_b_exit || is_sig_pending())) {
             errno = EINTR;
             xlio_throw_object(io_mux_call::io_error);
         }
-        m_p_stats->n_iomux_os_rx_ready += m_n_ready_rfds; // TODO: check
 
-        // wake up mechanism can bring up events of later joined offloaded sockets
-        if (*m_p_num_all_offloaded_fds) {
-            check_all_offloaded_sockets();
+        if (num_all_offloaded_fds) {
             if (m_n_all_ready_fds) {
                 goto done;
             } else { // false wake-up, and we already discovered that we should be in 2nd

@@ -14,6 +14,86 @@
 
 class tcp_accept : public tcp_base {};
 
+static void ignore_sigint(int signo)
+{
+    UNREFERENCED_PARAMETER(signo);
+}
+
+/**
+ * @test tcp_accept.ready_connection_precedes_shutdown_interrupt
+ * @brief
+ *    accept() returns an already-queued connection ahead of the shutdown EINTR
+ *
+ * @details
+ */
+TEST_F(tcp_accept, ready_connection_precedes_shutdown_interrupt)
+{
+    int server_pid = fork();
+    ASSERT_LE(0, server_pid);
+
+    if (server_pid == 0) {
+        int l_fd = tcp_base::sock_create_fa(m_family, true);
+        EXPECT_LE_ERRNO(0, l_fd);
+        EXPECT_EQ_ERRNO(0, bind(l_fd, &server_addr.addr, sizeof(server_addr)));
+        EXPECT_EQ_ERRNO(0, listen(l_fd, 5));
+
+        int sync_pipe[2] = {-1, -1};
+        EXPECT_EQ_ERRNO(0, pipe(sync_pipe));
+
+        int client_pid = fork();
+        EXPECT_LE(0, client_pid);
+        if (client_pid == 0) {
+            close(sync_pipe[1]);
+            barrier_fork(client_pid);
+
+            int fd = tcp_base::sock_create_fa(m_family, false);
+            EXPECT_LE_ERRNO(0, fd);
+            EXPECT_EQ_ERRNO(0, bind(fd, &client_addr.addr, sizeof(client_addr)));
+            EXPECT_EQ_ERRNO(0, connect(fd, &server_addr.addr, sizeof(server_addr)));
+
+            char value = 0;
+            EXPECT_EQ_ERRNO(1, read(sync_pipe[0], &value, sizeof(value)));
+            close(sync_pipe[0]);
+            close(fd);
+            exit(testing::Test::HasFailure());
+        }
+
+        close(sync_pipe[0]);
+        barrier_fork(client_pid);
+
+        int epfd = epoll_create1(0);
+        EXPECT_LE_ERRNO(0, epfd);
+        struct epoll_event event = {};
+        event.events = EPOLLIN | EPOLLET;
+        event.data.fd = l_fd;
+        EXPECT_EQ_ERRNO(0, epoll_ctl(epfd, EPOLL_CTL_ADD, l_fd, &event));
+
+        event = {};
+        EXPECT_EQ_ERRNO(1, epoll_wait(epfd, &event, 1, 10000));
+
+        struct sigaction action = {};
+        action.sa_handler = ignore_sigint;
+        sigemptyset(&action.sa_mask);
+        EXPECT_EQ_ERRNO(0, sigaction(SIGINT, &action, nullptr));
+        EXPECT_EQ_ERRNO(0, raise(SIGINT));
+
+        int fd = accept(l_fd, nullptr, nullptr);
+        EXPECT_LE_ERRNO(0, fd);
+
+        char value = 1;
+        EXPECT_EQ_ERRNO(1, write(sync_pipe[1], &value, sizeof(value)));
+
+        close(sync_pipe[1]);
+        close(fd);
+        close(epfd);
+        close(l_fd);
+        EXPECT_EQ(0, wait_fork(client_pid));
+        exit(testing::Test::HasFailure());
+    }
+
+    EXPECT_EQ(0, wait_fork(server_pid));
+}
+
 /**
  * @test tcp_accept.mapped_ipv4_accept
  * @brief
