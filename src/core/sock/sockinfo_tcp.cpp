@@ -5,6 +5,7 @@
  */
 
 #include <functional>
+#include <new>
 #include <numeric>
 #include <stdio.h>
 #include <sys/time.h>
@@ -1311,6 +1312,30 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp);
 }
 
+int sockinfo_tcp::tcp_tx_prepare_call_ctx(const xlio_tx_call_attr_t &tx_arg, tx_call_ctx &tx_ctx)
+{
+    if (tx_arg.opcode != TX_SENDMSG || !tx_arg.attr.hdr || tx_arg.attr.hdr->msg_controllen == 0U) {
+        return 0;
+    }
+
+    if (unlikely(!tx_arg.attr.hdr->msg_control)) {
+        stats_update_tx_errors(EFAULT);
+        errno = EFAULT;
+        return -1;
+    }
+
+    try {
+        tx_ctx = tx_call_ctx(tx_arg.opcode, tx_arg.attr.flags, tx_arg.attr.hdr->msg_control,
+                             tx_arg.attr.hdr->msg_controllen);
+    } catch (const std::bad_alloc &) {
+        stats_update_tx_errors(ENOMEM);
+        errno = ENOMEM;
+        return -1;
+    }
+
+    return 0;
+}
+
 ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
 {
     iovec *p_iov = tx_arg.attr.iov;
@@ -1318,6 +1343,7 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     ssize_t sent_bytes = 0;
     uint32_t store_used = m_store_offset;
     int errno_tmp = errno;
+    tx_call_ctx tx_ctx;
 
     // TODO Flags aren't supported now. They usually affect blocking mode and zerocopy.
 
@@ -1332,6 +1358,10 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
             stats_update_tx_errors(errno);
             return -1;
         }
+    }
+
+    if (unlikely(tcp_tx_prepare_call_ctx(tx_arg, tx_ctx) != 0)) {
+        return -1;
     }
 
     size_t bytes_to_send =
@@ -1374,7 +1404,7 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
             if (store_used == m_store->sz_buffer) {
                 m_entity_context->add_job(entity_context::job_desc {
                     entity_context::JOB_TYPE_SOCK_TX, entity_context::JOB_FLAG_TX_LAST_CHUNK, this,
-                    m_store, m_store_offset, store_used - m_store_offset});
+                    m_store, m_store_offset, store_used - m_store_offset, tx_ctx});
                 m_store = nullptr;
             }
 
@@ -1400,7 +1430,7 @@ exit:
 
         m_entity_context->add_job(entity_context::job_desc {
             entity_context::JOB_TYPE_SOCK_TX, !!last_chunk * entity_context::JOB_FLAG_TX_LAST_CHUNK,
-            this, m_store, m_store_offset, store_used - m_store_offset});
+            this, m_store, m_store_offset, store_used - m_store_offset, tx_ctx});
 
         m_store_offset = store_used;
         if (last_chunk) {
@@ -1412,10 +1442,13 @@ exit:
     return sent_bytes;
 }
 
-void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32_t size, int flags)
+void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32_t size, int flags,
+                                    const tx_call_ctx &tx_ctx)
 {
     const struct iovec iov = {.iov_base = buf->p_buffer + offset, .iov_len = size};
     int rc;
+
+    NOT_IN_USE(tx_ctx);
 
     // To suppress clang analyzer warning about buf->lkey dereference.
     if (unlikely(!buf)) {

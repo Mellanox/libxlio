@@ -324,6 +324,7 @@ libxlio_la_SOURCES := \
 	sock/sock-redirect.h \
 	sock/sock-redirect-internal.h \
 	sock/sock-app.h \
+	sock/tx_call_ctx.h \
 	sock/sock-extra.h \
 	sock/bind_no_port.h \
 	\

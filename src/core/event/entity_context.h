@@ -39,6 +39,7 @@
 #include "event/job_queue.h"
 #include "util/xlio_stats.h"
 #include "event/event_handler_manager_local.h"
+#include "sock/tx_call_ctx.h"
 
 class sockinfo;
 class mem_buf_desc_t;
@@ -58,12 +59,26 @@ public:
     };
 
     struct job_desc {
+        job_desc(job_type id, int job_flags, sockinfo *socket, mem_buf_desc_t *buffer,
+                 uint32_t buffer_offset, uint32_t size, const tx_call_ctx &context = tx_call_ctx {})
+            : job_id(id)
+            , flags(job_flags)
+            , sock(socket)
+            , buf(buffer)
+            , offset(buffer_offset)
+            , tot_size(size)
+            , tx_ctx(context)
+        {
+        }
+
         job_type job_id;
         int flags;
         sockinfo *sock;
         mem_buf_desc_t *buf;
         uint32_t offset;
         uint32_t tot_size;
+        /* Deep copied per job, so no lifetime coupling to the originating TX call. */
+        tx_call_ctx tx_ctx;
     };
 
     entity_context(size_t index);

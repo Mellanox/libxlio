@@ -147,7 +147,7 @@ void entity_context::tx_data_job(const job_desc &job)
         ctx_logwarn("Invalid TX job");
         return;
     }
-    job.sock->tx_thread_commit(job.buf, job.offset, job.tot_size, job.flags);
+    job.sock->tx_thread_commit(job.buf, job.offset, job.tot_size, job.flags, job.tx_ctx);
 }
 
 void entity_context::add_incoming_socket(sockinfo *sock)

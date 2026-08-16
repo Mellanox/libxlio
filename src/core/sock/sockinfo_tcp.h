@@ -245,8 +245,8 @@ public:
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     ssize_t tcp_tx(xlio_tx_call_attr_t &tx_arg);
     ssize_t tcp_tx_thread(xlio_tx_call_attr_t &tx_arg);
-    void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size,
-                          int flags) override;
+    void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size, int flags,
+                          const tx_call_ctx &tx_ctx) override;
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
@@ -477,6 +477,7 @@ private:
                                                   int errno_to_restore);
     ssize_t tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, int errno_to_restore);
     ssize_t tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg);
+    int tcp_tx_prepare_call_ctx(const xlio_tx_call_attr_t &tx_arg, tx_call_ctx &tx_ctx);
     err_t handle_fin(struct tcp_pcb *pcb, err_t err);
     void handle_rx_lwip_cb_error(pbuf *p);
     void rx_lwip_cb_error(pbuf *p);
