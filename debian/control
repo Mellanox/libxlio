@@ -8,6 +8,7 @@ Build-Depends: debhelper (>= 7),
  automake,
  libibverbs-dev,
  librdmacm-dev,
+ libssl-dev,
  libnl-route-3-dev | libnl-dev,
  dpcp (>= 1.1.58),
 Homepage: https://github.com/Mellanox-lab/libxlio

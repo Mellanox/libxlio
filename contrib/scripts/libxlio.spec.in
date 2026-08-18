@@ -26,6 +26,7 @@ BuildRequires: autoconf
 BuildRequires: libtool
 BuildRequires: gcc-c++
 BuildRequires: rdma-core-devel
+BuildRequires: openssl-devel
 %if 0%{?rhel} >= 7 || 0%{?fedora} >= 24 || 0%{?suse_version} >= 1500
 BuildRequires: pkgconfig(libnl-3.0)
 BuildRequires: pkgconfig(libnl-route-3.0)
