@@ -7,9 +7,36 @@ ARG _GID=101
 ARG _LOGIN=swx-jenkins
 ARG _HOME=/var/home/$_LOGIN
 
-RUN sed -i 's!baseurl=.*everything.*!baseurl=http://webrepo.gtm.nvidia.com/Ctyunos/Mirrors/23.01/$basearch/everything/!' /etc/yum.repos.d/ctyunos.repo && \
-    sed -i 's!baseurl=.*update.*!baseurl=http://webrepo.gtm.nvidia.com/Ctyunos/Mirrors/23.01/$basearch/update/!' /etc/yum.repos.d/ctyunos.repo && \
-    sed -i 's!baseurl=.*extras.*!baseurl=http://webrepo.gtm.nvidia.com/Ctyunos/Mirrors/23.01/$basearch/extras/!' /etc/yum.repos.d/ctyunos.repo && \
+# Serve CTyunOS 23.01 from the internal mirror, which carries only the frozen
+# "everything" snapshot. The update/extras repos are kept in the file but
+# disabled, so they can be re-enabled without re-deriving the URLs.
+# The file is written whole rather than sed-patched: sed exits 0 when a
+# pattern does not match, so a base-image layout change would silently leave the
+# unreachable repos enabled.
+# Note: $basearch is single-quoted on purpose - it must reach dnf unexpanded.
+RUN printf '%s\n' \
+      '# Temporary: switch back to' \
+      '# http://webrepo.gtm.nvidia.com/Ctyunos/Mirrors/23.01/$basearch/everything/' \
+      '# once that mirror is available again.' \
+      '[everything]' \
+      'name=ctyunos-everything' \
+      'baseurl=http://webrepo.gtm.nvidia.com/Ctyunos/23.01-everything/$basearch/' \
+      'enabled=1' \
+      'gpgcheck=0' \
+      '' \
+      '[update]' \
+      'name=ctyunos-update' \
+      'baseurl=http://webrepo.gtm.nvidia.com/Ctyunos/Mirrors/23.01/$basearch/update/' \
+      'enabled=0' \
+      'gpgcheck=0' \
+      '' \
+      '[extras]' \
+      'name=ctyunos-extras' \
+      'baseurl=http://webrepo.gtm.nvidia.com/Ctyunos/Mirrors/23.01/$basearch/extras/' \
+      'gpgcheck=0' \
+      'enabled=0' \
+      > /etc/yum.repos.d/ctyunos.repo && \
+    cat /etc/yum.repos.d/ctyunos.repo && \
     dnf clean all
 
 RUN dnf --releasever=23.01 install -y autoconf automake make libtool json-c-devel git gcc-c++ \
