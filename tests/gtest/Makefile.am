@@ -122,6 +122,7 @@ gtest_SOURCES = \
 	udp/udp_sendto.cc \
 	udp/udp_rfs.cc \
 	\
+	core/sigaction.cc \
 	core/xlio_base.cc \
 	core/xlio_sockopt.cc \
 	\
