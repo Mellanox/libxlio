@@ -999,11 +999,14 @@ ssize_t sockinfo_tcp_ops_tls::tx_internal(xlio_tx_call_attr_t &tx_arg)
             size_t tosend = std::min<size_t>(p_iov[i].iov_len - pos, TLS_RECORD_MAX);
 
             if (!worker_mode && m_p_sock->sndbuf_available() == 0U && !block_this_run) {
-                if (ret == 0) {
-                    errno = EAGAIN;
-                    ret = -1;
+                m_p_sock->rx_poll_on_tx();
+                if (m_p_sock->sndbuf_available() == 0U) {
+                    if (ret == 0) {
+                        errno = EAGAIN;
+                        ret = -1;
+                    }
+                    goto done;
                 }
-                goto done;
             }
 
             rec =
