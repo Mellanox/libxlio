@@ -402,10 +402,10 @@ uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
 
     if (safe_mce_sys().enable_relaxed_ordering) {
 #ifndef DEFINED_IBV_ACCESS_RELAXED_ORDERING
-        VLOG_PRINTF_ONCE_THEN_DEBUG(
-            VLOG_WARNING, "Relaxed Ordering was requested but "
-                          "IBV_ACCESS_RELAXED_ORDERING is unavailable; "
-                          "the request was not applied\n");
+        VLOG_PRINTF_ONCE_THEN_DEBUG(VLOG_WARNING,
+                                    "Relaxed Ordering was requested but "
+                                    "IBV_ACCESS_RELAXED_ORDERING is unavailable; "
+                                    "the request was not applied\n");
 #else
         access |= IBV_ACCESS_RELAXED_ORDERING;
 #endif
