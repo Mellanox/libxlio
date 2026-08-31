@@ -815,6 +815,7 @@ void mce_sys_var::get_env_params()
     strq_stride_num_per_rwqe = MCE_DEFAULT_STRQ_NUM_STRIDES;
     strq_stride_size_bytes = MCE_DEFAULT_STRQ_STRIDE_SIZE_BYTES;
     strq_strides_compensation_level = MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL;
+    enable_relaxed_ordering = MCE_DEFAULT_RELAXED_ORDERING;
 
     gro_streams_max = MCE_DEFAULT_GRO_STREAMS_MAX;
     disable_flow_tag = MCE_DEFAULT_DISABLE_FLOW_TAG;
@@ -1149,6 +1150,10 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_STRQ_STRIDES_COMPENSATION_LEVEL))) {
         strq_strides_compensation_level = (uint32_t)atoi(env_ptr);
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_RELAXED_ORDERING))) {
+        enable_relaxed_ordering = atoi(env_ptr) ? true : false;
     }
 
     if ((env_ptr = getenv(SYS_VAR_ZC_CACHE_THRESHOLD))) {

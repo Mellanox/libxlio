@@ -1,6 +1,6 @@
 # XLIO Configuration Reference
 
-This file documents all 121 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
+This file documents all 122 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
@@ -31,6 +31,7 @@ This file documents all 121 XLIO runtime configuration parameters with their typ
   - [`core.syscall.fork_support`](#coresyscallfork_support) — Enable fork support
   - [`core.syscall.sendfile_cache_limit`](#coresyscallsendfile_cache_limit) — Sendfile byte limit
 - **[HARDWARE_FEATURES](#hardware_features)**
+  - [`hardware_features.memory_registration.relaxed_ordering`](#hardware_featuresmemory_registrationrelaxed_ordering) — Request relaxed ordering for memory registration
   - [`hardware_features.striding_rq.enable`](#hardware_featuresstriding_rqenable) — Enable striding receive queues
   - [`hardware_features.striding_rq.stride_size`](#hardware_featuresstriding_rqstride_size) — Size of each stride (bytes)
   - [`hardware_features.striding_rq.strides_num`](#hardware_featuresstriding_rqstrides_num) — Number of strides per WQE
@@ -747,6 +748,42 @@ working set = 10GB → default 10GB is appropriate.
 ---
 
 ## HARDWARE_FEATURES
+
+### `hardware_features.memory_registration.relaxed_ordering`
+
+> **Type:** boolean
+>
+> **Maps to:** `XLIO_RELAXED_ORDERING`
+
+Controls whether XLIO asks the network adapter to relax PCIe write ordering for host memory
+registered by XLIO. Relaxed Ordering can improve I/O performance on supported systems.
+
+**Values:**
+
+- false (default): Do not request Relaxed Ordering for XLIO-created memory keys. This does not
+  force strict ordering; the NIC can still use Relaxed Ordering when its device-wide configuration
+  forces it.
+- true: Request Relaxed Ordering for XLIO-created memory keys. This allows NIC DMA writes to reach
+  memory out of order. Completion and final data visibility semantics are unchanged, but
+  intermediate write-after-write ordering is not guaranteed.
+
+**Hardware configuration:**
+
+This setting controls behavior when the NIC's `PCI_WR_ORDERING` mode is `per_mkey`. If the NIC is
+in `force_relaxed` mode, Relaxed Ordering remains active regardless of this setting. XLIO does not
+change the NIC's `mlxconfig` setting.
+
+**Support notes:**
+
+When requested, XLIO passes `IBV_ACCESS_RELAXED_ORDERING` to libibverbs. If the build's verbs
+headers do not provide this flag, XLIO logs a warning and continues without applying the request.
+A modern libibverbs can also mask optional access flags when paired with a kernel that does not
+support them, without reporting that decision to XLIO. Startup output therefore reports whether
+XLIO requested Relaxed Ordering, not the effective hardware ordering mode.
+
+This setting does not affect memory regions registered directly by the application.
+
+**Default:** `false`
 
 ### `hardware_features.striding_rq.enable`
 
