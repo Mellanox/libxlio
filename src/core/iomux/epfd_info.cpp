@@ -81,8 +81,6 @@ epfd_info::~epfd_info()
     __log_funcall("");
     sockinfo *sock_fd;
 
-    // Meny: going over all handled fds and removing epoll context.
-
     lock();
 
     while (!m_ready_fds.empty()) {
@@ -203,7 +201,6 @@ int epfd_info::add_fd(int fd, epoll_event *event)
 
     if (temp_sock_fd_api && temp_sock_fd_api->skip_os_select()) {
         __log_dbg("fd=%d must be skipped from os epoll()", fd);
-        // Checking for duplicate fds
         if (get_fd_rec(fd)) {
             errno = EEXIST;
             __log_dbg(
@@ -307,28 +304,32 @@ void epfd_info::increase_ring_ref_count(ring *ring)
     m_ring_map_lock.lock();
     ring_map_t::iterator iter = m_ring_map.find(ring);
     if (iter != m_ring_map.end()) {
-        // increase ref count
         iter->second++;
     } else {
         m_ring_map[ring] = 1;
 
-        // add cq channel fd to the epfd
-        size_t num_ring_rx_fds;
-        int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
-        for (size_t i = 0; i < num_ring_rx_fds; i++) {
-            epoll_event evt = {0, {nullptr}};
-            evt.events = EPOLLIN | EPOLLPRI;
-            int fd = ring_rx_fds_array[i];
-            evt.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
-            int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, fd, &evt);
-            BULLSEYE_EXCLUDE_BLOCK_START
-            if (ret < 0) {
-                __log_dbg("failed to add cq fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd,
-                          errno);
-            } else {
-                __log_dbg("add cq fd=%d to epfd=%d", fd, m_epfd);
+        // In threads mode the worker threads own the CQs and the application never drains
+        // the comp channels, so watching them here would keep the epfd readable until a
+        // worker acks the event and would grow m_ready_cq_fd_q without bound.
+        if (!safe_mce_sys().is_threads_mode()) {
+            // add cq channel fd to the epfd
+            size_t num_ring_rx_fds;
+            int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
+            for (size_t i = 0; i < num_ring_rx_fds; i++) {
+                epoll_event evt = {0, {nullptr}};
+                evt.events = EPOLLIN | EPOLLPRI;
+                int fd = ring_rx_fds_array[i];
+                evt.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
+                int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, fd, &evt);
+                BULLSEYE_EXCLUDE_BLOCK_START
+                if (ret < 0) {
+                    __log_dbg("failed to add cq fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd,
+                              errno);
+                } else {
+                    __log_dbg("add cq fd=%d to epfd=%d", fd, m_epfd);
+                }
+                BULLSEYE_EXCLUDE_BLOCK_END
             }
-            BULLSEYE_EXCLUDE_BLOCK_END
         }
     }
     m_ring_map_lock.unlock();
@@ -346,26 +347,28 @@ void epfd_info::decrease_ring_ref_count(ring *ring)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    // decrease ref count
     iter->second--;
 
     if (iter->second == 0) {
         m_ring_map.erase(iter);
 
-        // remove cq channel fd from the epfd
-        size_t num_ring_rx_fds;
-        int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
-        for (size_t i = 0; i < num_ring_rx_fds; i++) {
-            // delete cq fd from epfd
-            int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], nullptr);
-            BULLSEYE_EXCLUDE_BLOCK_START
-            if (ret < 0) {
-                __log_dbg("failed to remove cq fd=%d from epfd=%d (errno=%d %m)",
-                          ring_rx_fds_array[i], m_epfd, errno);
-            } else {
-                __log_dbg("remove cq fd=%d from epfd=%d", ring_rx_fds_array[i], m_epfd);
+        // Not registered in threads mode, see increase_ring_ref_count().
+        if (!safe_mce_sys().is_threads_mode()) {
+            // remove cq channel fd from the epfd
+            size_t num_ring_rx_fds;
+            int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
+            for (size_t i = 0; i < num_ring_rx_fds; i++) {
+                // delete cq fd from epfd
+                int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], nullptr);
+                BULLSEYE_EXCLUDE_BLOCK_START
+                if (ret < 0) {
+                    __log_dbg("failed to remove cq fd=%d from epfd=%d (errno=%d %m)",
+                              ring_rx_fds_array[i], m_epfd, errno);
+                } else {
+                    __log_dbg("remove cq fd=%d from epfd=%d", ring_rx_fds_array[i], m_epfd);
+                }
+                BULLSEYE_EXCLUDE_BLOCK_END
             }
-            BULLSEYE_EXCLUDE_BLOCK_END
         }
     }
     m_ring_map_lock.unlock();
@@ -441,9 +444,7 @@ int epfd_info::del_fd(int fd, bool passthrough)
     if (temp_sock_fd_api && (fi->offloaded_index > 0)) {
         assert(temp_sock_fd_api->get_epoll_context_fd() == m_epfd);
 
-        /* Firstly remove epoll context from socket
-         * to avoid new events insertion into m_ready_fds queue
-         */
+        // Remove epoll context from socket to avoid new events insertion into m_ready_fds queue
         unlock();
         m_ring_map_lock.lock();
         temp_sock_fd_api->remove_epoll_context(this);
@@ -497,7 +498,6 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
     int ret;
 
     __log_funcall("fd=%d", fd);
-    // find the fd in local table
     fd_rec = get_fd_rec(fd);
     if (!fd_rec) {
         errno = ENOENT;
