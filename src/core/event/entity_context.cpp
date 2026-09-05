@@ -286,18 +286,23 @@ entity_context::wakeup_reason entity_context::wait_for_interrupt(int timeout_ms)
         return WAKEUP_NONE;
     }
 
-    arm_cq_notifications();
-
-    // Race avoidance: re-poll CQ after arming.
-    if (poll()) {
-        return WAKEUP_CQ_EVENT;
-    }
-
-    // Transition to sleeping. An app thread that inserted a job between the
-    // last poll and this point either made the job visible to the check inside
-    // try_sleep(), or takes the queue lock after it and writes to wakeup_fd.
+    // Transition to sleeping first. An app thread that inserted a job between
+    // the last poll and this point either made the job visible to the check
+    // inside try_sleep(), or takes the queue lock after it and writes to
+    // wakeup_fd. Doing this before arming keeps the job path free of the CQ
+    // arming cost, and a solicited interrupt is requested only when the worker
+    // really intends to sleep.
     if (!m_job_queue.try_sleep()) {
         return WAKEUP_JOB_POSTED;
+    }
+
+    arm_cq_notifications();
+
+    // Race avoidance: re-poll CQ after arming. The notification stays armed and
+    // is acknowledged on the next wakeup - there is no disarm primitive.
+    if (poll()) {
+        m_job_queue.wake();
+        return WAKEUP_CQ_EVENT;
     }
 
     static constexpr int MAX_EVENTS = 8;
