@@ -2573,7 +2573,7 @@ CPU spinning before every sleep transition.
 - *Too high / -1:* Thread spins idle, starving co-located
   threads on the same core.
 
-For most workloads the default (100000 = 100 milliseconds)
+For most workloads the default (10000 = 10 milliseconds)
 is sufficient. Use -1 only with dedicated CPU cores.
 
 **Auto-modified by:** ultra_latency (-1), latency (-1), nginx (0),
@@ -2582,7 +2582,7 @@ nginx_dpu (0).
 **Related:** [`blocking_rx_poll_usec`](#performancepollingblocking_rx_poll_usec) (same for recv()/read()),
 [`poll_os_ratio`](#performancepollingiomuxpoll_os_ratio) (OS polling within the busy-poll loop).
 
-**Default:** `100000`
+**Default:** `10000`
 
 ### `performance.polling.iomux.skip_os`
 
