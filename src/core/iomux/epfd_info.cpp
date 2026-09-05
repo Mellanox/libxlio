@@ -371,11 +371,27 @@ void epfd_info::decrease_ring_ref_count(ring *ring)
     m_ring_map_lock.unlock();
 }
 
-bool epfd_info::move_entity_context_ready_events()
+// Assumed lock. When arm_wakeup is set, the application is about to sleep: each
+// entity context is armed in the same epfd critical section that marks the
+// application sleeping, so a worker claiming the wakeup can never run its
+// do_wakeup() before going_to_sleep() becomes visible.
+bool epfd_info::move_entity_context_ready_events(bool arm_wakeup)
 {
-    std::for_each(begin(m_entity_context_events), end(m_entity_context_events),
-                  [this](auto &itr) { itr.move_epoll_ready_events(m_ready_fds); });
+    std::for_each(
+        begin(m_entity_context_events), end(m_entity_context_events),
+        [this, arm_wakeup](auto &itr) { itr.move_epoll_ready_events(m_ready_fds, arm_wakeup); });
     return !m_ready_fds.empty();
+}
+
+// Assumed lock. Keeps the contexts armed while any other waiter still sleeps on
+// this epfd - the shared wakeup fd wakes all of them with a single signal.
+void epfd_info::disarm_entity_context_wakeup()
+{
+    if (m_is_sleeping > 0) {
+        return;
+    }
+    std::for_each(begin(m_entity_context_events), end(m_entity_context_events),
+                  [](auto &itr) { itr.disarm_wakeup(); });
 }
 
 void epfd_info::add_rx_migration_cand(sockinfo *si)
@@ -582,9 +598,10 @@ void epfd_info::insert_epoll_event_cb(sockinfo *sock_fd, uint32_t event_flags)
         if (event_flags & (sock_fd->m_fd_rec.events | EPOLLHUP | EPOLLERR)) {
             size_t vecindex =
                 sock_fd->get_entity_context()->get_index() % m_entity_context_events.size();
-            m_entity_context_events[vecindex].add_epoll_ready_socket(event_flags, sock_fd);
-            // TODO: Consider wakeup moderation to reduce excessive wakeups under high event rate.
-            if (safe_mce_sys().select_poll_num != -1) {
+            // The wakeup decision is taken under the per-context lock that the
+            // insert already holds. Only a context armed by a sleeping
+            // application yields a claim, which also coalesces the wakeups.
+            if (m_entity_context_events[vecindex].add_epoll_ready_socket(event_flags, sock_fd)) {
                 lock();
                 do_wakeup();
                 unlock();
@@ -823,13 +840,19 @@ void epfd_info::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     }
 }
 
-void epfd_info_entity_context_events::add_epoll_ready_socket(uint64_t events, sockinfo *si)
+bool epfd_info_entity_context_events::add_epoll_ready_socket(uint64_t events, sockinfo *si)
 {
     std::lock_guard<decltype(m_epoll_ready_sockets_lock)> lock(m_epoll_ready_sockets_lock);
 
     si->set_epoll_event_flags_thread(si->get_epoll_event_flags_thread() | events);
     m_epoll_ready_sockets.push_back_if_absent(si);
     __log_dbg("Adding (threads mode) event %" PRIu64 " (fd=%d)", events, si->get_fd());
+
+    // Claim the wakeup. Workers that follow rely on the signal already sent and
+    // on the application merging the whole list.
+    bool claimed = m_app_sleeping;
+    m_app_sleeping = false;
+    return claimed;
 }
 
 void epfd_info_entity_context_events::remove_epoll_ready_socket(sockinfo *si)
@@ -843,9 +866,13 @@ void epfd_info_entity_context_events::remove_epoll_ready_socket(sockinfo *si)
     }
 }
 
-void epfd_info_entity_context_events::move_epoll_ready_events(ep_ready_fd_list_t &out)
+void epfd_info_entity_context_events::move_epoll_ready_events(ep_ready_fd_list_t &out,
+                                                              bool arm_wakeup)
 {
     std::lock_guard<decltype(m_epoll_ready_sockets_lock)> lock(m_epoll_ready_sockets_lock);
+    if (arm_wakeup) {
+        m_app_sleeping = true;
+    }
     if (m_epoll_ready_sockets.empty()) {
         return;
     }
@@ -861,4 +888,10 @@ void epfd_info_entity_context_events::move_epoll_ready_events(ep_ready_fd_list_t
         si = m_epoll_ready_sockets.next(si);
     }
     m_epoll_ready_sockets.clear();
+}
+
+void epfd_info_entity_context_events::disarm_wakeup()
+{
+    std::lock_guard<decltype(m_epoll_ready_sockets_lock)> lock(m_epoll_ready_sockets_lock);
+    m_app_sleeping = false;
 }
