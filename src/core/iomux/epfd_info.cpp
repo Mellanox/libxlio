@@ -17,6 +17,7 @@
 #define EPFD_MAX_OFFLOADED_STR 150
 
 #define CQ_FD_MARK 0xabcd
+#define CQ_FD_MASK 0xffffffffULL
 
 int epfd_info::remove_fd_from_epoll_os(int fd)
 {
@@ -168,7 +169,7 @@ bool epfd_info::is_cq_fd(uint64_t data)
     lock();
     // todo consider making m_ready_cq_fd_q a set instead of queue
     // TODO: Modifying the queue is unexpected and confusing in the method with name is_cq_fd().
-    m_ready_cq_fd_q.push_back((int)(data & 0xffff));
+    m_ready_cq_fd_q.push_back(static_cast<int>(data & CQ_FD_MASK));
     unlock();
 
     return true;
@@ -319,7 +320,7 @@ void epfd_info::increase_ring_ref_count(ring *ring)
                 epoll_event evt = {0, {nullptr}};
                 evt.events = EPOLLIN | EPOLLPRI;
                 int fd = ring_rx_fds_array[i];
-                evt.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
+                evt.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | (fd & CQ_FD_MASK));
                 int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, fd, &evt);
                 BULLSEYE_EXCLUDE_BLOCK_START
                 if (ret < 0) {
