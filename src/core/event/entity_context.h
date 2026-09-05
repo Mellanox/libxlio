@@ -87,8 +87,6 @@ public:
     wakeup_reason wait_for_interrupt(int timeout_ms);
     void wakeup();
 
-    bool is_sleeping() const { return m_sleeping.load(std::memory_order_acquire); }
-
     // Called only by the XLIO thread executing this context.
     void add_incoming_socket(sockinfo *sock);
 
@@ -112,7 +110,6 @@ private:
     bool m_last_poll_hit = false;
     entity_context_stats_t m_stats;
 
-    std::atomic<bool> m_sleeping {false};
     int m_wakeup_fd = -1;
     int m_epoll_fd = -1;
 };

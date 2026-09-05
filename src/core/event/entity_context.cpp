@@ -152,9 +152,7 @@ bool entity_context::process()
 
 void entity_context::add_job(const job_desc &job)
 {
-    m_job_queue.insert_job(job);
-
-    if (m_sleeping.exchange(false, std::memory_order_acq_rel)) {
+    if (m_job_queue.insert_job(job)) {
         wakeup();
     }
 }
@@ -295,15 +293,10 @@ entity_context::wakeup_reason entity_context::wait_for_interrupt(int timeout_ms)
         return WAKEUP_CQ_EVENT;
     }
 
-    m_sleeping.store(true, std::memory_order_release);
-
-    // Final re-check after setting sleeping flag. An app thread that inserted
-    // a job between the last poll and the store above will either:
-    // (a) release the queue lock before this check, so the job is visible, or
-    // (b) acquire the queue lock after this check, so it observes m_sleeping
-    //     and writes to wakeup_fd after inserting the job.
-    if (m_job_queue.has_pending()) {
-        m_sleeping.store(false, std::memory_order_release);
+    // Transition to sleeping. An app thread that inserted a job between the
+    // last poll and this point either made the job visible to the check inside
+    // try_sleep(), or takes the queue lock after it and writes to wakeup_fd.
+    if (!m_job_queue.try_sleep()) {
         return WAKEUP_JOB_POSTED;
     }
 
@@ -315,7 +308,7 @@ entity_context::wakeup_reason entity_context::wait_for_interrupt(int timeout_ms)
         nfds = SYSCALL(epoll_wait, m_epoll_fd, events, MAX_EVENTS, timeout_ms);
     } while (nfds == -1 && errno == EINTR && !g_b_exit);
 
-    m_sleeping.store(false, std::memory_order_release);
+    m_job_queue.wake();
 
     if (unlikely(nfds == -1)) {
         if (errno != EINTR || !g_b_exit) {

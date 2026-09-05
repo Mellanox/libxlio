@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 
 #include <pthread.h>
+#include <atomic>
+#include <chrono>
 #include <mutex>
 #include "core/event/job_queue.h"
 
@@ -217,15 +219,130 @@ TEST_F(job_queue_test, ti_6)
     EXPECT_EQ(remaining_jobs.size(), 0UL);
 }
 
-TEST_F(job_queue_test, pending_state)
+/**
+ * @test job_queue_test.sleep_transition
+ * @brief
+ *    Test the consumer sleep transition against a pending job.
+ * @details
+ *    try_sleep() must refuse to sleep while the insert queue holds a job and
+ *    must succeed once the consumer drained it.
+ */
+TEST_F(job_queue_test, sleep_transition)
 {
-    EXPECT_FALSE(queue.has_pending());
+    EXPECT_TRUE(queue.try_sleep());
+    queue.wake();
 
     queue.insert_job(test_job {1, 10});
-    EXPECT_TRUE(queue.has_pending());
+    EXPECT_FALSE(queue.try_sleep());
 
     auto &jobs = queue.get_all();
     EXPECT_EQ(jobs.size(), 1UL);
-    EXPECT_FALSE(queue.has_pending());
     jobs.clear();
+
+    EXPECT_TRUE(queue.try_sleep());
+    queue.wake();
+}
+
+/**
+ * @test job_queue_test.wakeup_claim
+ * @brief
+ *    Test that a single producer claims the wakeup of a sleeping consumer.
+ * @details
+ *    Only the first producer that observes the sleeping consumer is asked to
+ *    signal it. Producers that follow rely on that pending signal.
+ */
+TEST_F(job_queue_test, wakeup_claim)
+{
+    // An awake consumer is never signalled.
+    EXPECT_FALSE(queue.insert_job(test_job {1, 10}));
+
+    auto &jobs = queue.get_all();
+    jobs.clear();
+
+    ASSERT_TRUE(queue.try_sleep());
+    EXPECT_TRUE(queue.insert_job(test_job {2, 20}));
+    EXPECT_FALSE(queue.insert_job(test_job {3, 30}));
+
+    auto &more_jobs = queue.get_all();
+    EXPECT_EQ(more_jobs.size(), 2UL);
+    more_jobs.clear();
+
+    // wake() on an already claimed queue keeps the consumer awake.
+    queue.wake();
+    EXPECT_FALSE(queue.insert_job(test_job {4, 40}));
+
+    auto &last_jobs = queue.get_all();
+    last_jobs.clear();
+}
+
+/**
+ * @test job_queue_test.no_lost_wakeup
+ * @brief
+ *    Test that a producer racing the consumer sleep transition never loses a
+ *    wakeup.
+ * @details
+ *    Models the entity_context handshake: the consumer drains, tries to sleep
+ *    and blocks on a signal, while a producer inserts jobs and signals only
+ *    when insert_job() tells it to. A lost wakeup stalls the consumer, which
+ *    the deadline detects.
+ */
+TEST_F(job_queue_test, no_lost_wakeup)
+{
+    const int total_jobs = 20000;
+
+    std::atomic<int> signals(0);
+    std::atomic<int> consumed(0);
+    std::atomic<bool> lost_wakeup(false);
+
+    struct thread_data {
+        job_queue_t *queue;
+        std::atomic<int> *signals;
+        std::atomic<int> *consumed;
+        std::atomic<bool> *lost_wakeup;
+        int total_jobs;
+    };
+
+    thread_data data {&queue, &signals, &consumed, &lost_wakeup, total_jobs};
+
+    auto consumer_func = [](void *arg) -> void * {
+        thread_data *d = static_cast<thread_data *>(arg);
+
+        while (d->consumed->load() < d->total_jobs) {
+            auto &jobs = d->queue->get_all();
+            if (!jobs.empty()) {
+                d->consumed->fetch_add(static_cast<int>(jobs.size()));
+                jobs.clear();
+                continue;
+            }
+            if (!d->queue->try_sleep()) {
+                continue;
+            }
+            // Emulate blocking on the wakeup fd.
+            auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            while (d->signals->load() == 0) {
+                if (std::chrono::steady_clock::now() > deadline) {
+                    d->lost_wakeup->store(true);
+                    d->queue->wake();
+                    return nullptr;
+                }
+            }
+            d->signals->store(0);
+            d->queue->wake();
+        }
+        return nullptr;
+    };
+
+    pthread_t consumer_thread;
+    ASSERT_EQ(0, pthread_create(&consumer_thread, nullptr, consumer_func, &data));
+
+    for (int i = 0; i < total_jobs; ++i) {
+        if (queue.insert_job(test_job {i, 0})) {
+            signals.fetch_add(1);
+        }
+    }
+
+    ASSERT_EQ(0, pthread_join(consumer_thread, nullptr));
+
+    EXPECT_FALSE(lost_wakeup.load());
+    EXPECT_EQ(consumed.load(), total_jobs);
 }
