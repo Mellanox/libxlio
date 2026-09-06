@@ -22,6 +22,7 @@ public:
     void do_wakeup();
     virtual inline bool is_wakeup_fd(int fd) { return fd == g_wakeup_pipes[0]; };
     virtual void remove_wakeup_fd();
+    void force_remove_wakeup_fd(); // DEL; ignores m_is_sleeping
 
 private:
     static int g_wakeup_pipes[2];
