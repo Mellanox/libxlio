@@ -79,6 +79,11 @@ void wakeup_pipe::remove_wakeup_fd()
     if (m_is_sleeping) {
         return;
     }
+    force_remove_wakeup_fd();
+}
+
+void wakeup_pipe::force_remove_wakeup_fd()
+{
     wkup_entry_dbg("");
 
     int tmp_errno = errno;
