@@ -172,6 +172,14 @@ void entity_context::connect_socket_job(const job_desc &job)
         add_socket(reinterpret_cast<sockinfo_tcp *>(sock));
         reinterpret_cast<sockinfo_tcp *>(sock)->connect_entity_context();
         if (sock->isPassthrough()) {
+            // Blocking connect is parked on this socket and already woken by setPassthrough()+
+            // do_wakeup(). Do not handle_close() here (would destroy sock under the app thread).
+            // The woken connect() returns -1 and the redirect OS-connects. Non-blocking (already
+            // returned EINPROGRESS) is OS-connected here. Use the post-time snapshot, not live
+            // is_blocking().
+            if (job.flags & JOB_FLAG_SOCK_BLOCKING) {
+                return;
+            }
             int fd = sock->get_fd();
             /* copy before handle_close may destroy sock */
             sock_addr peer = sock->get_peername();

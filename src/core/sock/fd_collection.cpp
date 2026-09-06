@@ -457,7 +457,11 @@ bool fd_collection::handle_worker_threads_mode_close(int fd, sockinfo *p_sfd_api
 {
     if (p_sfd_api->get_protocol() == PROTO_TCP) {
         sockinfo_tcp *tcp_si = static_cast<sockinfo_tcp *>(p_sfd_api);
-        if (tcp_si->get_entity_context()) {
+        // Owner under the socket lock: lock-free null here would sync-free a socket still in ADD.
+        tcp_si->lock_tcp_con();
+        entity_context *ec = tcp_si->get_entity_context();
+        tcp_si->unlock_tcp_con();
+        if (ec) {
             // Incoming/outgoing sockets - delegate to entity context and return
             // Clear the socket from the fd_collection before delegating
             clear_socket(fd);
@@ -495,6 +499,13 @@ void fd_collection::handle_socket_close_job_worker_threads_mode(sockinfo_tcp *si
 {
     // Send close job to socket's entity context
     assert(si->get_entity_context());
+    // One JOB_TYPE_SOCK_CLOSE per socket (connect passthrough handle_close vs app close).
+    si->lock_tcp_con();
+    const bool routed = si->try_route_worker_close();
+    si->unlock_tcp_con();
+    if (!routed) {
+        return;
+    }
     si->get_entity_context()->add_job(
         entity_context::job_desc {entity_context::JOB_TYPE_SOCK_CLOSE, 0, si, nullptr, 0U, 0U});
 }

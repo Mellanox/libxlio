@@ -316,6 +316,7 @@ libxlio_la_SOURCES := \
 	\
 	sock/cleanable_obj.h \
 	sock/fd_collection.h \
+	sock/blocking_wait_results.h \
 	sock/sock_stats.h \
 	sock/sockinfo.h \
 	sock/sockinfo_tcp.h \

@@ -1066,7 +1066,10 @@ ssize_t sockinfo_tcp_ops_tls::tx_internal(xlio_tx_call_attr_t &tx_arg)
                 if (tls_arg.attr.iov[0].iov_len != rec->m_size) {
                     /* We cannot recover from a fail in the middle of a TLS record */
                     if (!g_b_exit) {
+                        // tcp_tx() returned unlocked. tcp_abort -> err_lwip_cb ASSERT_LOCKED.
+                        m_p_sock->lock_tcp_con();
                         m_p_sock->abort_connection();
+                        m_p_sock->unlock_tcp_con();
                     }
                     ret += (rec->m_size - tls_arg.attr.iov[0].iov_len);
                     rec->put();
