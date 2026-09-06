@@ -12,6 +12,7 @@
 #include "common/def.h"
 
 #include "util/blocking_wait.h"
+#include "util/blocking_wait_sock.h"
 
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -64,7 +65,15 @@ public:
     int block(int timeout_ms)
     {
         struct epoll_event evs[4];
-        return ::epoll_wait(m_epfd, evs, 4, timeout_ms);
+        m_woken_by_watched_fd = false;
+        const int count = ::epoll_wait(m_epfd, evs, 4, timeout_ms);
+
+        for (int index = 0; index < count; ++index) {
+            if (evs[index].data.fd == m_watched_fd) {
+                m_woken_by_watched_fd = true;
+            }
+        }
+        return count;
     }
 
     void disarm()
@@ -86,10 +95,24 @@ public:
         ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, m_pipe[0], &ev);
     }
 
+    bool watch_fd(int fd)
+    {
+        struct epoll_event ev = {};
+
+        ev.events = EPOLLIN;
+        ev.data.fd = fd;
+        m_watched_fd = fd;
+        return ::epoll_ctl(m_epfd, EPOLL_CTL_ADD, fd, &ev) == 0;
+    }
+
+    bool was_woken_by_watched_fd() const { return m_woken_by_watched_fd; }
+
 private:
     int m_epfd = -1;
     int m_pipe[2] = {-1, -1};
+    int m_watched_fd = -1;
     bool m_armed = false;
+    bool m_woken_by_watched_fd = false;
 };
 
 // Production waiter: one wakeup_pipe + one m_rx_epfd + m_is_sleeping. Pipe byte stays unread.
@@ -253,6 +276,34 @@ TEST(blocking_wait, worker_wakes_sleeping_app)
     EXPECT_LT(took, 2000);
 }
 
+// Shadow-listener readiness must be pred, not a spurious wake.
+TEST(blocking_wait, watched_external_fd_returns_control)
+{
+    test_waiter w;
+    std::mutex lock;
+    int external_pipe[2] = {-1, -1};
+
+    ASSERT_EQ(0, ::pipe(external_pipe));
+    ASSERT_TRUE(w.watch_fd(external_pipe[0]));
+
+    std::thread producer([&] {
+        std::this_thread::sleep_for(ms(100));
+        const ssize_t written = ::write(external_pipe[1], "x", 1);
+        (void)written;
+    });
+
+    lock.lock();
+    const blocking_wait::result r = blocking_wait::wait_until(
+        lock, w, [&] { return w.was_woken_by_watched_fd(); }, 2000);
+    lock.unlock();
+
+    producer.join();
+    EXPECT_EQ(blocking_wait::result::READY, r);
+    EXPECT_TRUE(w.was_woken_by_watched_fd());
+    ::close(external_pipe[0]);
+    ::close(external_pipe[1]);
+}
+
 TEST(blocking_wait, no_lost_wakeup_when_signaled_in_check_sleep_window)
 {
     const int iterations = 200;
@@ -375,4 +426,63 @@ TEST(blocking_wait, two_waiters_unmatched_notify_parks_not_spins)
 
     // Park: one wait per waiter. Spin: thousands of immediate epoll_wait returns.
     EXPECT_LT(block_calls.load(std::memory_order_relaxed), 20);
+}
+
+// Pins blocking_wait_sock_waiter::block()'s event scan directly (real epoll_wait cannot force
+// the batch ordering). A wakeup fd ahead of the watched fd must still flag the watched fd; a
+// break after the wakeup fd would leave was_woken_by_watched_fd() false and drop accept wakeups.
+TEST(blocking_wait_sock, classify_flags_both_when_wakeup_precedes_watched)
+{
+    const int wakeup_fd = 7;
+    const int watched_fd = 9;
+    struct epoll_event evs[2] = {};
+    evs[0].data.fd = wakeup_fd;
+    evs[1].data.fd = watched_fd;
+
+    bool woken_wakeup = false;
+    bool woken_watched = false;
+    classify_wake_events(
+        evs, 2, [&](int fd) { return fd == wakeup_fd; }, watched_fd, woken_wakeup, woken_watched);
+
+    EXPECT_TRUE(woken_wakeup);
+    EXPECT_TRUE(woken_watched);
+}
+
+TEST(blocking_wait_sock, classify_flags_both_when_watched_precedes_wakeup)
+{
+    const int wakeup_fd = 7;
+    const int watched_fd = 9;
+    struct epoll_event evs[2] = {};
+    evs[0].data.fd = watched_fd;
+    evs[1].data.fd = wakeup_fd;
+
+    bool woken_wakeup = false;
+    bool woken_watched = false;
+    classify_wake_events(
+        evs, 2, [&](int fd) { return fd == wakeup_fd; }, watched_fd, woken_wakeup, woken_watched);
+
+    EXPECT_TRUE(woken_wakeup);
+    EXPECT_TRUE(woken_watched);
+}
+
+TEST(blocking_wait_sock, classify_isolates_wakeup_and_watched)
+{
+    const int wakeup_fd = 7;
+    const int watched_fd = 9;
+    bool woken_wakeup = false;
+    bool woken_watched = false;
+
+    struct epoll_event watched_only[1] = {};
+    watched_only[0].data.fd = watched_fd;
+    classify_wake_events(watched_only, 1, [&](int fd) { return fd == wakeup_fd; }, watched_fd,
+                         woken_wakeup, woken_watched);
+    EXPECT_FALSE(woken_wakeup);
+    EXPECT_TRUE(woken_watched);
+
+    struct epoll_event wakeup_only[1] = {};
+    wakeup_only[0].data.fd = wakeup_fd;
+    classify_wake_events(wakeup_only, 1, [&](int fd) { return fd == wakeup_fd; }, watched_fd,
+                         woken_wakeup, woken_watched);
+    EXPECT_TRUE(woken_wakeup);
+    EXPECT_FALSE(woken_watched);
 }

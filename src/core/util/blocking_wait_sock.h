@@ -7,6 +7,8 @@
 #ifndef BLOCKING_WAIT_SOCK_H
 #define BLOCKING_WAIT_SOCK_H
 
+#include <sys/epoll.h>
+
 class wakeup_pipe;
 
 /**
@@ -41,5 +43,23 @@ private:
     // Accept: shadow listener vs unrelated CQ events in the same epoll set.
     bool m_woken_by_watched_fd = false;
 };
+
+// Scan EVERY event (no early break): a wakeup fd ahead of the watched fd in the same epoll
+// batch must not mask it - accept_wait_threads_mode() keys its pred on the watched fd.
+template <typename WakeupMatch>
+inline void classify_wake_events(const struct epoll_event *events, int n, WakeupMatch is_wakeup,
+                                 int watched_fd, bool &woken_wakeup, bool &woken_watched)
+{
+    woken_wakeup = false;
+    woken_watched = false;
+    for (int i = 0; i < n; ++i) {
+        if (is_wakeup(events[i].data.fd)) {
+            woken_wakeup = true;
+        }
+        if (events[i].data.fd == watched_fd) {
+            woken_watched = true;
+        }
+    }
+}
 
 #endif /* BLOCKING_WAIT_SOCK_H */

@@ -21,19 +21,12 @@ void blocking_wait_sock_waiter::arm()
 int blocking_wait_sock_waiter::block(int timeout_ms)
 {
     struct epoll_event events[SI_RX_EPFD_EVENT_MAX];
-    m_woken_by_wakeup_fd = false;
-    m_woken_by_watched_fd = false;
 
     const int n = SYSCALL(epoll_wait, m_rx_epfd, events, SI_RX_EPFD_EVENT_MAX, timeout_ms);
 
-    for (int i = 0; i < n; ++i) {
-        if (m_wakeup_pipe.is_wakeup_fd(events[i].data.fd)) {
-            m_woken_by_wakeup_fd = true;
-        }
-        if (events[i].data.fd == m_watched_fd) {
-            m_woken_by_watched_fd = true;
-        }
-    }
+    classify_wake_events(
+        events, n, [this](int fd) { return m_wakeup_pipe.is_wakeup_fd(fd); }, m_watched_fd,
+        m_woken_by_wakeup_fd, m_woken_by_watched_fd);
     return n;
 }
 
