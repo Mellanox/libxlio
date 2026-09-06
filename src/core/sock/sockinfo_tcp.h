@@ -390,6 +390,15 @@ public:
     inline int trylock_tcp_con() { return m_tcp_con_lock.trylock(); }
     inline void lock_tcp_con() { m_tcp_con_lock.lock(); }
     inline void unlock_tcp_con() { m_tcp_con_lock.unlock(); }
+    // Under m_tcp_con_lock. First close job only; later close()/handle_close() return false.
+    inline bool try_route_worker_close()
+    {
+        if (m_worker_close_routed) {
+            return false;
+        }
+        m_worker_close_routed = true;
+        return true;
+    }
     tcp_timers_collection *get_tcp_timer_collection();
     bool is_cleaned() const { return m_is_cleaned; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
@@ -477,6 +486,8 @@ private:
     void stats_update_tx_errors(int error_number);
 
     int accept_helper(struct sockaddr *__addr, socklen_t *__addrlen, int __flags = 0);
+    // Entered and returned with the listen lock held.
+    int accept_wait_threads_mode();
 
     // clone socket in accept call
     sockinfo_tcp *accept_clone();
@@ -490,6 +501,9 @@ private:
     static err_t connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err);
     // tx
     unsigned tx_wait(bool blocking);
+    // Socket lock held. Do not lock again in threads_mode.
+    unsigned tx_wait_threads_mode();
+    unsigned tx_wait_poll(bool blocking);
     int os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxevents);
     void handle_incoming_handshake_failure(sockinfo_tcp *child_conn);
 
@@ -519,9 +533,14 @@ private:
     void handle_socket_linger();
     bool connect_bind_any_and_check_rules();
     void connect_async_set_errs();
-    void connect_threads_mode();
+    int connect_threads_mode();
+    // Socket lock held.
+    int connect_wait_threads_mode();
     int rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout);
     int rx_sleep_wait(loops_timer &rcv_timeout);
+    // Entered and returned without the socket lock.
+    int rx_sleep_wait_threads_mode(loops_timer &rcv_timeout);
+    int rx_sleep_wait_poll(loops_timer &rcv_timeout);
 
     ssize_t rx_read_ready_packets(iovec *p_iov, ssize_t sz_iov, int *p_flags, sockaddr *__from,
                                   socklen_t *__fromlen, struct msghdr *__msg);
@@ -678,6 +697,7 @@ private:
     // second call to failed connect blocking socket.
     bool report_connected;
     bool m_is_cleaned = false; // If this socket registered deletion on internal thread.
+    bool m_worker_close_routed = false; // under lock: close job posted at most once
     int m_error_status;
 
     const buffer_batching_mode_t m_sysvar_buffer_batching_mode;

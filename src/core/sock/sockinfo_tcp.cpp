@@ -19,6 +19,9 @@
 #include "util/libxlio.h"
 #include "util/instrumentation.h"
 #include "util/list.h"
+#include "util/blocking_wait.h"
+#include "util/blocking_wait_sock.h"
+#include "sock/blocking_wait_results.h"
 #include "event/event_handler_manager.h"
 #include "event/event_handler_manager_local.h"
 #include "event/poll_group.h"
@@ -1165,7 +1168,52 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
     return ret_val;
 }
 
+namespace {
+// lock_tcp_con / unlock_tcp_con as wait_until's Lock. RX, TX, connect, accept.
+struct tcp_con_lock_adapter {
+    explicit tcp_con_lock_adapter(sockinfo_tcp &sock)
+        : m_sock(sock)
+    {
+    }
+    void lock() { m_sock.lock_tcp_con(); }
+    void unlock() { m_sock.unlock_tcp_con(); }
+    sockinfo_tcp &m_sock;
+};
+} // namespace
+
 unsigned sockinfo_tcp::tx_wait(bool blocking)
+{
+    // Worker-threads blocking: park. Else ring-poll (R2C and non-blocking).
+    if (blocking && safe_mce_sys().is_threads_mode()) {
+        return tx_wait_threads_mode();
+    }
+    return tx_wait_poll(blocking);
+}
+
+// Entered with the socket lock held (tcp_tx_slow_path). Do not lock again.
+unsigned sockinfo_tcp::tx_wait_threads_mode()
+{
+    loops_timer send_timeout(m_loops_timer.get_timeout_msec());
+    const int timeout_ms = send_timeout.time_left_msec();
+
+    tcp_con_lock_adapter lock_adapter(*this);
+    blocking_wait_sock_waiter waiter(m_sock_wakeup_pipe, m_rx_epfd);
+
+    // Terminals (!is_rts, exit) must be in pred: producers wake without sndbuf space.
+    const blocking_wait::result r = blocking_wait::wait_until(
+        lock_adapter, waiter,
+        [this]() { return sndbuf_available() > 0 || g_b_exit || !is_rts(); }, timeout_ms);
+
+    const unsigned sz = sndbuf_available();
+    const tx_wait_outcome outcome = map_tx_wait_result(r, sz > 0, g_b_exit);
+    if (outcome.err) {
+        errno = outcome.err;
+    }
+    return outcome.has_space ? sz : 0U;
+}
+
+// Entered and returned with the socket lock held.
+unsigned sockinfo_tcp::tx_wait_poll(bool blocking)
 {
     unsigned sz = sndbuf_available();
     int poll_count = 0;
@@ -1886,6 +1934,8 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
         return;
     }
 
+    ASSERT_LOCKED(conn->m_tcp_con_lock);
+
     /*
      * In case we got RST from the other end we need to marked this socket as ready to read for
      * epoll
@@ -1995,6 +2045,10 @@ err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u32_t ack
     if (conn->sndbuf_available()) {
         // This method can be called for closing socket. In this case there is no epoll context.
         NOTIFY_ON_EVENTS(conn, EPOLLOUT);
+        // Owner-gated: R2C has no sleeper on this pipe.
+        if (conn->get_entity_context()) {
+            conn->m_sock_wakeup_pipe.do_wakeup();
+        }
     }
     vlog_func_exit();
 
@@ -2586,10 +2640,42 @@ int sockinfo_tcp::rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_tim
     return 1;
 }
 
-// Temporary implementation for blocking RX.
 int sockinfo_tcp::rx_sleep_wait(loops_timer &rcv_timeout)
 {
     __log_info_func("");
+
+    if (safe_mce_sys().is_threads_mode()) {
+        return rx_sleep_wait_threads_mode(rcv_timeout);
+    }
+    return rx_sleep_wait_poll(rcv_timeout);
+}
+
+// Entered and returned without the socket lock.
+int sockinfo_tcp::rx_sleep_wait_threads_mode(loops_timer &rcv_timeout)
+{
+    lock_tcp_con();
+
+    tcp_con_lock_adapter lock_adapter(*this);
+    blocking_wait_sock_waiter waiter(m_sock_wakeup_pipe, m_rx_epfd);
+
+    const int timeout_ms = rcv_timeout.time_left_msec();
+
+    // Terminals (exit, !is_rtr) must be in pred: producers wake without RX data.
+    const blocking_wait::result r = blocking_wait::wait_until(
+        lock_adapter, waiter,
+        [this]() { return m_rx_ready_byte_count >= 1 || g_b_exit || !is_rtr(); }, timeout_ms);
+
+    const rx_sleep_wait_outcome outcome = map_rx_sleep_wait_result(r, m_rx_ready_byte_count >= 1);
+    if (outcome.err) {
+        errno = outcome.err;
+    }
+
+    unlock_tcp_con();
+    return outcome.proceed ? 1 : -1;
+}
+
+int sockinfo_tcp::rx_sleep_wait_poll(loops_timer &rcv_timeout)
+{
     int32_t busy_loop_count = 0;
 
     while (m_rx_ready_byte_count < 1 &&
@@ -2829,8 +2915,9 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
 
     if (safe_mce_sys().is_threads_mode()) {
         // For Threads mode need to do partial preparation and the rest will be done by the Thread.
-        connect_threads_mode();
-        return -1; // Currently no blocking socket support.
+        // A non-blocking socket returns -1/EINPROGRESS; a blocking socket now waits for the
+        // worker to complete/fail the handshake and returns 0 on success.
+        return connect_threads_mode();
     }
 
     if (unlikely(!prepare_dst_to_send(false))) {
@@ -2950,19 +3037,20 @@ void sockinfo_tcp::connect_async_set_errs()
     si_tcp_logdbg("NON blocking connect");
 }
 
-void sockinfo_tcp::connect_threads_mode()
+int sockinfo_tcp::connect_threads_mode()
 {
-    if (m_b_blocking) {
-        m_error_status = ECANCELED; // Temporary no support for blocking sockets.
-        errno = m_error_status;
-        m_conn_state = TCP_CONN_FAILED;
-        si_tcp_logerr("Blocking sockets are not supported in Threads mode.");
-        return;
+    // Job already posted. In-flight blocking wait stays BOUND, so the sock_state
+    // gate above cannot see it. Do not post a second ADD_AND_CONNECT.
+    if (m_conn_state != TCP_CONN_INIT) {
+        errno = EALREADY;
+        return -1;
     }
 
     m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, false, true);
     if (!connect_bind_any_and_check_rules()) {
-        return;
+        // Non-offloaded / rule mismatch: connect_bind_any_and_check_rules() already set
+        // passthrough or errno.
+        return -1;
     }
 
     fit_rcv_wnd(true);
@@ -2973,13 +3061,57 @@ void sockinfo_tcp::connect_threads_mode()
 
     if (!m_b_blocking) {
         connect_async_set_errs();
-        return;
+        return -1;
     }
 
-    // Wait for the worker thread to process connect job.
+    // Non-blocking: EINPROGRESS. Blocking: wait for the worker handshake.
+    return connect_wait_threads_mode();
+}
 
-    errno = m_error_status;
-    si_tcp_logdbg("Blocking connect error, m_sock_state=%d", static_cast<int>(m_sock_state));
+// Entered with connect()'s socket lock held. wait_until releases it around block().
+int sockinfo_tcp::connect_wait_threads_mode()
+{
+    const int timeout_ms = -1;
+
+    tcp_con_lock_adapter lock_adapter(*this);
+    blocking_wait_sock_waiter waiter(m_sock_wakeup_pipe, m_rx_epfd);
+
+    // Handshake done, INITED, passthrough, CLOSING, or exit. Passthrough and CLOSING must be in
+    // the pred: worker setPassthrough() leaves CONNECTING; close() may not move conn/sock state.
+    // Without them the sleeper re-arms on that wake and hangs.
+    const blocking_wait::result r = blocking_wait::wait_until(
+        lock_adapter, waiter,
+        [this]() {
+            return m_conn_state != TCP_CONN_CONNECTING || m_sock_state == TCP_SOCK_INITED ||
+                isPassthrough() || m_state >= SOCKINFO_CLOSING || g_b_exit;
+        },
+        timeout_ms);
+
+    const connect_wait_outcome outcome =
+        map_connect_wait_result(r, m_conn_state == TCP_CONN_CONNECTED,
+                                m_conn_state == TCP_CONN_TIMEOUT, g_b_exit, isPassthrough());
+
+    if (outcome.ok) {
+        // Match R2C success: CONNECTED_RDWR, not passthrough.
+        m_sock_state = TCP_SOCK_CONNECTED_RDWR;
+        setPassthrough(false);
+        si_tcp_logdbg("+++ CONNECT OK!!!! ++++");
+        return 0;
+    }
+
+    if (outcome.err) {
+        errno = outcome.err;
+    }
+    m_error_status = errno;
+    // Force a terminal m_conn_state if we were woken by g_b_exit while still connecting, so a
+    // later connect()/close() sees a coherent failed state (mirrors connect()'s EINTR handling).
+    if (m_conn_state == TCP_CONN_CONNECTING) {
+        m_conn_state = TCP_CONN_FAILED;
+    }
+    // Do not tcp_close() the pcb on the app thread. Worker close job reclaims it.
+    si_tcp_logdbg("Blocking connect error, m_conn_state=%d m_sock_state=%d errno=%d",
+                  static_cast<int>(m_conn_state), static_cast<int>(m_sock_state), errno);
+    return -1;
 }
 
 void sockinfo_tcp::connect_entity_context()
@@ -2989,12 +3121,15 @@ void sockinfo_tcp::connect_entity_context()
     if (!prepare_dst_to_send(false)) {
         si_tcp_logdbg("non offloaded socket --> connect only via OS (prepare_dst_to_send failed)");
         setPassthrough();
+        // Wake parked blocking connect(); lock already held. Non-blocking: no sleeper.
+        m_sock_wakeup_pipe.do_wakeup();
         return;
     }
 
     if (!attach_as_uc_receiver((role_t)NULL, true)) {
         si_tcp_logdbg("Unable to attach uc receiver, falling back to passthrough.");
         setPassthrough();
+        m_sock_wakeup_pipe.do_wakeup(); // Wake the parked blocking connect() (see above).
         return;
     }
 
@@ -3009,6 +3144,7 @@ void sockinfo_tcp::connect_entity_context()
         si_tcp_logdbg("Unable to send SYN packet, falling back to passthrough.");
 
         setPassthrough();
+        m_sock_wakeup_pipe.do_wakeup(); // Wake the parked blocking connect() (see above).
         return;
     }
 
@@ -3332,6 +3468,39 @@ int sockinfo_tcp::rx_verify_available_data()
     return ret;
 }
 
+// Entered with accept_helper's listen lock held.
+int sockinfo_tcp::accept_wait_threads_mode()
+{
+    const int timeout_ms = -1;
+
+    tcp_con_lock_adapter lock_adapter(*this);
+    blocking_wait_sock_waiter waiter(m_sock_wakeup_pipe, m_rx_epfd);
+
+    // Child enqueue is not parent m_ready_conn_cnt until harvest. Save errno (harvest sets EAGAIN).
+    const blocking_wait::result r = blocking_wait::wait_until(
+        lock_adapter, waiter,
+        [this]() {
+            if (g_b_exit || m_sock_state != TCP_SOCK_ACCEPT_READY) {
+                return true;
+            }
+            if (m_ready_conn_cnt > 0) {
+                return true;
+            }
+            const int saved_errno = errno;
+            harvest_sockinfo_tcp_listen_objects();
+            errno = saved_errno;
+            return m_ready_conn_cnt > 0;
+        },
+        timeout_ms);
+
+    const accept_wait_outcome outcome = map_accept_wait_result(
+        r, m_ready_conn_cnt > 0, g_b_exit, m_sock_state != TCP_SOCK_ACCEPT_READY);
+    if (outcome.err) {
+        errno = outcome.err;
+    }
+    return outcome.ok ? 0 : -1;
+}
+
 int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
                                 int __flags /* = 0 */)
 {
@@ -3398,8 +3567,16 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
             }
         }
 
-        int tmp_ret = safe_mce_sys().worker_threads > 0 ? harvest_sockinfo_tcp_listen_objects()
-                                                        : rx_wait(poll_count, m_b_blocking);
+        // Worker-threads: do not ring-poll. Non-blocking: harvest once (EAGAIN if empty).
+        // Blocking: park; harvest lives in accept_wait_threads_mode()'s pred.
+        // R2C keeps rx_wait().
+        int tmp_ret;
+        if (safe_mce_sys().is_threads_mode()) {
+            tmp_ret = m_b_blocking ? accept_wait_threads_mode()
+                                   : harvest_sockinfo_tcp_listen_objects();
+        } else {
+            tmp_ret = rx_wait(poll_count, m_b_blocking);
+        }
         if (tmp_ret < 0) {
             si_tcp_logdbg("interrupted accept");
             unlock_tcp_con();
@@ -3789,6 +3966,17 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
     // Now we should register the child socket to TCP timer
 
     conn->unlock_tcp_con();
+
+    // RSS child enqueue: child's do_wakeup does not reach the parent acceptor. Lock parent.
+    // Order: child then parent (sequential). Harvest is parent then child. No inversion.
+    if (conn->is_sockinfo_tcp_listen_rss_child()) {
+        sockinfo_tcp *parent = conn->m_listen_ctx->get_parent_listen_socket();
+        if (parent) {
+            parent->lock_tcp_con();
+            parent->m_sock_wakeup_pipe.do_wakeup();
+            parent->unlock_tcp_con();
+        }
+    }
 
     new_sock->lock_tcp_con();
 
