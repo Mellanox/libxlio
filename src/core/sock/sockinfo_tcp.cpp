@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+#include <cstdint>
 #include <functional>
 #include <new>
 #include <numeric>
@@ -2461,19 +2462,31 @@ ssize_t sockinfo_tcp::rx_read_ready_packets(iovec *p_iov, ssize_t sz_iov, int *p
         return 0;
     }
 
-    int errno_tmp = errno;
+    const int errno_tmp = errno;
     loops_timer rcv_timeout(m_loops_timer.get_timeout_msec());
-    int rx_tot_size = 0;
-    int rc = rx_wait_for_data(*p_flags, __msg, rcv_timeout);
+    size_t min_ready_bytes = 1U;
+
+    if (unlikely((*p_flags & MSG_WAITALL) != 0)) {
+        size_t requested = 0U;
+        for (ssize_t i = 0; i < sz_iov; ++i) {
+            if (SIZE_MAX - requested < p_iov[i].iov_len) {
+                errno = EINVAL;
+                return -1;
+            }
+            requested += p_iov[i].iov_len;
+        }
+        if (requested == 0U) {
+            return 0;
+        }
+        min_ready_bytes = requested;
+    }
+    const int rc = rx_wait_for_data(*p_flags, __msg, rcv_timeout, min_ready_bytes);
     if (rc < 1) {
         return rc;
     }
 
-    rx_tot_size += rx_fetch_ready_buffers(p_iov, p_iov + sz_iov, __msg);
-
-    // Currently MSG_WAITALL and MSG_PEEK are not supported.
-    // In case of MSG_WAITALL we should loop here until all data is received.
-    // Error queue is not supported.
+    const ssize_t fetched =
+        static_cast<ssize_t>(rx_fetch_ready_buffers(p_iov, p_iov + sz_iov, __msg));
 
     if (__from && __fromlen) {
         // For TCP connected 5T fetch from m_connected.
@@ -2481,11 +2494,11 @@ ssize_t sockinfo_tcp::rx_read_ready_packets(iovec *p_iov, ssize_t sz_iov, int *p
         m_connected.get_sa_by_family(__from, *__fromlen, m_family);
     }
 
-    si_tcp_logfunc("RX completed, %d bytes. tid: %d", rx_tot_size, gettid());
+    si_tcp_logfunc("RX completed, %d bytes. tid: %d", fetched, gettid());
 
     // Restore errno on function entry in case successs
     errno = errno_tmp;
-    return rx_tot_size;
+    return fetched;
 }
 
 size_t sockinfo_tcp::rx_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, struct msghdr *__msg)
@@ -2622,12 +2635,14 @@ void sockinfo_tcp::rx_data_recvd(uint32_t tot_size)
     }
 }
 
-int sockinfo_tcp::rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout)
+int sockinfo_tcp::rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout,
+                                   size_t min_ready_bytes)
 {
     // This conditions ensures that m_rx_pkt_ready_list.front() is not null later.
-    if (m_rx_ready_byte_count < 1) {
+    if (m_rx_ready_byte_count < min_ready_bytes) {
         bool blocking = BLOCK_THIS_RUN(m_b_blocking, in_flags);
-        if ((!blocking && (errno = EAGAIN)) || (rx_sleep_wait(rcv_timeout) < 1)) {
+        if ((!blocking && (errno = EAGAIN)) ||
+            (rx_sleep_wait(rcv_timeout, min_ready_bytes) < 1)) {
             int ret = handle_rx_error(blocking);
             if (__msg && ret == 0) {
                 /* We don't return a control message in this case. */
@@ -2640,18 +2655,18 @@ int sockinfo_tcp::rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_tim
     return 1;
 }
 
-int sockinfo_tcp::rx_sleep_wait(loops_timer &rcv_timeout)
+int sockinfo_tcp::rx_sleep_wait(loops_timer &rcv_timeout, size_t min_ready_bytes)
 {
     __log_info_func("");
 
     if (safe_mce_sys().is_threads_mode()) {
-        return rx_sleep_wait_threads_mode(rcv_timeout);
+        return rx_sleep_wait_threads_mode(rcv_timeout, min_ready_bytes);
     }
-    return rx_sleep_wait_poll(rcv_timeout);
+    return rx_sleep_wait_poll(rcv_timeout, min_ready_bytes);
 }
 
 // Entered and returned without the socket lock.
-int sockinfo_tcp::rx_sleep_wait_threads_mode(loops_timer &rcv_timeout)
+int sockinfo_tcp::rx_sleep_wait_threads_mode(loops_timer &rcv_timeout, size_t min_ready_bytes)
 {
     lock_tcp_con();
 
@@ -2663,9 +2678,13 @@ int sockinfo_tcp::rx_sleep_wait_threads_mode(loops_timer &rcv_timeout)
     // Terminals (exit, !is_rtr) must be in pred: producers wake without RX data.
     const blocking_wait::result r = blocking_wait::wait_until(
         lock_adapter, waiter,
-        [this]() { return m_rx_ready_byte_count >= 1 || g_b_exit || !is_rtr(); }, timeout_ms);
+        [this, min_ready_bytes]() {
+            return m_rx_ready_byte_count >= min_ready_bytes || g_b_exit || !is_rtr();
+        },
+        timeout_ms);
 
-    const rx_sleep_wait_outcome outcome = map_rx_sleep_wait_result(r, m_rx_ready_byte_count >= 1);
+    const rx_sleep_wait_outcome outcome =
+        map_rx_sleep_wait_result(r, m_rx_ready_byte_count >= min_ready_bytes);
     if (outcome.err) {
         errno = outcome.err;
     }
@@ -2674,11 +2693,11 @@ int sockinfo_tcp::rx_sleep_wait_threads_mode(loops_timer &rcv_timeout)
     return outcome.proceed ? 1 : -1;
 }
 
-int sockinfo_tcp::rx_sleep_wait_poll(loops_timer &rcv_timeout)
+int sockinfo_tcp::rx_sleep_wait_poll(loops_timer &rcv_timeout, size_t min_ready_bytes)
 {
     int32_t busy_loop_count = 0;
 
-    while (m_rx_ready_byte_count < 1 &&
+    while (m_rx_ready_byte_count < min_ready_bytes &&
            (busy_loop_count < safe_mce_sys().rx_poll_num || safe_mce_sys().rx_poll_num == -1)) {
         if (unlikely(g_b_exit || !is_rtr())) {
             return -1;
@@ -2700,7 +2719,7 @@ int sockinfo_tcp::rx_sleep_wait_poll(loops_timer &rcv_timeout)
 
     lock_tcp_con();
 
-    if (m_rx_ready_byte_count >= 1) {
+    if (m_rx_ready_byte_count >= min_ready_bytes) {
         return 1;
     }
 
@@ -2739,7 +2758,7 @@ int sockinfo_tcp::rx_sleep_wait_poll(loops_timer &rcv_timeout)
 
     rmb(); // For the CPU to fetch m_rx_ready_byte_count which can be updated from another core.
 
-    if (m_rx_ready_byte_count == 0U && prev_sndbuf == sndbuf_available()) { // Final check
+    if (m_rx_ready_byte_count < min_ready_bytes && prev_sndbuf == sndbuf_available()) { // Final check
         errno = EAGAIN;
         return -1;
     }
@@ -3469,21 +3488,24 @@ int sockinfo_tcp::rx_verify_available_data()
 }
 
 // Entered with accept_helper's listen lock held.
-int sockinfo_tcp::accept_wait_threads_mode()
+int sockinfo_tcp::accept_wait_threads_mode(loops_timer &accept_timeout)
 {
-    const int timeout_ms = -1;
+    const int timeout_ms = accept_timeout.time_left_msec();
 
     tcp_con_lock_adapter lock_adapter(*this);
-    blocking_wait_sock_waiter waiter(m_sock_wakeup_pipe, m_rx_epfd);
+    blocking_wait_sock_waiter waiter(m_sock_wakeup_pipe, m_rx_epfd, m_fd);
 
     // Child enqueue is not parent m_ready_conn_cnt until harvest. Save errno (harvest sets EAGAIN).
     const blocking_wait::result r = blocking_wait::wait_until(
         lock_adapter, waiter,
-        [this]() {
+        [this, &waiter]() {
             if (g_b_exit || m_sock_state != TCP_SOCK_ACCEPT_READY) {
                 return true;
             }
             if (m_ready_conn_cnt > 0) {
+                return true;
+            }
+            if (waiter.was_woken_by_watched_fd()) {
                 return true;
             }
             const int saved_errno = errno;
@@ -3531,6 +3553,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
         return -1;
     }
 
+    loops_timer accept_timeout(m_loops_timer.get_timeout_msec());
     lock_tcp_con();
 
     si_tcp_logdbg("sock state = %d", get_tcp_state(&m_pcb));
@@ -3572,7 +3595,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
         // R2C keeps rx_wait().
         int tmp_ret;
         if (safe_mce_sys().is_threads_mode()) {
-            tmp_ret = m_b_blocking ? accept_wait_threads_mode()
+            tmp_ret = m_b_blocking ? accept_wait_threads_mode(accept_timeout)
                                    : harvest_sockinfo_tcp_listen_objects();
         } else {
             tmp_ret = rx_wait(poll_count, m_b_blocking);
