@@ -93,7 +93,9 @@ if test "x$dpcp_explicitly_specified" = "xno"; then
         set -f
         set -- $with_dpcp_flags
         set +f
-        CC="$CC" CXX="$CXX" "$CMAKE" "$[]@" \
+        CC="$CC" CXX="$CXX" "$CMAKE" \
+            "-DCMAKE_CXX_FLAGS:STRING=-O2" \
+            "$[]@" \
             "-DCMAKE_INSTALL_PREFIX:PATH=$DPCP_INSTALL_DIR" \
             "-DCMAKE_INSTALL_LIBDIR:PATH=lib" \
             "-DDPCP_STATIC:BOOL=$DPCP_CMAKE_STATIC" \

@@ -256,6 +256,7 @@ def prepare_external_dpcp(work_root, environment):
                 "-B",
                 "build-shared",
                 "-DCMAKE_INSTALL_PREFIX=install",
+                "-DCMAKE_CXX_FLAGS:STRING=-O2",
             ),
             dpcp_dir,
             "configure shared build",
@@ -278,6 +279,7 @@ def prepare_external_dpcp(work_root, environment):
                 "-B",
                 "build-static",
                 "-DCMAKE_INSTALL_PREFIX=install",
+                "-DCMAKE_CXX_FLAGS:STRING=-O2",
                 "-DDPCP_STATIC=ON",
             ),
             dpcp_dir,
@@ -511,7 +513,10 @@ def run_case(
     if case.dpcp_link_mode == "shared":
         configure_args.append("--enable-dpcp-shared")
     if case.flags_mode == "flags":
-        configure_args.append("--with-dpcp-flags=-DCMAKE_BUILD_TYPE=Debug")
+        configure_args.append(
+            "--with-dpcp-flags=-DCMAKE_BUILD_TYPE=Debug "
+            "-DCMAKE_CXX_FLAGS=-O3"
+        )
     if case.prefix_mode == "prefix":
         configure_args.append(f"--prefix={xlio_prefix}")
     if case.utls_mode == "with-utls":
@@ -771,6 +776,15 @@ def run_case(
                     raise CaseFailure(
                         "CMAKE_BUILD_TYPE unexpectedly equals Debug"
                     )
+
+            expected_cxx_flags = "-O3" if case.flags_mode == "flags" else "-O2"
+            report.append(
+                f"  CHECK CMake cache contains CMAKE_CXX_FLAGS={expected_cxx_flags}"
+            )
+            if f"CMAKE_CXX_FLAGS:STRING={expected_cxx_flags}\n" not in cache:
+                raise CaseFailure(
+                    f"CMAKE_CXX_FLAGS does not equal {expected_cxx_flags}"
+                )
         else:
             check_absent(dpcp_build_dir / "CMakeCache.txt", report)
             check_absent(dpcp_build_dir / "install", report)
