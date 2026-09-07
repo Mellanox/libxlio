@@ -1186,15 +1186,15 @@ unsigned sockinfo_tcp::tx_wait(bool blocking)
 {
     // Worker-threads blocking: park. Else ring-poll (R2C and non-blocking).
     if (blocking && safe_mce_sys().is_threads_mode()) {
-        return tx_wait_threads_mode();
+        loops_timer send_timeout(m_loops_timer.get_timeout_msec());
+        return tx_wait_threads_mode(send_timeout);
     }
     return tx_wait_poll(blocking);
 }
 
 // Entered with the socket lock held (tcp_tx_slow_path). Do not lock again.
-unsigned sockinfo_tcp::tx_wait_threads_mode()
+unsigned sockinfo_tcp::tx_wait_threads_mode(loops_timer &send_timeout)
 {
-    loops_timer send_timeout(m_loops_timer.get_timeout_msec());
     const int timeout_ms = send_timeout.time_left_msec();
 
     tcp_con_lock_adapter lock_adapter(*this);
@@ -1390,11 +1390,12 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     iovec *p_iov = tx_arg.attr.iov;
     size_t sz_iov = tx_arg.attr.sz_iov;
     ssize_t sent_bytes = 0;
-    uint32_t store_used = m_store_offset;
     int errno_tmp = errno;
     tx_call_ctx tx_ctx;
+    const bool blocking = BLOCK_THIS_RUN(m_b_blocking, tx_arg.attr.flags);
+    loops_timer send_timeout(m_loops_timer.get_timeout_msec());
 
-    // TODO Flags aren't supported now. They usually affect blocking mode and zerocopy.
+    int tx_err = EAGAIN;
 
     /* Note, we do unprotected access to the socket state. State assignment is expected to be
      * atomic on supported architectures.
@@ -1416,39 +1417,90 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     size_t bytes_to_send =
         std::accumulate(&p_iov[0], &p_iov[sz_iov], 0U,
                         [](size_t sum, const iovec &curr) { return sum + curr.iov_len; });
-
-    int32_t prev_sndbuf = m_snd_buf.fetch_sub(bytes_to_send);
-    if (prev_sndbuf <= 0) {
-        m_snd_buf += bytes_to_send;
-        bytes_to_send = 0;
-        goto exit;
-    }
-    if (prev_sndbuf < static_cast<int32_t>(bytes_to_send)) {
-        // TODO Allow to make m_snd_buf negative not to send too small buffers.
-        m_snd_buf += bytes_to_send - prev_sndbuf;
-        bytes_to_send = prev_sndbuf;
+    if (bytes_to_send == 0U) {
+        return 0;
     }
 
-    for (size_t i = 0; i < sz_iov; ++i) {
-        size_t offset = 0;
-        while (offset < p_iov[i].iov_len) {
+    // Bytes live in m_store. m_snd_buf is SO_SNDBUF credit; ACK adds it back.
+    // One app sender owns m_store. Worker ACK only needs m_tcp_con_lock.
+    std::lock_guard<decltype(m_lock_snd)> send_lock(m_lock_snd);
+
+    // Snapshot under m_lock_snd: a concurrent writer advances m_store_offset, and a stale
+    // snapshot would stage this send over the other writer's not-yet-transmitted region.
+    uint32_t store_used = m_store_offset;
+
+    size_t iov_i = 0;
+    size_t iov_off = 0;
+    while (bytes_to_send > 0) {
+        // Optimistic grab of remaining request. fetch_sub returns credit before the grab.
+        int32_t prev_sndbuf = m_snd_buf.fetch_sub(static_cast<int32_t>(bytes_to_send));
+        if (prev_sndbuf <= 0) {
+            // Empty/overdrawn. Undo reservation.
+            m_snd_buf += static_cast<int32_t>(bytes_to_send);
+            if (!blocking) {
+                break;
+            }
+            // Park is still inside the loop, so the after-loop flush would not run.
+            // Post the partial store now or the worker never TXes and credit never returns.
+            if (m_store && store_used > m_store_offset) {
+                m_entity_context->add_job(entity_context::job_desc {
+                    entity_context::JOB_TYPE_SOCK_TX, entity_context::JOB_FLAG_TX_LAST_CHUNK, this,
+                    m_store, m_store_offset, store_used - m_store_offset, tx_ctx});
+                m_store = nullptr;
+                m_store_offset = 0;
+                store_used = 0;
+            }
+            lock_tcp_con();
+            errno = 0;
+            const unsigned available = tx_wait_threads_mode(send_timeout);
+            if (available == 0U) {
+                if (!is_rts()) {
+                    is_connected_and_ready_to_send();
+                }
+                if (errno != 0) {
+                    tx_err = errno;
+                }
+                unlock_tcp_con();
+                break;
+            }
+            unlock_tcp_con();
+            continue;
+        }
+
+        size_t remaining_batch;
+        if (prev_sndbuf < static_cast<int32_t>(bytes_to_send)) {
+            // Partial credit. Undo overshoot; copy only prev_sndbuf this batch.
+            m_snd_buf += static_cast<int32_t>(bytes_to_send) - prev_sndbuf;
+            remaining_batch = static_cast<size_t>(prev_sndbuf);
+        } else {
+            remaining_batch = bytes_to_send; // Enough credit for the rest.
+        }
+
+        while (remaining_batch > 0 && iov_i < sz_iov) {
+            if (iov_off >= p_iov[iov_i].iov_len) {
+                ++iov_i;
+                iov_off = 0;
+                continue;
+            }
             if (!m_store) {
                 m_store = m_p_connected_dst_entry->get_tx_buffer();
                 if (unlikely(!m_store)) {
-                    goto exit;
+                    m_snd_buf += static_cast<int32_t>(remaining_batch);
+                    break;
                 }
                 m_store_offset = 0;
                 store_used = 0;
                 m_store->p_next_desc = nullptr;
             }
 
-            size_t len = std::min(p_iov[i].iov_len - offset, m_store->sz_buffer - store_used);
-            len = std::min(len, bytes_to_send);
-            memcpy(m_store->p_buffer + store_used, (uint8_t *)p_iov[i].iov_base + offset, len);
+            size_t len = std::min(p_iov[iov_i].iov_len - iov_off, m_store->sz_buffer - store_used);
+            len = std::min(len, remaining_batch);
+            memcpy(m_store->p_buffer + store_used, (uint8_t *)p_iov[iov_i].iov_base + iov_off, len);
 
-            offset += len;
+            iov_off += len;
             store_used += len;
             sent_bytes += static_cast<ssize_t>(len);
+            remaining_batch -= len;
             bytes_to_send -= len;
 
             if (store_used == m_store->sz_buffer) {
@@ -1457,21 +1509,15 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
                     m_store, m_store_offset, store_used - m_store_offset, tx_ctx});
                 m_store = nullptr;
             }
-
-            if (bytes_to_send == 0) {
-                goto exit;
-            }
+        }
+        if (remaining_batch > 0) {
+            break;
         }
     }
 
-exit:
-    /* Restore send credit reserved for data that could not be copied into a TX buffer. */
-    m_snd_buf += bytes_to_send;
-
     if (unlikely(sent_bytes == 0)) {
-        // Only user thread increments the EAGAIN counter, so no need to lock
-        stats_update_tx_errors(EAGAIN);
-        errno = EAGAIN;
+        errno = tx_err;
+        stats_update_tx_errors(errno);
         return -1;
     }
 

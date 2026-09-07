@@ -502,7 +502,7 @@ private:
     // tx
     unsigned tx_wait(bool blocking);
     // Socket lock held. Do not lock again in threads_mode.
-    unsigned tx_wait_threads_mode();
+    unsigned tx_wait_threads_mode(loops_timer &send_timeout);
     unsigned tx_wait_poll(bool blocking);
     int os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxevents);
     void handle_incoming_handshake_failure(sockinfo_tcp *child_conn);
