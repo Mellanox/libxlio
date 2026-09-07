@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <new>
 #include <numeric>
 #include <stdio.h>
@@ -1397,10 +1398,16 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
 
     int tx_err = EAGAIN;
 
-    /* Note, we do unprotected access to the socket state. State assignment is expected to be
-     * atomic on supported architectures.
-     * In case of false negative, the TX job execution handles it and subsequent send operation
-     * will likely return expected error.
+    // Bytes live in m_store. m_snd_buf is SO_SNDBUF credit; ACK adds it back.
+    // One app sender owns m_store. Worker ACK only needs m_tcp_con_lock.
+    std::lock_guard<decltype(m_lock_snd)> send_lock(m_lock_snd);
+
+    /* Latch check under m_lock_snd: shutdown() flips the send latch while holding m_lock_snd
+     * before posting its SHUTDOWN job, so the check cannot interleave with the flip - either
+     * the flip is visible here (EPIPE, no bytes accepted) or every job this send posts
+     * precedes the SHUTDOWN job in the worker FIFO. close() during a concurrent send() on
+     * the same fd remains an application lifecycle race with no ordering guarantee; its
+     * committed jobs drop at the TX gate with a warning.
      */
     if (!is_rts()) {
         std::lock_guard<decltype(m_tcp_con_lock)> _lock(m_tcp_con_lock);
@@ -1420,10 +1427,6 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
     if (bytes_to_send == 0U) {
         return 0;
     }
-
-    // Bytes live in m_store. m_snd_buf is SO_SNDBUF credit; ACK adds it back.
-    // One app sender owns m_store. Worker ACK only needs m_tcp_con_lock.
-    std::lock_guard<decltype(m_lock_snd)> send_lock(m_lock_snd);
 
     // Snapshot under m_lock_snd: a concurrent writer advances m_store_offset, and a stale
     // snapshot would stage this send over the other writer's not-yet-transmitted region.
@@ -1575,7 +1578,10 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32
     NOT_IN_USE(tx_ctx);
 #endif /* DEFINED_UTLS */
 
-    rc = tcp_tx_express(&iov, 1, buf->lkey, XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE, buf);
+    rc = tcp_tx_express(&iov, 1, buf->lkey,
+                        XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE |
+                            XLIO_EXPRESS_TX_COMMITTED,
+                        buf);
     if (rc < 0) {
         /* TODO
          * tcp_tx_express() doesn't fail socket properly on ENOMEM. m_sock_state remains connected
@@ -1585,12 +1591,37 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32
          * close().
          * Need to trigger epoll EPOLLERR event in case of ENOMEM.
          */
+        // These bytes were reported to the application as sent, so the drop must be visible.
+        // A peer reset discards in-flight send data in kernel TCP too - debug level; any other
+        // cause (own FIN sequenced under accepted bytes, ENOMEM) is anomalous - warning.
+        if (errno == ECONNRESET) {
+            si_tcp_logdbg("dropping %u accepted TX bytes (errno=%d, tcp_state=%d, conn_state=%d)",
+                          size, errno, get_tcp_state(&m_pcb), m_conn_state);
+        } else {
+            si_tcp_logwarn("dropping %u accepted TX bytes (errno=%d, tcp_state=%d, conn_state=%d)",
+                           size, errno, get_tcp_state(&m_pcb), m_conn_state);
+        }
         // Handles reference of the current operation and buffer release if needed.
         buf->p_desc_owner->mem_buf_tx_release(buf, true);
     } else {
         // tcp_tx_express() doesn't account this counter, but ack_recvd_lwip_cb() does
         IF_STATS(m_p_socket_stats->n_tx_ready_byte_count += size);
     }
+}
+
+void sockinfo_tcp::tx_thread_shutdown(int how)
+{
+    lock_tcp_con();
+    const int shut_rx = (how != SHUT_WR);
+    const int shut_tx = (how != SHUT_RD);
+    if (get_tcp_state(&m_pcb) != LISTEN) {
+        if (shut_rx && m_n_rx_pkt_ready_list_count) {
+            abort_connection();
+        } else {
+            tcp_shutdown(&m_pcb, shut_rx, shut_tx);
+        }
+    }
+    unlock_tcp_con();
 }
 
 /**
@@ -4624,6 +4655,14 @@ int sockinfo_tcp::shutdown(int __how)
         return SYSCALL(shutdown, m_fd, __how);
     }
 
+    // Same order as tcp_tx_thread: m_lock_snd then tcp. In-flight send finishes posting first.
+    std::unique_lock<decltype(m_lock_snd)> send_lock(m_lock_snd, std::defer_lock);
+    const bool defer_tx_fin = m_entity_context && safe_mce_sys().is_threads_mode() &&
+        (__how == SHUT_WR || __how == SHUT_RDWR);
+    if (defer_tx_fin) {
+        send_lock.lock();
+    }
+
     lock_tcp_con();
 
     shut_tx = shut_rx = 0;
@@ -4679,12 +4718,17 @@ int sockinfo_tcp::shutdown(int __how)
             tcp_accept(&m_pcb, nullptr);
             tcp_syn_handled(&m_pcb, sockinfo_tcp::syn_received_drop_lwip_cb);
         }
+    } else if (get_tcp_state(&m_pcb) != LISTEN && shut_rx && m_n_rx_pkt_ready_list_count) {
+        abort_connection();
+    } else if (defer_tx_fin) {
+        // FIN behind queued SOCK_TX. App-thread tcp_shutdown() overtakes the tail.
+        m_sock_wakeup_pipe.do_wakeup();
+        unlock_tcp_con();
+        m_entity_context->add_job(entity_context::job_desc {
+            entity_context::JOB_TYPE_SOCK_SHUTDOWN, __how, this, nullptr, 0U, 0U});
+        return 0;
     } else {
-        if (get_tcp_state(&m_pcb) != LISTEN && shut_rx && m_n_rx_pkt_ready_list_count) {
-            abort_connection();
-        } else {
-            err = tcp_shutdown(&m_pcb, shut_rx, shut_tx);
-        }
+        err = tcp_shutdown(&m_pcb, shut_rx, shut_tx);
     }
 
     m_sock_wakeup_pipe.do_wakeup();
@@ -6395,7 +6439,21 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
 
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
-    if (unlikely(!is_connected_and_ready_to_send())) {
+    if (flags & XLIO_EXPRESS_TX_COMMITTED) {
+        /* Committed bytes were accepted by a send() that already returned their count.
+         * The SHUT_WR latch (m_sock_state via is_rts()) gates only new sends, under
+         * m_lock_snd, and the SHUTDOWN job is FIFO-ordered behind every committed TX job,
+         * so a live pcb here cannot have sequenced its own FIN yet. Refuse only when the
+         * pcb can no longer legally carry new data (own FIN sequenced by close(), or the
+         * connection reset/closed): accepted bytes are never dropped on the latch.
+         */
+        const enum tcp_state pcb_state = get_tcp_state(&m_pcb);
+        if (unlikely(pcb_state != ESTABLISHED && pcb_state != CLOSE_WAIT)) {
+            errno = (m_conn_state == TCP_CONN_RESETED) ? ECONNRESET : EPIPE;
+            stats_update_tx_errors(errno);
+            return -1;
+        }
+    } else if (unlikely(!is_connected_and_ready_to_send())) {
         stats_update_tx_errors(errno);
         return -1;
     }
