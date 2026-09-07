@@ -76,6 +76,11 @@ enum xlio_express_flags : uint32_t {
     XLIO_EXPRESS_MSG_MORE = 0x0010u,
     XLIO_EXPRESS_MSG_SND_BUF = 0x0020u,
     XLIO_EXPRESS_MSG_MASK = 0x0ff0u,
+    // Internal, worker job-commit path only (not part of the express send API).
+    // The bytes were already accepted by a send() that returned their count, so the
+    // app-visible SHUT_WR latch (is_rts()) must not drop them - refuse only when the
+    // pcb can no longer legally carry new data (own FIN sequenced, or reset/closed).
+    XLIO_EXPRESS_TX_COMMITTED = 0x1000u,
 };
 
 struct socket_option_t {
@@ -249,6 +254,8 @@ public:
     ssize_t tcp_tx_thread(xlio_tx_call_attr_t &tx_arg);
     void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size, int flags,
                           const tx_call_ctx &tx_ctx) override;
+    // Worker job: tcp_shutdown after queued TX jobs. App thread must not FIN itself.
+    void tx_thread_shutdown(int how);
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
