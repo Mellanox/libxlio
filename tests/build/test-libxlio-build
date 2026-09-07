@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Exercise XLIO build-system combinations from clone through make install.
+Exercise XLIO build-system combinations from source preparation through make
+install.
 
 The script creates ./test-build in the current directory. The script may remain
 in the XLIO source tree; all clones, logs, build directories, and staged
@@ -12,13 +13,20 @@ Example:
     cd /tmp/xlio-build-tests
     /path/to/libxlio/tests/build/test-libxlio-build -j 4
 
+To test tracked files from a development tree, including local modifications:
+
+    cd /path/to/libxlio
+    ./tests/build/test-libxlio-build --local -j 16
+
 Before running the matrix, the script clones and builds an external libdpcp
 under ./test-build/libdpcp. Its ./test-build/libdpcp/install prefix is used for
 --with-dpcp cases.
 
 By default, the repository URL and branch are read from the Git checkout
 containing this script. Set REPO_URL and/or BRANCH in the environment to
-override either value.
+override either value. With --local, the tracked files in the current directory
+are copied instead, including their working-tree modifications; REPO_URL and
+BRANCH are ignored.
 """
 
 import argparse
@@ -184,6 +192,88 @@ def repository_settings():
         raise CaseFailure("BRANCH is empty")
 
     return repository_url, branch
+
+
+def local_repository():
+    current_directory = Path.cwd().resolve()
+    repository_root = Path(
+        git_value(current_directory, "rev-parse", "--show-toplevel")
+    ).resolve()
+    if current_directory != repository_root:
+        raise CaseFailure(
+            f"--local must be run from the repository root: {repository_root}"
+        )
+    submodule_status = git_value(
+        current_directory, "submodule", "status", "--recursive"
+    )
+    unavailable_submodules = [
+        line for line in submodule_status.splitlines() if line.startswith(("-", "U"))
+    ]
+    if unavailable_submodules:
+        raise CaseFailure(
+            "--local requires initialized submodules without merge conflicts: "
+            + ", ".join(line[1:].strip() for line in unavailable_submodules)
+        )
+    return current_directory
+
+
+def local_copy_command_text(source, destination):
+    command = (
+        "git ls-files -z --recurse-submodules | "
+        "tar --no-recursion --null -T - -cf - | "
+        f"tar -x -C {shlex.quote(str(destination))}"
+    )
+    return f"$ (cd {shlex.quote(str(source))} && {command})"
+
+
+def local_tracked_files(source):
+    process = subprocess.run(
+        ("git", "ls-files", "-z", "--recurse-submodules"),
+        cwd=str(source),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if process.returncode != 0:
+        detail = os.fsdecode(process.stderr).strip() or "git ls-files failed"
+        raise CaseFailure(detail)
+
+    source_bytes = os.fsencode(source)
+    existing_paths = []
+    for path in process.stdout.split(b"\0"):
+        if not path:
+            continue
+        try:
+            os.lstat(os.path.join(source_bytes, path))
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            raise CaseFailure(
+                f"Unable to read tracked path {os.fsdecode(path)!r}: {error}"
+            ) from error
+        existing_paths.append(path)
+
+    return b"\0".join(existing_paths) + (b"\0" if existing_paths else b"")
+
+
+def copy_local_repository(source, destination, log_path, case_name):
+    destination.mkdir(parents=True)
+    display_command = local_copy_command_text(source, destination)
+    emit(f"[{case_name}] running: {display_command}")
+
+    tracked_files = local_tracked_files(source)
+    command = 'tar --no-recursion --null -T - -cf - | tar -x -C "$1"'
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write(f"ACTION running: {display_command}\n")
+        process = subprocess.run(
+            ("bash", "-o", "pipefail", "-c", command, "bash", str(destination)),
+            cwd=str(source),
+            input=tracked_files,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+    return process.returncode
 
 
 def run_logged(args, cwd, log_path, environment, case_name):
@@ -479,6 +569,7 @@ def create_cases():
 def run_case(
     case,
     work_root,
+    local_source,
     repository_url,
     branch,
     external_dpcp_prefix,
@@ -492,6 +583,15 @@ def run_case(
     xlio_prefix = case_dir / "xlio-install"
     expect_configure_failure = (
         case.dpcp_source == "external" and case.flags_mode == "flags"
+    )
+    check_invalid_dpcp_flags = (
+        case.layout == "out"
+        and case.xlio_mode == "shared"
+        and case.dpcp_source == "built-in"
+        and case.dpcp_link_mode == "static"
+        and case.flags_mode == "flags"
+        and case.prefix_mode == "prefix"
+        and case.utls_mode == "without-utls"
     )
 
     if case.layout == "in-tree":
@@ -515,15 +615,21 @@ def run_case(
     if case.flags_mode == "flags":
         configure_args.append(
             "--with-dpcp-flags=-DCMAKE_BUILD_TYPE=Debug "
-            "-DCMAKE_CXX_FLAGS=-O3"
+            "-DCMAKE_CXX_FLAGS='-O3 -g'"
         )
     if case.prefix_mode == "prefix":
         configure_args.append(f"--prefix={xlio_prefix}")
     if case.utls_mode == "with-utls":
         configure_args.append("--enable-utls")
 
-    clone_command = ("git", "clone", repository_url, case_dir_name)
-    checkout_command = ("git", "checkout", branch)
+    clone_command = (
+        None
+        if local_source is not None
+        else ("git", "clone", repository_url, case_dir_name)
+    )
+    checkout_command = (
+        None if local_source is not None else ("git", "checkout", branch)
+    )
     autogen_command = ("./autogen.sh",)
     configure_args_full = (configure_command, *configure_args)
     make_command = ("make", "-C", str(build_dir), f"-j{make_jobs}", "install")
@@ -532,16 +638,31 @@ def run_case(
 
     case_log.write_text("", encoding="utf-8")
     report = CaseReport(case_log)
-    report.extend([
-        "",
-        f"=== {case.name} ===",
-        "Commands:",
-        f"  {command_text(clone_command)}",
-        f"  {cd_command_text(case_dir_name, checkout_command)}",
-        f"  {cd_command_text(case_dir_name, autogen_command)}",
-    ])
+    report.extend(
+        [
+            "",
+            f"=== {case.name} ===",
+            "Commands:",
+        ]
+    )
+    if local_source is not None:
+        report.append(
+            f"  {local_copy_command_text(local_source, case_dir)}"
+        )
+    else:
+        report.extend(
+            [
+                f"  {command_text(clone_command)}",
+                f"  {cd_command_text(case_dir_name, checkout_command)}",
+            ]
+        )
+    report.append(f"  {cd_command_text(case_dir_name, autogen_command)}")
     if case.layout == "out":
         report.append(f"  {command_text(('mkdir', '-p', display_build_dir))}")
+    if check_invalid_dpcp_flags:
+        report.append(
+            "  EXPECT configure to reject an invalid --with-dpcp-flags value"
+        )
     report.append(f"  {cd_command_text(display_build_dir, configure_args_full)}")
     if expect_configure_failure:
         report.append(
@@ -558,20 +679,29 @@ def run_case(
             raise CaseFailure(
                 f"Case directory already exists; remove it before rerunning: {case_dir}"
             )
-        if (
-            run_logged(
-                clone_command, work_root, case_log, environment, case.name
-            )
-            != 0
-        ):
-            raise CaseFailure(f"Clone failed; see {case_log}")
-        if (
-            run_logged(
-                checkout_command, case_dir, case_log, environment, case.name
-            )
-            != 0
-        ):
-            raise CaseFailure(f"Branch checkout failed; see {case_log}")
+        if local_source is not None:
+            if (
+                copy_local_repository(
+                    local_source, case_dir, case_log, case.name
+                )
+                != 0
+            ):
+                raise CaseFailure(f"Local source copy failed; see {case_log}")
+        else:
+            if (
+                run_logged(
+                    clone_command, work_root, case_log, environment, case.name
+                )
+                != 0
+            ):
+                raise CaseFailure(f"Clone failed; see {case_log}")
+            if (
+                run_logged(
+                    checkout_command, case_dir, case_log, environment, case.name
+                )
+                != 0
+            ):
+                raise CaseFailure(f"Branch checkout failed; see {case_log}")
         if (
             run_logged(
                 autogen_command, case_dir, case_log, environment, case.name
@@ -582,6 +712,46 @@ def run_case(
 
         if case.layout == "out":
             build_dir.mkdir(parents=True)
+
+        if check_invalid_dpcp_flags:
+            invalid_build_dir = case_dir / "invalid-dpcp-flags"
+            invalid_build_dir.mkdir()
+            invalid_status = run_logged(
+                (
+                    "../configure",
+                    "--with-dpcp-flags=-DDPCP_TEST=bad%value",
+                ),
+                invalid_build_dir,
+                case_log,
+                environment,
+                case.name,
+            )
+            report.append(
+                "Checks after configure with invalid DPCP flags:"
+            )
+            report.append(
+                "  CHECK configure rejects unsupported characters"
+            )
+            if invalid_status == 0:
+                raise CaseFailure(
+                    "configure unexpectedly accepted invalid "
+                    "--with-dpcp-flags characters"
+                )
+            configure_log = case_log.read_text(
+                encoding="utf-8", errors="replace"
+            )
+            expected_error = (
+                "--with-dpcp-flags contains unsupported characters"
+            )
+            if expected_error not in configure_log:
+                raise CaseFailure(
+                    f"configure rejected invalid DPCP flags for an unexpected "
+                    f"reason; see {case_log}"
+                )
+            check_absent(
+                invalid_build_dir / "submodules/libdpcp/CMakeCache.txt",
+                report,
+            )
 
         configure_status = run_logged(
             configure_args_full,
@@ -777,7 +947,7 @@ def run_case(
                         "CMAKE_BUILD_TYPE unexpectedly equals Debug"
                     )
 
-            expected_cxx_flags = "-O3" if case.flags_mode == "flags" else "-O2"
+            expected_cxx_flags = "-O3 -g" if case.flags_mode == "flags" else "-O2"
             report.append(
                 f"  CHECK CMake cache contains CMAKE_CXX_FLAGS={expected_cxx_flags}"
             )
@@ -879,8 +1049,11 @@ def print_failed_cases(failed_results, work_root):
     emit(lines)
 
 
-def validate_environment():
-    for command in ("ar", "cc", "cmake", "git", "make", "ldd", "nm"):
+def validate_environment(use_local_source):
+    commands = ["ar", "cc", "cmake", "git", "make", "ldd", "nm"]
+    if use_local_source:
+        commands.extend(("bash", "tar"))
+    for command in commands:
         require_command(command)
 
 
@@ -930,6 +1103,14 @@ def parse_arguments():
         action="store_true",
         help="run 10 representative cases covering both states of every option",
     )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help=(
+            "copy tracked files from the current repository instead of cloning; "
+            "ignore REPO_URL and BRANCH"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -956,15 +1137,6 @@ def main():
         else all_cases
     )
 
-    if work_root.exists():
-        print(
-            f"ERROR: Build directory already exists; remove it before rerunning: "
-            f"{work_root}",
-            file=sys.stderr,
-            flush=True,
-        )
-        return 1
-
     if not cases:
         print(
             "ERROR: No test names match --filter",
@@ -977,6 +1149,15 @@ def main():
         emit(case.name for case in cases)
         return 0
 
+    if work_root.exists():
+        print(
+            f"ERROR: Build directory already exists; remove it before rerunning: "
+            f"{work_root}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return 1
+
     if args.jobs is None:
         emit(
             "Tip: use -j N to run test cases concurrently; "
@@ -984,8 +1165,14 @@ def main():
         )
 
     try:
-        validate_environment()
-        repository_url, branch = repository_settings()
+        validate_environment(args.local)
+        if args.local:
+            local_source = local_repository()
+            repository_url = None
+            branch = None
+        else:
+            local_source = None
+            repository_url, branch = repository_settings()
     except CaseFailure as error:
         print(f"ERROR: {error}", file=sys.stderr, flush=True)
         emit(f"Total runtime: {format_duration(time.monotonic() - run_started_at)}")
@@ -1026,9 +1213,14 @@ def main():
         return 1
 
     total = len(cases)
-    summary = (
-        f"Repository: {repository_url}",
-        f"Branch: {branch}",
+    if local_source is not None:
+        summary = (f"Local source: {local_source}",)
+    else:
+        summary = (
+            f"Repository: {repository_url}",
+            f"Branch: {branch}",
+        )
+    summary += (
         f"Build directory: {work_root}",
         f"Tests selected: {total}",
     )
@@ -1061,6 +1253,7 @@ def main():
             result = run_case(
                 case,
                 work_root,
+                local_source,
                 repository_url,
                 branch,
                 external_dpcp_prefix,
@@ -1092,6 +1285,7 @@ def main():
                     run_case,
                     case,
                     work_root,
+                    local_source,
                     repository_url,
                     branch,
                     external_dpcp_prefix,
