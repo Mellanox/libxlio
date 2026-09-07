@@ -106,6 +106,7 @@ public:
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) = 0;
     virtual bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *) { return false; }
     virtual int drain_and_proccess() = 0;
+    virtual void drain_tx_for_poll_group_teardown() {}
     virtual void wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr) = 0;
 
     // @return Zero - Not drained, Positive - Drained with packets, Negative - No packets.
