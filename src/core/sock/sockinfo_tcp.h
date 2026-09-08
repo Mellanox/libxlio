@@ -207,6 +207,7 @@ public:
     int getsockopt_offload(int __level, int __optname, void *__optval, socklen_t *__optlen);
     int connect(const sockaddr *, socklen_t) override;
     void connect_entity_context() override;
+    void cancel_connect_entity_context();
     void listen_entity_context();
     int harvest_sockinfo_tcp_listen_objects();
     inline bool try_harvest_from_rss_child(size_t rss_child_index);

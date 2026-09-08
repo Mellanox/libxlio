@@ -3203,8 +3203,14 @@ int sockinfo_tcp::connect_wait_threads_mode()
     // later connect()/close() sees a coherent failed state (mirrors connect()'s EINTR handling).
     if (m_conn_state == TCP_CONN_CONNECTING) {
         m_conn_state = TCP_CONN_FAILED;
+        // R2C tcp_close()s the pcb on this thread. The worker owns the pcb here, so post
+        // cancel instead. FAILED is set first under this lock so a late SYN-ACK cannot
+        // publish CONNECTED. Passthrough is the OS-connect redirect; close owns CLOSING.
+        if (!isPassthrough() && m_state < SOCKINFO_CLOSING && m_entity_context) {
+            m_entity_context->add_job(entity_context::job_desc {
+                entity_context::JOB_TYPE_SOCK_CONNECT_CANCEL, 0, this, nullptr, 0U, 0U});
+        }
     }
-    // Do not tcp_close() the pcb on the app thread. Worker close job reclaims it.
     si_tcp_logdbg("Blocking connect error, m_conn_state=%d m_sock_state=%d errno=%d",
                   static_cast<int>(m_conn_state), static_cast<int>(m_sock_state), errno);
     return -1;
@@ -3213,6 +3219,12 @@ int sockinfo_tcp::connect_wait_threads_mode()
 void sockinfo_tcp::connect_entity_context()
 {
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
+
+    // EINTR/cancel can land before this queued job. Do not send SYN after the app was
+    // told connect() failed.
+    if (m_conn_state != TCP_CONN_CONNECTING || m_state >= SOCKINFO_CLOSING) {
+        return;
+    }
 
     if (!prepare_dst_to_send(false)) {
         si_tcp_logdbg("non offloaded socket --> connect only via OS (prepare_dst_to_send failed)");
@@ -3249,6 +3261,29 @@ void sockinfo_tcp::connect_entity_context()
     // since wait_for_conn_ready_blocking may block on epoll_wait and the timer sends SYN
     // rexmits.
     register_timer();
+}
+
+void sockinfo_tcp::cancel_connect_entity_context()
+{
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
+
+    if (m_state >= SOCKINFO_CLOSING || isPassthrough() || m_conn_state == TCP_CONN_CONNECTED) {
+        return;
+    }
+    if (m_conn_state != TCP_CONN_CONNECTING && m_conn_state != TCP_CONN_FAILED) {
+        return;
+    }
+
+    remove_timer();
+    const enum tcp_state state = get_tcp_state(&m_pcb);
+    if (state == SYN_SENT || state == CLOSED) {
+        tcp_close(&m_pcb);
+    } else {
+        tcp_abort(&m_pcb);
+    }
+    destructor_helper_tcp();
+    m_conn_state = TCP_CONN_FAILED;
+    m_sock_wakeup_pipe.do_wakeup();
 }
 
 int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
@@ -4376,6 +4411,18 @@ err_t sockinfo_tcp::connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
     if (conn->m_conn_state == TCP_CONN_TIMEOUT) {
         // tcp_si_logdbg("conn timeout");
         conn->m_error_status = ETIMEDOUT;
+        conn->unlock_tcp_con();
+        return ERR_OK;
+    }
+    // Blocking wait already returned failure (EINTR/exit) and marked FAILED. lwIP
+    // has already set ESTABLISHED before this callback; abort so tcp_input skips
+    // tcp_ack_now and RECV. Do not abort TIMEOUT (above) or CONNECTED.
+    if (conn->m_conn_state == TCP_CONN_FAILED) {
+        conn->abort_connection();
+        conn->unlock_tcp_con();
+        return ERR_ABRT;
+    }
+    if (conn->m_conn_state != TCP_CONN_CONNECTING) {
         conn->unlock_tcp_con();
         return ERR_OK;
     }

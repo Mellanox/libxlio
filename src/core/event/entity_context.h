@@ -62,6 +62,7 @@ public:
         JOB_TYPE_SOCK_RX_DATA_RECVD,
         JOB_TYPE_SOCK_ADD_AND_LISTEN,
         JOB_TYPE_SOCK_TLS_SETUP,
+        JOB_TYPE_SOCK_CONNECT_CANCEL,
         JOB_TYPE_SOCK_CLOSE
     };
 
@@ -118,6 +119,7 @@ private:
     void rx_data_recvd_job(const job_desc &job);
     void listen_socket_job(const job_desc &job);
     void tls_setup_job(const job_desc &job);
+    void cancel_connect_job(const job_desc &job);
     void close_socket_job(const job_desc &job);
 
     static void entity_context_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq,
