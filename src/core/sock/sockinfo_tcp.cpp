@@ -4282,6 +4282,14 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     IF_STATS_O(new_sock, print_full_stats(new_sock->m_p_socket_stats, nullptr, g_stats_file));
 
     new_sock->socket_stats_init();
+    /*
+     * socket_stats_init() clears the properties that are otherwise assigned only by
+     * the constructor, which doesn't run for a reused socket. It can also allocate a
+     * stats object here for a socket that found the pool exhausted at construction
+     * time. Restore the properties from the socket object in both cases.
+     */
+    IF_STATS_O(new_sock, new_sock->m_p_socket_stats->socket_type = SOCK_STREAM);
+    IF_STATS_O(new_sock, new_sock->m_p_socket_stats->b_is_offloaded = !new_sock->isPassthrough());
 
     new_sock->m_state = SOCKINFO_OPENED;
     new_sock->m_sock_state = TCP_SOCK_INITED;
