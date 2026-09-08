@@ -706,7 +706,7 @@ private:
     // second call to failed connect blocking socket.
     bool report_connected;
     bool m_is_cleaned = false; // If this socket registered deletion on internal thread.
-    bool m_worker_close_routed = false; // under lock: close job posted at most once
+    bool m_worker_close_routed = false; // under lock: one close job per incarnation
     int m_error_status;
 
     const buffer_batching_mode_t m_sysvar_buffer_batching_mode;

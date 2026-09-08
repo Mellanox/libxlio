@@ -4244,6 +4244,8 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     new_sock->m_state = SOCKINFO_OPENED;
     new_sock->m_sock_state = TCP_SOCK_INITED;
     new_sock->m_conn_state = TCP_CONN_INIT;
+    // Recycle is a new life. The first close already consumed the one-shot latch.
+    new_sock->m_worker_close_routed = false;
     new_sock->m_parent = listen_sock;
     tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
     tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb);
