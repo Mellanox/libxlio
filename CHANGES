@@ -1,3 +1,17 @@
+Version 3.80.0-1:
+Date + Time 2026-09-10
+=============================================================
+Added:
+	- RM #4830545 Add built-in static libdpcp linking
+
+Fixed:
+	- RM #4810385 Fix hardware TLS RX resynchronization
+	- RM #5165660 Fix json-c configuration for parallel VPATH builds
+	- RM #5217929 Fix SIGINT handler interposition lifecycle and semantics
+	- RM #5227183 Build static libxlio.a with position-independent code
+	- RM #5229407 Require OpenSSL development packages for TLS offload builds
+	- RM #5260757 Fix built-in DPCP build on RHEL 9.6
+
 Version 3.71.1-1:
 Date + Time 2026-07-09
 =============================================================
