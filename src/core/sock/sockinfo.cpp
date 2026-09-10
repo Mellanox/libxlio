@@ -156,17 +156,24 @@ sockinfo::~sockinfo()
 
 void sockinfo::socket_stats_init()
 {
-    if (!m_p_socket_stats) { // This check is for listen sockets.
+    if (!m_p_socket_stats) {
         m_p_socket_stats = sock_stats::instance().get_stats_obj();
         if (!m_p_socket_stats) {
             return;
         }
 
+        // The pool doesn't clean an object on release, so it still carries the
+        // properties of the previous socket. Drop them with the connection state.
+        m_p_socket_stats->reset();
+
         // Save stats as local copy and allow state publisher to copy from this location
         xlio_stats_instance_create_socket_block(m_p_socket_stats);
+    } else {
+        // Re-initialization of a reused socket object. Keep the properties: they are
+        // assigned by the derived constructor, which doesn't run on this path.
+        m_p_socket_stats->reset_connection();
     }
 
-    m_p_socket_stats->reset();
     m_p_socket_stats->fd = m_fd;
     m_p_socket_stats->inode = fd2inode(m_fd);
     m_p_socket_stats->b_blocking = m_b_blocking;

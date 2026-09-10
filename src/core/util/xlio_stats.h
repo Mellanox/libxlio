@@ -253,14 +253,18 @@ struct socket_stats_t {
 #endif /* DEFINED_UTLS */
     socket_stats_t *_next_stat;
 
-    void reset()
+    /*
+     * Reset the per-connection state only. Socket properties (see reset()) are kept,
+     * because a socket object can be re-initialized for a new connection without a
+     * constructor - see sockinfo_tcp::syn_received_timewait_cb().
+     */
+    void reset_connection()
     {
         fd = 0;
         inode = tcp_state = 0;
-        socket_type = 0;
         sa_family = 0;
-        b_is_offloaded = b_blocking = b_mc_loop = false;
-        bound_if = connected_ip = mc_tx_if = ip_address(in6addr_any);
+        b_blocking = false;
+        bound_if = connected_ip = ip_address(in6addr_any);
         bound_port = connected_port = (in_port_t)0;
         threadid_last_rx = threadid_last_tx = pid_t(0);
         n_rx_ready_pkt_count = n_rx_ready_byte_count = n_tx_ready_byte_count = 0;
@@ -275,6 +279,15 @@ struct socket_stats_t {
         mc_grp_map.reset();
         ring_user_id_rx = ring_user_id_tx = 0;
         ring_alloc_logic_rx = ring_alloc_logic_tx = RING_LOGIC_PER_INTERFACE;
+    }
+
+    /* Full reset, including the properties assigned once per socket object. */
+    void reset()
+    {
+        reset_connection();
+        socket_type = 0;
+        b_is_offloaded = b_mc_loop = false;
+        mc_tx_if = ip_address(in6addr_any);
     };
 
     void set_bound_if(sock_addr &sock)
