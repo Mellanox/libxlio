@@ -265,8 +265,8 @@ mapping_cache::~mapping_cache()
     while (!m_hot_list.empty()) {
         mapping = m_hot_list.get_and_pop_front();
         if (!demote_mapping_unlocked(mapping)) {
-            map_logerr("Mapping %p is still referenced during cache destruction: ref=%u", mapping,
-                       (unsigned)mapping->m_ref.value());
+            map_loginfo("Mapping %p is still referenced during cache destruction: ref=%u", mapping,
+                        (unsigned)mapping->m_ref.value());
         }
     }
 
