@@ -70,7 +70,21 @@ if [[ -z "${MANUAL_RUN}" ]]; then
 fi
 
 # Test with full coverage of the config-file feature
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_full_coverage.json GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio_*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
+eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 \
+XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_full_coverage.json \
+GTEST_TAP=2 LD_PRELOAD=$gtest_lib \
+$gtest_app $gtest_opt --gtest_filter=-xlio_*:-ultra* \
+--gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
+rc=$(($rc+$?))
+
+# Pin structured-config activation at the 120 s cap. At the cap, tcpi_rto is
+# independent of live RTT variance, so this check remains deterministic on
+# loaded runners.
+eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 \
+XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_rto_floor_max.json \
+XLIO_GTEST_EXPECT_RTO_MSEC=120000 GTEST_TAP=2 LD_PRELOAD=$gtest_lib \
+$gtest_app $gtest_opt --gtest_filter=tcp_sockopt.ti_1b_tcp_info_low_rtt_us \
+--gtest_output=xml:${WORKSPACE}/${prefix}/test-rto-floor-max.xml"
 rc=$(($rc+$?))
 
 # Exclude EXTRA API tests IPv6

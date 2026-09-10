@@ -126,6 +126,7 @@ TEST_F(output, config_show_sample_values)
         #endif
             // Simple number
             "Data threshold for flush       42                         [network.protocols.tcp.nodelay.byte_threshold, Reason: User-configured]",
+            "[network.protocols.tcp.rto_floor_msec, Reason: User-configured]",
         #ifdef DEFINED_UTLS
             // 4096 is shown as 4K
             "DEK max cache size             4K                         [hardware_features.tcp.tls_offload.dek_cache_max_size, Reason: User-configured]",
@@ -168,6 +169,57 @@ TEST_F(output, config_show_sample_values)
             "TX ring allocation logic       per_socket                 "
             "[performance.rings.tx.allocation_logic]",
         });
+}
+
+/**
+ * @test output.tcp_rto_floor_environment_validation
+ * @brief Environment parsing accepts both endpoints and defaults invalid values.
+ */
+TEST_F(output, tcp_rto_floor_environment_validation)
+{
+    struct test_case {
+        const char *value;
+        unsigned expected_msec;
+        const char *warning;
+    };
+
+    static const test_case cases[] = {
+        {"1", 1U, nullptr},
+        {"120000", 120000U, nullptr},
+        {"0", 600U, "is out of range [1, 120000]. Using default [600] msec."},
+        {"120001", 600U, "is out of range [1, 120000]. Using default [600] msec."},
+        {"invalid", 600U, "is not an unsigned decimal 32-bit value. Using default [600] msec."},
+        {"4294967296", 600U, "is not an unsigned decimal 32-bit value. Using default [600] msec."},
+    };
+
+    for (const auto &item : cases) {
+        std::string cmd = "XLIO_USE_NEW_CONFIG=0 XLIO_TRACELEVEL=4 "
+                          "XLIO_TCP_RTO_FLOOR_MSEC=" +
+            std::string(item.value) + " " + SOCKET_CMD;
+        exec_cmd_to_file(cmd, m_output_file);
+
+        std::ifstream ifs(m_output_file);
+        std::string text(std::istreambuf_iterator<char>(ifs), {});
+        ifs.close();
+
+        if (item.warning) {
+            EXPECT_NE(std::string::npos, text.find(item.warning)) << "value=" << item.value;
+        }
+
+        const std::string label = "TCP RTO Floor (msec)";
+        const std::string variable = "[XLIO_TCP_RTO_FLOOR_MSEC]";
+        size_t value_pos = text.find(label);
+        ASSERT_NE(std::string::npos, value_pos) << "value=" << item.value << "\n" << text;
+        value_pos += label.size();
+        size_t variable_pos = text.find(variable, value_pos);
+        ASSERT_NE(std::string::npos, variable_pos) << "value=" << item.value << "\n" << text;
+
+        std::string value_field = text.substr(value_pos, variable_pos - value_pos);
+        char *end = nullptr;
+        unsigned long observed_msec = strtoul(value_field.c_str(), &end, 10);
+        ASSERT_NE(value_field.c_str(), end) << "value=" << item.value << "\n" << text;
+        EXPECT_EQ(item.expected_msec, observed_msec) << "value=" << item.value;
+    }
 }
 
 /**

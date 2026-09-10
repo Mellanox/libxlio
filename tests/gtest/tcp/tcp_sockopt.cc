@@ -169,13 +169,24 @@ TEST_F(tcp_sockopt, ti_1b_tcp_info_low_rtt_us)
             barrier_fork(pid);
 
             int fd = tcp_base::sock_create();
-            ASSERT_LE(0, fd);
+            if (fd < 0) {
+                ADD_FAILURE() << "socket creation failed";
+                exit(testing::Test::HasFailure());
+            }
 
             rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
-            ASSERT_EQ(0, rc);
+            if (rc != 0) {
+                ADD_FAILURE() << "client bind failed";
+                close(fd);
+                exit(testing::Test::HasFailure());
+            }
 
             rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-            ASSERT_EQ(0, rc);
+            if (rc != 0) {
+                ADD_FAILURE() << "client connect failed";
+                close(fd);
+                exit(testing::Test::HasFailure());
+            }
 
             /* Exercise ACK estimation beyond the handshake. */
             static const char payload[] = HELLO_STR;
@@ -193,9 +204,9 @@ TEST_F(tcp_sockopt, ti_1b_tcp_info_low_rtt_us)
             socklen_t optlen = sizeof(ti);
             memset(&ti, 0, sizeof(ti));
             rc = getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &optlen);
-            ASSERT_EQ(0, rc);
+            EXPECT_EQ(0, rc);
             /* A synchronized read may observe any live state, but not abort. */
-            ASSERT_NE(TCP_CLOSE, ti.tcpi_state);
+            EXPECT_NE(TCP_CLOSE, ti.tcpi_state);
 
             EXPECT_GE(ti.tcpi_rto, 200000U)
                 << "tcpi_rto below the common XLIO/Linux test lower bound";
@@ -203,6 +214,19 @@ TEST_F(tcp_sockopt, ti_1b_tcp_info_low_rtt_us)
 #ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTT
             EXPECT_GT(ti.tcpi_rtt, 0U) << "tcpi_rtt missing after real ACK";
 #endif
+
+            const char *expected_rto_msec = getenv("XLIO_GTEST_EXPECT_RTO_MSEC");
+            if (expected_rto_msec) {
+                char *end = nullptr;
+                unsigned long rto_msec = strtoul(expected_rto_msec, &end, 10);
+                const bool valid_expected_rto = expected_rto_msec != end && *end == '\0' &&
+                    rto_msec <= std::numeric_limits<uint32_t>::max() / 1000U;
+                EXPECT_TRUE(valid_expected_rto) << "invalid expected RTO";
+                if (valid_expected_rto) {
+                    EXPECT_EQ(static_cast<uint32_t>(rto_msec * 1000U), ti.tcpi_rto)
+                        << "TCP_INFO does not reflect the configured capped RTO";
+                }
+            }
 
             /* Hold peer teardown until after TCP_INFO. */
             static const char done = 'D';
