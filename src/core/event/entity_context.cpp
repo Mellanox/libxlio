@@ -58,6 +58,8 @@ entity_context::entity_context(size_t index)
                                        entity_context_comp_cb, nullptr, nullptr})
     , m_index(index)
     , m_prev_proc_time(steady_clock::now())
+    , m_last_poll_hit(false)
+    , m_intr_setup_ok(false)
 {
     memset(&m_stats, 0, sizeof(m_stats));
     xlio_stats_instance_create_ent_ctx_block(&m_stats);
@@ -81,6 +83,8 @@ entity_context::entity_context(size_t index)
             ev.data.fd = m_wakeup_fd;
             if (SYSCALL(epoll_ctl, m_epoll_fd, EPOLL_CTL_ADD, m_wakeup_fd, &ev) < 0) {
                 ctx_logerr("Failed to add wakeup fd to epoll (errno=%d %m)", errno);
+            } else {
+                m_intr_setup_ok = true;
             }
         }
     }
@@ -261,6 +265,11 @@ void entity_context::arm_cq_notifications()
         bool success = rng->request_notification(CQT_RX);
         if (unlikely(!success)) {
             ctx_logerr("Failed to arm CQ notification for ring %p", rng);
+	    // We should never reach this place because with current code, 
+	    // rng->request_notification() never fails. This code serves to alert
+	    // if this ever changes. If it happens, the error message will fire,
+	    // and we need to deal with it by returning bool and changing 
+	    // wait_for_interrupt() to handle the failure.
         }
     }
 }
@@ -282,7 +291,7 @@ entity_context::wakeup_reason entity_context::wait_for_interrupt(int timeout_ms)
 {
     wakeup_reason reason = WAKEUP_NONE;
 
-    if (unlikely(m_epoll_fd < 0 || m_wakeup_fd < 0)) {
+    if (unlikely(!m_intr_setup_ok)) {
         return WAKEUP_NONE;
     }
 
@@ -350,7 +359,7 @@ entity_context::wakeup_reason entity_context::wait_for_interrupt(int timeout_ms)
 
 void entity_context::wakeup()
 {
-    if (unlikely(m_wakeup_fd < 0)) {
+    if (unlikely(!m_intr_setup_ok)) {
         return;
     }
 
@@ -379,7 +388,7 @@ void entity_context::entity_context_comp_cb(xlio_socket_t sock, uintptr_t userda
 
 void entity_context::notify_ring_added(ring *rng)
 {
-    if (m_epoll_fd < 0) {
+    if (!m_intr_setup_ok) {
         // This covers busy polling mode and run-time failures during entity context construction.
         return;
     }

@@ -1592,6 +1592,14 @@ void mce_sys_var::get_env_params()
                     SYS_VAR_TIMER_RESOLUTION_MSEC, timer_resolution_msec, timer_resolution_msec);
         tcp_timer_resolution_msec = timer_resolution_msec;
     }
+    if (tcp_timer_resolution_msec > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC) {
+        vlog_printf(VLOG_WARNING,
+                    "TCP timer resolution [%s=%u] exceeds maximum %d. "
+                    "Setting TCP timer resolution to %d msec.\n",
+                    SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec,
+                    MCE_MAX_TCP_TIMER_RESOLUTION_MSEC, MCE_MAX_TCP_TIMER_RESOLUTION_MSEC);
+        tcp_timer_resolution_msec = MCE_MAX_TCP_TIMER_RESOLUTION_MSEC;
+    }
 
     if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_CPUSET))) {
         snprintf(internal_thread_cpuset, FILENAME_MAX, "%s", env_ptr);
