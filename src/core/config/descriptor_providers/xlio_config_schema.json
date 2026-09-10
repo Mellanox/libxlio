@@ -484,6 +484,19 @@
             "title": "Hardware Features",
             "description": "Hardware-specific configurations and offloads",
             "properties": {
+                "memory_registration": {
+                    "type": "object",
+                    "description": "Memory registration settings.",
+                    "properties": {
+                        "relaxed_ordering": {
+                            "type": "boolean",
+                            "default": false,
+                            "title": "Request relaxed ordering for memory registration",
+                            "description": "Maps to XLIO_RELAXED_ORDERING environment variable.\nControls whether XLIO asks the network adapter to relax PCIe write ordering for host memory\nregistered by XLIO. Relaxed Ordering can improve I/O performance on supported systems.\n\n**Values:**\n\n- false (default): Do not request Relaxed Ordering for XLIO-created memory keys. This does not\n  force strict ordering; the NIC can still use Relaxed Ordering when its device-wide configuration\n  forces it.\n- true: Request Relaxed Ordering for XLIO-created memory keys. This allows NIC DMA writes to reach\n  memory out of order. Completion and final data visibility semantics are unchanged, but\n  intermediate write-after-write ordering is not guaranteed.\n\n**Hardware configuration:**\n\nThis setting controls behavior when the NIC's `PCI_WR_ORDERING` mode is `per_mkey`. If the NIC is\nin `force_relaxed` mode, Relaxed Ordering remains active regardless of this setting. XLIO does not\nchange the NIC's `mlxconfig` setting.\n\n**Support notes:**\n\nWhen requested, XLIO passes `IBV_ACCESS_RELAXED_ORDERING` to libibverbs. If the build's verbs\nheaders do not provide this flag, XLIO logs a warning and continues without applying the request.\nA modern libibverbs can also mask optional access flags when paired with a kernel that does not\nsupport them, without reporting that decision to XLIO. Startup output therefore reports whether\nXLIO requested Relaxed Ordering, not the effective hardware ordering mode.\n\nThis setting does not affect memory regions registered directly by the application."
+                        }
+                    },
+                    "additionalProperties": false
+                },
                 "striding_rq": {
                     "type": "object",
                     "description": "Striding Receive Queue settings for optimized packet processing.",
