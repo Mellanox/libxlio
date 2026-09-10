@@ -8,6 +8,7 @@
 #define SYS_VARS_H
 
 #include <experimental/optional>
+#include <limits.h>
 #include <netinet/in.h>
 #include <sched.h>
 #include <stdio.h>
@@ -617,6 +618,7 @@ extern const mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_OFFLOADED_SOCKETS              (true)
 #define MCE_DEFAULT_TIMER_RESOLUTION_MSEC          (10)
 #define MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC      (100)
+#define MCE_MAX_TCP_TIMER_RESOLUTION_MSEC          (INT_MAX)
 #define MCE_DEFAULT_TCP_CTL_THREAD                 (option_tcp_ctl_thread::CTL_THREAD_DISABLE)
 #define MCE_DEFAULT_TCP_TIMESTAMP_OPTION           (TCP_TS_OPTION_DISABLE)
 #define MCE_DEFAULT_TCP_NODELAY                    (false)

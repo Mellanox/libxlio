@@ -1513,7 +1513,7 @@ request-response protocols, or when experiencing latency spikes with small messa
 
 ### `network.protocols.tcp.timer_msec`
 
-> **Type:** integer (min: 0)
+> **Type:** integer (range: 0 to 2147483647)
 >
 > **Maps to:** `XLIO_TCP_TIMER_RESOLUTION_MSEC`
 

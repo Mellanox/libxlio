@@ -107,7 +107,8 @@ private:
     size_t m_index;
     size_t m_last_job_size = 0U;
     event_handler_manager_local::time_point m_prev_proc_time;
-    bool m_last_poll_hit = false;
+    bool m_last_poll_hit : 1;
+    bool m_intr_setup_ok : 1;
     entity_context_stats_t m_stats;
 
     int m_wakeup_fd = -1;

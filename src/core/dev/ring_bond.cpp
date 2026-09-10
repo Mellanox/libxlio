@@ -653,7 +653,7 @@ void ring_bond::update_rx_channel_fds()
     m_p_n_rx_channel_fds = new int[m_recv_rings.size()];
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
         size_t num_rx_channel_fds;
-        int *p_rx_channel_fds = m_bond_rings[i]->get_rx_channel_fds(num_rx_channel_fds);
+        int *p_rx_channel_fds = m_recv_rings[i]->get_rx_channel_fds(num_rx_channel_fds);
         /* Assume that a slave ring contains exactly 1 channel fd. */
         NOT_IN_USE(num_rx_channel_fds);
         m_p_n_rx_channel_fds[i] = p_rx_channel_fds[0];
