@@ -248,6 +248,7 @@ public:
     uint16_t worker_threads;
     uint32_t timer_resolution_msec;
     uint32_t tcp_timer_resolution_msec;
+    uint32_t tcp_rto_floor_msec;
     option_tcp_ctl_thread::mode_t tcp_ctl_thread;
     tcp_ts_opt_t tcp_ts_opt;
     bool tcp_nodelay;
@@ -469,6 +470,7 @@ extern const mce_sys_var &safe_mce_sys();
 #define SYS_VAR_WORKER_THREADS            "XLIO_WORKER_THREADS"
 #define SYS_VAR_TIMER_RESOLUTION_MSEC     "XLIO_TIMER_RESOLUTION_MSEC"
 #define SYS_VAR_TCP_TIMER_RESOLUTION_MSEC "XLIO_TCP_TIMER_RESOLUTION_MSEC"
+#define SYS_VAR_TCP_RTO_FLOOR_MSEC        "XLIO_TCP_RTO_FLOOR_MSEC"
 #define SYS_VAR_TCP_CTL_THREAD            "XLIO_TCP_CTL_THREAD"
 #define SYS_VAR_TCP_TIMESTAMP_OPTION      "XLIO_TCP_TIMESTAMP_OPTION"
 #define SYS_VAR_TCP_NODELAY               "XLIO_TCP_NODELAY"
@@ -616,6 +618,9 @@ extern const mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_OFFLOADED_SOCKETS              (true)
 #define MCE_DEFAULT_TIMER_RESOLUTION_MSEC          (10)
 #define MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC      (100)
+#define MCE_MIN_TCP_RTO_FLOOR_MSEC                 (1)
+#define MCE_MAX_TCP_RTO_FLOOR_MSEC                 (120000)
+#define MCE_DEFAULT_TCP_RTO_FLOOR_MSEC             (600)
 #define MCE_DEFAULT_TCP_CTL_THREAD                 (option_tcp_ctl_thread::CTL_THREAD_DISABLE)
 #define MCE_DEFAULT_TCP_TIMESTAMP_OPTION           (TCP_TS_OPTION_DISABLE)
 #define MCE_DEFAULT_TCP_NODELAY                    (false)

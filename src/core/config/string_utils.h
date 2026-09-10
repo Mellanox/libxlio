@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,14 @@
  * to avoid code duplication across the configuration subsystem.
  */
 namespace string_utils {
+
+/**
+ * @brief Strictly parses an unsigned decimal 32-bit integer.
+ *
+ * Accepts one or more ASCII digits and rejects signs, whitespace, trailing
+ * characters, and overflow. The output is unchanged on failure.
+ */
+bool parse_uint32_decimal(const char *value, uint32_t &result);
 
 /**
  * @brief Splits a string by a delimiter character
