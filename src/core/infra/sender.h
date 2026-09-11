@@ -17,7 +17,7 @@ class event;
 
 class neigh_send_data {
 public:
-    neigh_send_data(iovec *iov, size_t sz, header *hdr, uint32_t mtu, uint32_t packet_id);
+    neigh_send_data(const iovec *iov, size_t sz, header *hdr, uint32_t mtu, uint32_t packet_id);
 
     neigh_send_data(neigh_send_data &&snd_data);
 

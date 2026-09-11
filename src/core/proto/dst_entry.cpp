@@ -700,8 +700,7 @@ ssize_t dst_entry::pass_pkt_to_neigh(const iovec *p_iov, size_t sz_iov, uint32_t
     if (m_p_neigh_entry && dummy) {
         configure_eth_headers(m_header_neigh, *dummy, *dummy, m_p_net_dev_val->get_vlan());
 
-        neigh_send_data n_send_info(const_cast<iovec *>(p_iov), sz_iov, m_header_neigh,
-                                    get_route_mtu(), packet_id);
+        neigh_send_data n_send_info(p_iov, sz_iov, m_header_neigh, get_route_mtu(), packet_id);
         ret_val = m_p_neigh_entry->send(n_send_info);
     }
 
