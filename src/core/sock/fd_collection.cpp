@@ -50,8 +50,10 @@ fd_collection::fd_collection()
     }
     fdcoll_logdbg("using open files max limit of %d file descriptors", m_n_fd_map_size);
 
-    m_p_sockfd_map = new sockinfo *[m_n_fd_map_size];
-    memset(m_p_sockfd_map, 0, m_n_fd_map_size * sizeof(sockinfo *));
+    m_p_sockfd_map = new std::atomic<sockinfo *>[m_n_fd_map_size];
+    for (int i = 0; i < m_n_fd_map_size; ++i) {
+        m_p_sockfd_map[i].store(nullptr, std::memory_order_relaxed);
+    }
 
     m_p_epfd_map = new epfd_info *[m_n_fd_map_size];
     memset(m_p_epfd_map, 0, m_n_fd_map_size * sizeof(epfd_info *));
@@ -87,13 +89,9 @@ void fd_collection::prepare_to_close()
 {
     lock();
     for (int fd = 0; fd < m_n_fd_map_size; ++fd) {
-        if (m_p_sockfd_map[fd]) {
-            if (!g_is_forked_child) {
-                sockinfo *p_sfd_api = get_sockfd(fd);
-                if (p_sfd_api) {
-                    p_sfd_api->prepare_to_close(true);
-                }
-            }
+        sockinfo *p_sfd_api = m_p_sockfd_map[fd].load(std::memory_order_relaxed);
+        if (p_sfd_api && !g_is_forked_child) {
+            p_sfd_api->prepare_to_close(true);
         }
     }
     unlock();
@@ -125,16 +123,14 @@ void fd_collection::clear()
     /* Clean up all left overs sockinfo
      */
     for (fd = 0; fd < m_n_fd_map_size; ++fd) {
-        if (m_p_sockfd_map[fd]) {
+        sockinfo *p_sfd_api = m_p_sockfd_map[fd].load(std::memory_order_relaxed);
+        if (p_sfd_api) {
             if (!g_is_forked_child) {
-                sockinfo *p_sfd_api = get_sockfd(fd);
-                if (p_sfd_api) {
-                    p_sfd_api->statistics_print();
-                    p_sfd_api->clean_socket_obj();
-                }
+                p_sfd_api->statistics_print();
+                p_sfd_api->clean_socket_obj();
             }
 
-            m_p_sockfd_map[fd] = nullptr;
+            m_p_sockfd_map[fd].store(nullptr, std::memory_order_relaxed);
             fdcoll_logdbg("destroyed fd=%d", fd);
         }
 
@@ -235,7 +231,7 @@ int fd_collection::addsocket(int fd, int domain, int type, bool check_offload /*
 
     assert(!get_sockfd(fd));
     assert(!get_epfd(fd));
-    m_p_sockfd_map[fd] = p_sfd_api_obj;
+    m_p_sockfd_map[fd].store(p_sfd_api_obj, std::memory_order_release);
 
     unlock();
 
@@ -428,7 +424,7 @@ int fd_collection::del_sockfd(int fd, bool is_for_udp_pool /*=false*/)
             // the socket is already closable
             // This may register the socket to be erased by internal thread,
             // However, a timer may tick on this socket before it is deleted.
-            ret_val = del_socket(fd, m_p_sockfd_map);
+            ret_val = del_socket(fd);
         } else {
             lock();
             // The socket is not ready for close.
@@ -437,11 +433,11 @@ int fd_collection::del_sockfd(int fd, bool is_for_udp_pool /*=false*/)
             // This will be done from fd_col timer handler.
             // Used for UDP socket pool as well
             // so closed UDP sockets will be deleted at the end of the world
-            if (m_p_sockfd_map[fd] == p_sfd_api) {
+            if (m_p_sockfd_map[fd].load(std::memory_order_relaxed) == p_sfd_api) {
                 if (!is_for_udp_pool) {
                     ++g_global_stat_static.n_pending_sockets;
                 }
-                m_p_sockfd_map[fd] = nullptr;
+                m_p_sockfd_map[fd].store(nullptr, std::memory_order_release);
                 m_pending_to_remove_lst.push_front(p_sfd_api);
             }
 
@@ -460,7 +456,7 @@ bool fd_collection::handle_worker_threads_mode_close(int fd, sockinfo *p_sfd_api
         if (tcp_si->get_entity_context()) {
             // Incoming/outgoing sockets - delegate to entity context and return
             // Clear the socket from the fd_collection before delegating
-            clear_socket(fd);
+            clear_socket(fd, p_sfd_api);
             handle_socket_close_job_worker_threads_mode(tcp_si);
             return true; // Should return from del_sockfd
         } else if (tcp_si->get_listen_context()) {
@@ -540,7 +536,7 @@ template <typename cls> int fd_collection::del(int fd, bool b_cleanup, cls **map
     return -1;
 }
 
-int fd_collection::del_socket(int fd, sockinfo **map_type)
+int fd_collection::del_socket(int fd)
 {
     fdcoll_logfunc("fd=%d", fd);
 
@@ -549,9 +545,9 @@ int fd_collection::del_socket(int fd, sockinfo **map_type)
     }
 
     lock();
-    sockinfo *p_obj = map_type[fd];
+    sockinfo *p_obj = m_p_sockfd_map[fd].load(std::memory_order_relaxed);
     if (p_obj) {
-        map_type[fd] = nullptr;
+        m_p_sockfd_map[fd].store(nullptr, std::memory_order_release);
         unlock();
         p_obj->clean_socket_obj();
         return 0;
@@ -599,8 +595,8 @@ bool fd_collection::pop_socket_pool(int &fd, bool &add_to_udp_pool, int type)
         // use fd from pool - will skip creation of new fd by os
         sockinfo *sockfd = m_socket_pool.top();
         fd = sockfd->get_fd();
-        if (!m_p_sockfd_map[fd]) {
-            m_p_sockfd_map[fd] = sockfd;
+        if (!m_p_sockfd_map[fd].load(std::memory_order_relaxed)) {
+            m_p_sockfd_map[fd].store(sockfd, std::memory_order_release);
             m_pending_to_remove_lst.erase(sockfd);
         }
         sockfd->prepare_to_close_socket_pool(false);
