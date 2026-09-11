@@ -305,6 +305,10 @@ public:
     inline void sock_pop_descs_rx_ready(descq_t *cache);
 
     entity_context *get_entity_context() const { return m_entity_context; }
+    bool should_use_threads_mode() const
+    {
+        return safe_mce_sys().is_threads_mode() && !m_is_xlio_socket;
+    }
     uint32_t get_epoll_event_flags() { return m_epoll_event_flags; }
     uint32_t get_epoll_event_flags_thread() const { return m_epoll_event_flags_thread; }
     void set_epoll_event_flags(uint32_t events) { m_epoll_event_flags = events; }
