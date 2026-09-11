@@ -90,8 +90,15 @@ if test "x$dpcp_explicitly_specified" = "xno"; then
 
     (
         cd "$DPCP_BUILD_DIR" || exit 1
+        case "$with_dpcp_flags" in
+            *[[!A-Za-z0-9._,+:/\"\'\ =-]]*)
+                AC_MSG_ERROR([--with-dpcp-flags contains unsupported characters])
+                ;;
+        esac
         set -f
-        set -- $with_dpcp_flags
+        # Reparse trusted configure input so quoted CMake values can contain whitespace.
+        # For example, --with-dpcp-flags="-DCMAKE_CXX_FLAGS='-O3 -g'" remains one CMake argument.
+        eval "set -- $with_dpcp_flags"
         set +f
         CC="$CC" CXX="$CXX" "$CMAKE" \
             "-DCMAKE_CXX_FLAGS:STRING=-O2" \

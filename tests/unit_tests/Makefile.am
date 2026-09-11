@@ -68,6 +68,7 @@ libgtest_la_SOURCES = \
 unit_tests_LDADD = libgtest.la $(LIBJSON_LIBS)
 
 unit_tests_CPPFLAGS = \
+	-DXLIO_STATIC_BUILD \
 	-I$(top_srcdir)/ \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/core \
@@ -94,6 +95,8 @@ unit_tests_SOURCES = \
 	config/parameter_descriptor.cpp \
 	config/schema_analyzer.cpp \
 	job_queue/job_queue_test.cpp \
+	proto/mapping_test.cpp \
+	$(top_builddir)/src/core/proto/mapping.cpp \
     $(top_builddir)/src/core/config/loaders/inline_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/json_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/key_resolver.cpp \
