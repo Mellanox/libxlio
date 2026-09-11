@@ -2728,6 +2728,11 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         return -1;
     }
 
+    if (m_conn_state == TCP_CONN_CONNECTING) {
+        errno = EALREADY;
+        return -1;
+    }
+
     // Calling connect more than once should return error codes
     if (m_sock_state > TCP_SOCK_BOUND) {
         switch (m_sock_state) {
