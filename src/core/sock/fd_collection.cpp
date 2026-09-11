@@ -99,6 +99,25 @@ void fd_collection::prepare_to_close()
     unlock();
 }
 
+void fd_collection::wakeup_offloaded_sockets()
+{
+    lock();
+    for (int fd = 0; fd < m_n_fd_map_size; ++fd) {
+        // Lock-free is safe: do_wakeup() is a no-op unless the owner is parked, and a missed wake
+        // this pass is recovered by the drain loop's repeated calls.
+        sockinfo *p_sfd_api = m_p_sockfd_map[fd];
+        if (p_sfd_api) {
+            p_sfd_api->m_sock_wakeup_pipe.do_wakeup();
+        }
+        // epfd_info waiters (epoll_wait/poll/select) too.
+        epfd_info *p_epfd = m_p_epfd_map[fd];
+        if (p_epfd) {
+            p_epfd->do_wakeup();
+        }
+    }
+    unlock();
+}
+
 // Called in destructor after Internal-Thread destroyed
 void fd_collection::clear()
 {

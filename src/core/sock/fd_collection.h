@@ -150,6 +150,13 @@ public:
     void clear();
     void prepare_to_close();
 
+    /**
+     * Wake offloaded sockets/epfds parked in a blocking wait so they re-check g_b_exit and leave
+     * the offload path. Call repeatedly while draining: do_wakeup() only fires for an
+     * already-parked waiter, so one parking just after a wake is caught next pass.
+     */
+    void wakeup_offloaded_sockets();
+
     void offloading_rule_change_thread(bool offloaded, pthread_t tid);
 
     /**
