@@ -211,6 +211,8 @@ void poll_group::add_ring(ring *rng, ring_alloc_logic_attr *attr)
                     std::make_pair(std::make_unique<ring_alloc_logic_attr>(*attr), nd));
             }
         }
+
+        notify_ring_added(rng);
     }
 }
 

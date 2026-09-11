@@ -1513,7 +1513,7 @@ request-response protocols, or when experiencing latency spikes with small messa
 
 ### `network.protocols.tcp.timer_msec`
 
-> **Type:** integer (min: 0)
+> **Type:** integer (range: 0 to 2147483647)
 >
 > **Maps to:** `XLIO_TCP_TIMER_RESOLUTION_MSEC`
 
@@ -2548,7 +2548,9 @@ lower for non-offloaded responsiveness, higher for latency.
 
 Controls how long (in microseconds) XLIO busy-polls the
 hardware Completion Queue during select()/poll()/epoll_wait()
-before arming interrupts and sleeping.
+before arming interrupts and sleeping. In worker-threads mode,
+the same budget controls how long an idle worker polls before
+it arms RX Completion Queue notifications and sleeps.
 
 **Mechanism:** Polls the Completion Queue for up to this many
 microseconds (capped by the application timeout). On expiry
@@ -2571,16 +2573,16 @@ CPU spinning before every sleep transition.
 - *Too high / -1:* Thread spins idle, starving co-located
   threads on the same core.
 
-For most workloads the default (100000 = 100 milliseconds)
+For most workloads the default (10000 = 10 milliseconds)
 is sufficient. Use -1 only with dedicated CPU cores.
 
 **Auto-modified by:** ultra_latency (-1), latency (-1), nginx (0),
-nginx_dpu (0), threads mode (-1).
+nginx_dpu (0).
 
 **Related:** [`blocking_rx_poll_usec`](#performancepollingblocking_rx_poll_usec) (same for recv()/read()),
 [`poll_os_ratio`](#performancepollingiomuxpoll_os_ratio) (OS polling within the busy-poll loop).
 
-**Default:** `100000`
+**Default:** `10000`
 
 ### `performance.polling.iomux.skip_os`
 
@@ -3882,13 +3884,15 @@ doesn't affect its behavior.
 - *>0 (worker threads):* XLIO spawns N worker threads.
   XLIO binds sockets to the threads and performs networking
   and protocol related operations there. Memory copies are
-  done in the application threads.
+  done in the application threads. Workers busy-poll for the
+  configured [`poll_usec`](#performancepollingiomuxpoll_usec) budget, then arm RX Completion Queue
+  notifications and sleep until work arrives. A value of -1
+  keeps them in busy-poll mode.
 
 **Limitations:**
 
 - TCP only.
 - Non-blocking sockets only.
-- Worker threads work in busy-polling mode only.
 - Sockets are distributed across threads in round-robin only.
 
 **Tradeoffs:**
@@ -3899,22 +3903,23 @@ doesn't affect its behavior.
   frequently or socket distribution strategy is unpredictable,
   can lead to a lock contention.
 - *>0 (worker threads):* Independence from application
-  architecture and behavior. Extra CPU cost and latency.
+  architecture and behavior. Extra scheduling and handoff
+  latency. A finite polling budget reduces idle CPU at the
+  cost of interrupt wakeup latency.
 
-**Sizing:** In busy-polling mode, each worker consumes
-one CPU core at 100%. Set to cores you can dedicate, not
-connection count. For applications with per-thread
+**Sizing:** Set the worker count to cores or concurrency you
+can dedicate, not connection count. With [`poll_usec`](#performancepollingiomuxpoll_usec) -1 each
+worker consumes one CPU core at 100%; a finite value allows
+idle workers to sleep. For applications with per-thread
 sockets and frequent socket calls, the default (0) is
 sufficient and lower-latency. Use workers for legacy
 applications that share sockets across threads or call
 socket APIs infrequently. Too few workers: job queue
 backs up ("Max" column in xlio_stats view 6). Too
-many: CPU cores wasted on idle polling ("Idle" column
-near 100%).
+many: unnecessary handoffs and worker resources.
 
 **Forced changes** when >0: [`performance.buffers.tx.buf_size`](#performancebufferstxbuf_size) 256 KB,
-[`tcp_buffer_batch`](#performanceringstxtcp_buffer_batch) 1, [`poll_usec`](#performancepollingiomuxpoll_usec) -1,
-[`periodic_drain_msec`](#performancecompletion_queueperiodic_drain_msec) 0.
+[`tcp_buffer_batch`](#performanceringstxtcp_buffer_batch) 1, [`periodic_drain_msec`](#performancecompletion_queueperiodic_drain_msec) 0.
 
 **Monitoring:** `xlio_stats -v6` provides worker threads
 counters.

@@ -17,6 +17,7 @@
 #define EPFD_MAX_OFFLOADED_STR 150
 
 #define CQ_FD_MARK 0xabcd
+#define CQ_FD_MASK 0xffffffffULL
 
 int epfd_info::remove_fd_from_epoll_os(int fd)
 {
@@ -80,8 +81,6 @@ epfd_info::~epfd_info()
 {
     __log_funcall("");
     sockinfo *sock_fd;
-
-    // Meny: going over all handled fds and removing epoll context.
 
     lock();
 
@@ -169,7 +168,8 @@ bool epfd_info::is_cq_fd(uint64_t data)
 
     lock();
     // todo consider making m_ready_cq_fd_q a set instead of queue
-    m_ready_cq_fd_q.push_back((int)(data & 0xffff));
+    // TODO: Modifying the queue is unexpected and confusing in the method with name is_cq_fd().
+    m_ready_cq_fd_q.push_back(static_cast<int>(data & CQ_FD_MASK));
     unlock();
 
     return true;
@@ -202,7 +202,6 @@ int epfd_info::add_fd(int fd, epoll_event *event)
 
     if (temp_sock_fd_api && temp_sock_fd_api->skip_os_select()) {
         __log_dbg("fd=%d must be skipped from os epoll()", fd);
-        // Checking for duplicate fds
         if (get_fd_rec(fd)) {
             errno = EEXIST;
             __log_dbg(
@@ -306,28 +305,32 @@ void epfd_info::increase_ring_ref_count(ring *ring)
     m_ring_map_lock.lock();
     ring_map_t::iterator iter = m_ring_map.find(ring);
     if (iter != m_ring_map.end()) {
-        // increase ref count
         iter->second++;
     } else {
         m_ring_map[ring] = 1;
 
-        // add cq channel fd to the epfd
-        size_t num_ring_rx_fds;
-        int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
-        for (size_t i = 0; i < num_ring_rx_fds; i++) {
-            epoll_event evt = {0, {nullptr}};
-            evt.events = EPOLLIN | EPOLLPRI;
-            int fd = ring_rx_fds_array[i];
-            evt.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | fd);
-            int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, fd, &evt);
-            BULLSEYE_EXCLUDE_BLOCK_START
-            if (ret < 0) {
-                __log_dbg("failed to add cq fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd,
-                          errno);
-            } else {
-                __log_dbg("add cq fd=%d to epfd=%d", fd, m_epfd);
+        // In threads mode the worker threads own the CQs and the application never drains
+        // the comp channels, so watching them here would keep the epfd readable until a
+        // worker acks the event and would grow m_ready_cq_fd_q without bound.
+        if (!safe_mce_sys().is_threads_mode()) {
+            // add cq channel fd to the epfd
+            size_t num_ring_rx_fds;
+            int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
+            for (size_t i = 0; i < num_ring_rx_fds; i++) {
+                epoll_event evt = {0, {nullptr}};
+                evt.events = EPOLLIN | EPOLLPRI;
+                int fd = ring_rx_fds_array[i];
+                evt.data.u64 = (((uint64_t)CQ_FD_MARK << 32) | (fd & CQ_FD_MASK));
+                int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_ADD, fd, &evt);
+                BULLSEYE_EXCLUDE_BLOCK_START
+                if (ret < 0) {
+                    __log_dbg("failed to add cq fd=%d to epoll epfd=%d (errno=%d %m)", fd, m_epfd,
+                              errno);
+                } else {
+                    __log_dbg("add cq fd=%d to epfd=%d", fd, m_epfd);
+                }
+                BULLSEYE_EXCLUDE_BLOCK_END
             }
-            BULLSEYE_EXCLUDE_BLOCK_END
         }
     }
     m_ring_map_lock.unlock();
@@ -345,36 +348,54 @@ void epfd_info::decrease_ring_ref_count(ring *ring)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    // decrease ref count
     iter->second--;
 
     if (iter->second == 0) {
         m_ring_map.erase(iter);
 
-        // remove cq channel fd from the epfd
-        size_t num_ring_rx_fds;
-        int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
-        for (size_t i = 0; i < num_ring_rx_fds; i++) {
-            // delete cq fd from epfd
-            int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], nullptr);
-            BULLSEYE_EXCLUDE_BLOCK_START
-            if (ret < 0) {
-                __log_dbg("failed to remove cq fd=%d from epfd=%d (errno=%d %m)",
-                          ring_rx_fds_array[i], m_epfd, errno);
-            } else {
-                __log_dbg("remove cq fd=%d from epfd=%d", ring_rx_fds_array[i], m_epfd);
+        // Not registered in threads mode, see increase_ring_ref_count().
+        if (!safe_mce_sys().is_threads_mode()) {
+            // remove cq channel fd from the epfd
+            size_t num_ring_rx_fds;
+            int *ring_rx_fds_array = ring->get_rx_channel_fds(num_ring_rx_fds);
+            for (size_t i = 0; i < num_ring_rx_fds; i++) {
+                // delete cq fd from epfd
+                int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, ring_rx_fds_array[i], nullptr);
+                BULLSEYE_EXCLUDE_BLOCK_START
+                if (ret < 0) {
+                    __log_dbg("failed to remove cq fd=%d from epfd=%d (errno=%d %m)",
+                              ring_rx_fds_array[i], m_epfd, errno);
+                } else {
+                    __log_dbg("remove cq fd=%d from epfd=%d", ring_rx_fds_array[i], m_epfd);
+                }
+                BULLSEYE_EXCLUDE_BLOCK_END
             }
-            BULLSEYE_EXCLUDE_BLOCK_END
         }
     }
     m_ring_map_lock.unlock();
 }
 
-bool epfd_info::move_entity_context_ready_events()
+// Assumed lock. When arm_wakeup is set, the application is about to sleep: each
+// entity context is armed in the same epfd critical section that marks the
+// application sleeping, so a worker claiming the wakeup can never run its
+// do_wakeup() before going_to_sleep() becomes visible.
+bool epfd_info::move_entity_context_ready_events(bool arm_wakeup)
 {
-    std::for_each(begin(m_entity_context_events), end(m_entity_context_events),
-                  [this](auto &itr) { itr.move_epoll_ready_events(m_ready_fds); });
+    std::for_each(
+        begin(m_entity_context_events), end(m_entity_context_events),
+        [this, arm_wakeup](auto &itr) { itr.move_epoll_ready_events(m_ready_fds, arm_wakeup); });
     return !m_ready_fds.empty();
+}
+
+// Assumed lock. Keeps the contexts armed while any other waiter still sleeps on
+// this epfd - the shared wakeup fd wakes all of them with a single signal.
+void epfd_info::disarm_entity_context_wakeup()
+{
+    if (m_is_sleeping > 0) {
+        return;
+    }
+    std::for_each(begin(m_entity_context_events), end(m_entity_context_events),
+                  [](auto &itr) { itr.disarm_wakeup(); });
 }
 
 void epfd_info::add_rx_migration_cand(sockinfo *si)
@@ -424,9 +445,7 @@ int epfd_info::del_fd(int fd, bool passthrough)
     if (temp_sock_fd_api && (fi->offloaded_index > 0)) {
         assert(temp_sock_fd_api->get_epoll_context_fd() == m_epfd);
 
-        /* Firstly remove epoll context from socket
-         * to avoid new events insertion into m_ready_fds queue
-         */
+        // Remove epoll context from socket to avoid new events insertion into m_ready_fds queue
         unlock();
         m_ring_map_lock.lock();
         temp_sock_fd_api->remove_epoll_context(this);
@@ -480,7 +499,6 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
     int ret;
 
     __log_funcall("fd=%d", fd);
-    // find the fd in local table
     fd_rec = get_fd_rec(fd);
     if (!fd_rec) {
         errno = ENOENT;
@@ -581,7 +599,14 @@ void epfd_info::insert_epoll_event_cb(sockinfo *sock_fd, uint32_t event_flags)
         if (event_flags & (sock_fd->m_fd_rec.events | EPOLLHUP | EPOLLERR)) {
             size_t vecindex =
                 sock_fd->get_entity_context()->get_index() % m_entity_context_events.size();
-            m_entity_context_events[vecindex].add_epoll_ready_socket(event_flags, sock_fd);
+            // The wakeup decision is taken under the per-context lock that the
+            // insert already holds. Only a context armed by a sleeping
+            // application yields a claim, which also coalesces the wakeups.
+            if (m_entity_context_events[vecindex].add_epoll_ready_socket(event_flags, sock_fd)) {
+                lock();
+                do_wakeup();
+                unlock();
+            }
         }
         return;
     }
@@ -816,7 +841,7 @@ void epfd_info::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     }
 }
 
-void epfd_info_entity_context_events::add_epoll_ready_socket(uint64_t events, sockinfo *si)
+bool epfd_info_entity_context_events::add_epoll_ready_socket(uint64_t events, sockinfo *si)
 {
     std::lock_guard<decltype(m_epoll_ready_sockets_lock)> lock(m_epoll_ready_sockets_lock);
 
@@ -824,7 +849,11 @@ void epfd_info_entity_context_events::add_epoll_ready_socket(uint64_t events, so
     m_epoll_ready_sockets.push_back_if_absent(si);
     __log_dbg("Adding (threads mode) event %" PRIu64 " (fd=%d)", events, si->get_fd());
 
-    // For interrupt mode need to consider moderation and wakeup the epoll context.
+    // Claim the wakeup. Workers that follow rely on the signal already sent and
+    // on the application merging the whole list.
+    bool claimed = m_app_sleeping;
+    m_app_sleeping = false;
+    return claimed;
 }
 
 void epfd_info_entity_context_events::remove_epoll_ready_socket(sockinfo *si)
@@ -838,13 +867,17 @@ void epfd_info_entity_context_events::remove_epoll_ready_socket(sockinfo *si)
     }
 }
 
-void epfd_info_entity_context_events::move_epoll_ready_events(ep_ready_fd_list_t &out)
+void epfd_info_entity_context_events::move_epoll_ready_events(ep_ready_fd_list_t &out,
+                                                              bool arm_wakeup)
 {
+    std::lock_guard<decltype(m_epoll_ready_sockets_lock)> lock(m_epoll_ready_sockets_lock);
+    if (arm_wakeup) {
+        m_app_sleeping = true;
+    }
     if (m_epoll_ready_sockets.empty()) {
         return;
     }
 
-    std::lock_guard<decltype(m_epoll_ready_sockets_lock)> lock(m_epoll_ready_sockets_lock);
     sockinfo *si = m_epoll_ready_sockets.front();
     while (si) {
         si->set_epoll_event_flags(si->get_epoll_event_flags() | si->get_epoll_event_flags_thread());
@@ -855,4 +888,11 @@ void epfd_info_entity_context_events::move_epoll_ready_events(ep_ready_fd_list_t
 
         si = m_epoll_ready_sockets.next(si);
     }
+    m_epoll_ready_sockets.clear();
+}
+
+void epfd_info_entity_context_events::disarm_wakeup()
+{
+    std::lock_guard<decltype(m_epoll_ready_sockets_lock)> lock(m_epoll_ready_sockets_lock);
+    m_app_sleeping = false;
 }

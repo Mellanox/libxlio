@@ -25,13 +25,19 @@ public:
 
     ~epfd_info_entity_context_events() { m_epoll_ready_sockets.clear(); }
 
-    void add_epoll_ready_socket(uint64_t events, sockinfo *si);
+    // Returns true if the caller must wake up the application.
+    bool add_epoll_ready_socket(uint64_t events, sockinfo *si);
     void remove_epoll_ready_socket(sockinfo *si);
-    void move_epoll_ready_events(ep_ready_fd_list_t &out);
+    void move_epoll_ready_events(ep_ready_fd_list_t &out, bool arm_wakeup);
+    void disarm_wakeup();
 
 private:
     epoll_ready_sock_list m_epoll_ready_sockets;
     lock_spin_recursive m_epoll_ready_sockets_lock;
+    // Guarded by m_epoll_ready_sockets_lock. Set while the application sleeps,
+    // so that a worker takes the wakeup decision inside the critical section it
+    // already holds and touches the shared epfd lock only when it must signal.
+    bool m_app_sleeping = false;
 };
 
 enum class epoll_poll_type_t {
@@ -109,7 +115,8 @@ public:
     void remove_epoll_event(sockinfo *sock_fd, uint32_t event_flags);
     void increase_ring_ref_count(ring *ring);
     void decrease_ring_ref_count(ring *ring);
-    bool move_entity_context_ready_events();
+    bool move_entity_context_ready_events(bool arm_wakeup = false);
+    void disarm_entity_context_wakeup();
     void add_rx_migration_cand(sockinfo *si);
     void rx_migration_check();
 

@@ -853,7 +853,7 @@ The report doesn't show CPU utilization — this is the most common blind spot.
 
 #### Checklist: Polling Configuration
 If the workload is latency-sensitive:
-- `performance.polling.iomux.poll_usec` (default: `100000` µs = 100ms):
+- `performance.polling.iomux.poll_usec` (default: `10000` µs = 10ms):
   For ultra-low latency, set to `-1` (infinite polling, 100% CPU).
 - `performance.polling.blocking_rx_poll_usec` (default: `100000` µs):
   Same consideration for blocking recv operations.
@@ -1363,7 +1363,7 @@ are set via JSON config file or `XLIO_INLINE_CONFIG` environment variable.
 
 | Config Knob | Default | Description |
 |---|---|---|
-| `performance.polling.iomux.poll_usec` | `100000` (100 ms) | Duration to busy-poll before falling back to OS sleep. `-1` = infinite (100% CPU). |
+| `performance.polling.iomux.poll_usec` | `10000` (10 ms) | Duration to busy-poll before falling back to OS sleep. `-1` = infinite (100% CPU). |
 | `performance.polling.iomux.poll_os_ratio` | `10` | Ratio of OS polls to XLIO polls. `0` = only poll offloaded sockets. |
 | `performance.polling.blocking_rx_poll_usec` | `100000` (100 ms) | Busy-poll duration for blocking recv operations. |
 | `performance.polling.rx_poll_on_tx_tcp` | `false` | Poll RX during TCP TX operations. Enable for bidirectional workloads. |
