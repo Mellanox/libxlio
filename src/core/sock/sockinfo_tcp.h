@@ -240,13 +240,15 @@ public:
         return static_cast<unsigned>(std::max(m_snd_buf.load(), 0));
     }
 
+    inline void sndbuf_reserve(uint32_t bytes) { m_snd_buf -= static_cast<int32_t>(bytes); }
+
     inline unsigned get_mss() { return m_pcb.mss; }
 
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     ssize_t tcp_tx(xlio_tx_call_attr_t &tx_arg);
     ssize_t tcp_tx_thread(xlio_tx_call_attr_t &tx_arg);
-    void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size,
-                          int flags) override;
+    void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size, int flags,
+                          const tx_call_ctx &tx_ctx) override;
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
@@ -357,11 +359,18 @@ public:
         return rx_flow_iter->first;
     }
 
-    void rx_poll_on_tx_if_needed()
+    void rx_poll_on_tx()
     {
-        if (m_sysvar_rx_poll_on_tx_tcp && !m_entity_context) {
+        if (!m_entity_context) {
             int poll_count = 0;
             rx_wait_helper(poll_count, false);
+        }
+    }
+
+    void rx_poll_on_tx_if_needed()
+    {
+        if (m_sysvar_rx_poll_on_tx_tcp) {
+            rx_poll_on_tx();
         }
     }
 
@@ -384,7 +393,23 @@ public:
     tcp_timers_collection *get_tcp_timer_collection();
     bool is_cleaned() const { return m_is_cleaned; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    /*
+     * Deliver received data with the callback matching the socket ownership model.
+     * Keep this dispatch inline because the ownership mode is stable for the socket lifetime.
+     */
+    static inline err_t rx_lwip_cb_dispatch(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
+                                            err_t err)
+    {
+        sockinfo_tcp *conn = static_cast<sockinfo_tcp *>(arg);
+
+        if (conn->m_entity_context && likely(err == ERR_OK)) {
+            return rx_lwip_cb_entity_context(arg, tpcb, p, err);
+        }
+
+        return rx_lwip_cb(arg, tpcb, p, err);
+    }
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    void reuse_buffer(mem_buf_desc_t *buff);
 
     int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey, unsigned flags,
                        void *opaque_op);
@@ -477,6 +502,7 @@ private:
                                                   int errno_to_restore);
     ssize_t tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, int errno_to_restore);
     ssize_t tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg);
+    int tcp_tx_prepare_call_ctx(const xlio_tx_call_attr_t &tx_arg, tx_call_ctx &tx_ctx);
     err_t handle_fin(struct tcp_pcb *pcb, err_t err);
     void handle_rx_lwip_cb_error(pbuf *p);
     void rx_lwip_cb_error(pbuf *p);
@@ -523,7 +549,6 @@ private:
     // it can't help callers
     inline void return_pending_rx_buffs();
     inline void return_pending_tx_buffs();
-    inline void reuse_buffer(mem_buf_desc_t *buff);
     mem_buf_desc_t *get_next_desc(mem_buf_desc_t *p_desc) override;
     mem_buf_desc_t *get_next_desc_peek(mem_buf_desc_t *p_desc, int &rx_pkt_ready_list_idx) override;
     timestamps_t *get_socket_timestamps() override;

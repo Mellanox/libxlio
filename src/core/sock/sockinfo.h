@@ -6,6 +6,8 @@
 
 #include <unordered_map>
 #include <deque>
+#include <memory>
+#include <vector>
 #include <ifaddrs.h>
 #include <sys/socket.h>
 #include "config.h"
@@ -13,6 +15,7 @@
 #include "dev/cq_mgr_rx.h"
 #include "dev/buffer_pool.h"
 #include "sock/cleanable_obj.h"
+#include "sock/tx_call_ctx.h"
 #include "vlogger/vlogger.h"
 #include "utils/lock_wrapper.h"
 #include "util/data_updater.h"
@@ -256,7 +259,7 @@ public:
     virtual void rx_data_recvd(uint32_t tot_size) = 0;
     virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg) = 0;
     virtual void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size,
-                                  int flags) = 0;
+                                  int flags, const tx_call_ctx &tx_ctx) = 0;
     virtual bool is_readable(bool do_poll = true, fd_array_t *p_fd_array = nullptr) = 0;
     virtual bool is_writeable() = 0;
     virtual bool is_errorable(int *errors) = 0;

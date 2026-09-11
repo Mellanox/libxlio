@@ -2198,12 +2198,13 @@ tx_packet_to_os_stats:
 }
 
 void sockinfo_udp::tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size,
-                                    int flags)
+                                    int flags, const tx_call_ctx &tx_ctx)
 {
     NOT_IN_USE(buf_list);
     NOT_IN_USE(offset);
     NOT_IN_USE(size);
     NOT_IN_USE(flags);
+    NOT_IN_USE(tx_ctx);
 }
 
 ssize_t sockinfo_udp::check_payload_size(const iovec *p_iov, ssize_t sz_iov)

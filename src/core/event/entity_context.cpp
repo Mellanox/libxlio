@@ -95,6 +95,9 @@ void entity_context::process()
         case JOB_TYPE_SOCK_RX_DATA_RECVD:
             rx_data_recvd_job(job);
             break;
+        case JOB_TYPE_SOCK_TLS_SETUP:
+            tls_setup_job(job);
+            break;
         case JOB_TYPE_SOCK_CLOSE:
             close_socket_job(job);
             break;
@@ -147,7 +150,7 @@ void entity_context::tx_data_job(const job_desc &job)
         ctx_logwarn("Invalid TX job");
         return;
     }
-    job.sock->tx_thread_commit(job.buf, job.offset, job.tot_size, job.flags);
+    job.sock->tx_thread_commit(job.buf, job.offset, job.tot_size, job.flags, job.tx_ctx);
 }
 
 void entity_context::add_incoming_socket(sockinfo *sock)
@@ -158,12 +161,37 @@ void entity_context::add_incoming_socket(sockinfo *sock)
     }
 }
 
+void entity_context::release_rx_buffers(const job_desc &job)
+{
+    if (!job.buf) {
+        return;
+    }
+
+    if (job.buf->lwip_pbuf.type == PBUF_ZEROCOPY &&
+        job.buf->lwip_pbuf.desc.attr == PBUF_DESC_TLS_RX) {
+        /* Zerocopy wrappers produced by the TLS receive path reference the ring buffers
+         * that hold the encrypted record. Return them through reuse_buffer(), which
+         * unwraps them and releases the underlying buffers to the ring.
+         */
+        sockinfo_tcp *sock = reinterpret_cast<sockinfo_tcp *>(job.sock);
+        mem_buf_desc_t *buf = job.buf;
+
+        do {
+            mem_buf_desc_t *next = buf->p_next_desc;
+            buf->p_next_desc = nullptr;
+            sock->reuse_buffer(buf);
+            buf = next;
+        } while (buf);
+        return;
+    }
+
+    /* coverity[check_return] */
+    job.buf->p_desc_owner->reclaim_recv_buffers(job.buf);
+}
+
 void entity_context::rx_data_recvd_job(const job_desc &job)
 {
-    if (job.buf) {
-        /* coverity[check_return] */
-        job.buf->p_desc_owner->reclaim_recv_buffers(job.buf);
-    }
+    release_rx_buffers(job);
 
     if (job.sock) {
         job.sock->rx_data_recvd(job.tot_size);
@@ -182,6 +210,20 @@ void entity_context::listen_socket_job(const job_desc &job)
     } else {
         ctx_logdbg("Unsupported socket protocol %hd for Threads mode", sock->get_protocol());
     }
+}
+
+void entity_context::tls_setup_job(const job_desc &job)
+{
+#ifdef DEFINED_UTLS
+    sockinfo_tcp *sock = reinterpret_cast<sockinfo_tcp *>(job.sock);
+    assert(sock);
+    sockinfo_tcp_ops_tls *tls_ops = reinterpret_cast<sockinfo_tcp_ops_tls *>(sock->get_ops());
+
+    int optname = (job.flags & JOB_FLAG_TLS_TX) ? TLS_TX : TLS_RX;
+    tls_ops->tls_setup_entity_context(optname);
+#else
+    NOT_IN_USE(job);
+#endif /* DEFINED_UTLS */
 }
 
 void entity_context::close_socket_job(const job_desc &job)
