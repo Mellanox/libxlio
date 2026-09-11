@@ -525,7 +525,6 @@ receiver-side drops.
   - `disable` — no congestion control; only appropriate on lossless fabrics (e.g., RoCE
     with PFC) where the network guarantees no packet loss. Using `disable` on a lossy
     network will cause catastrophic retransmit storms.
-- `network.protocols.tcp.timer_msec` — TCP timer granularity affects retransmit detection
 
 **Config fix:**
 - Retransmits are rarely fixed by XLIO config alone — they indicate network issues
@@ -539,6 +538,52 @@ receiver-side drops.
 
 **Ask the user:** "Is the peer also running XLIO? Can you share its tuning report?
 Are there switches between the endpoints? What is the MTU on both sides?"
+
+#### TCP timer trylock starvation **(TCP only)**
+**WARNING:** `tcp_timer_consecutive_skips_max: <N> # WARNING: trylock starvation; <K>/<T> sockets in stats pool reached >=2 consecutive skips`
+**WARNING:** `tcp_timer_consecutive_skips_max_global: <N> # WARNING: trylock starvation; process high-water includes destroyed sockets no longer in pool`
+**WARNING:** `tcp_timer_consecutive_skips_max_global: <N> # WARNING: trylock starvation; per-socket distribution unavailable (enable monitor.stats.fd_num for distribution)`
+
+Two labels carry distinct semantics; each line corresponds to exactly one
+source so the warning text never contradicts the count it shows.
+
+- `tcp_timer_consecutive_skips_max` (no `_global` suffix): per-socket-aware
+  line emitted only when `monitor.stats.fd_num` is set. The high-water
+  value (`<N>`) and the `<K>/<T> sockets in stats pool reached >=2` count
+  come from the same source: currently living sockets in the stats pool.
+  WARN tag fires only when `<K> > 0` (i.e. at least one living pool socket
+  reached the threshold). If you see this line as a WARN, the misbehaving
+  sockets are in the current pool and are inspectable via socket stats.
+- `tcp_timer_consecutive_skips_max_global`: process-wide high-water,
+  emitted in two configurations:
+  - When `monitor.stats.fd_num` is set, this line accompanies the
+    pool-aware line above and shows the worst streak the process ever
+    saw, including streaks from sockets that have since been destroyed
+    and dropped out of the pool. WARN tag fires when the global
+    high-water alone meets the threshold.
+  - When `monitor.stats.fd_num` is `0`, this is the only TCP timer trylock
+    line emitted (the fallback path); per-socket distribution is
+    unavailable.
+
+**What it means:** XLIO could not acquire the per-socket TCP lock for consecutive timer visits.
+Each miss delays that socket's next fast and slow timer work by approximately `network.protocols.tcp.timer_msec`.
+The affected work can include delayed ACKs, an armed RTO deadline, persist or keepalive processing, and connection-state cleanup.
+The metric does not imply that every missed socket had an armed RTO.
+Two or more consecutive misses trigger a warning because they indicate sustained lock contention.
+
+**What to check:**
+- CPU saturation or long application critical sections around the same sockets
+- Very high connection count with heavy TX on the timer thread CPU
+- Whether `monitor.stats.fd_num` is `0`; the report still prints the process high-water,
+  but per-socket distribution is available only when socket stats are enabled
+- `network.protocols.tcp.timer_msec` - this controls how often the timer thread checks
+  RTO deadlines, not the RTT estimator precision itself
+
+**Config fix:**
+- Pin timer/progress threads away from overloaded application cores where possible
+- Enable `monitor.stats.fd_num` during reproduction to identify affected sockets
+- If sustained `>=2` persists under realistic load, collect XLIO logs and tuning reports
+  from both peers; this is a scheduling or lock-contention issue, not a network loss knob
 
 ### RX Issues
 
@@ -1376,7 +1421,7 @@ are set via JSON config file or `XLIO_INLINE_CONFIG` environment variable.
 | `network.protocols.ip.mtu` | `0` (use OS) | MTU size override (0-9000). Set to 9000 for jumbo frames. |
 | `network.protocols.tcp.congestion_control` | `lwip` (0) | TCP CC algorithm: `lwip` (built-in lightweight CC, default) / `disable` (no CC — only for lossless fabrics with PFC). |
 | `network.protocols.tcp.timestamps` | `disable` | TCP timestamps for RTT estimation. `disable`/`enable`/`os` (follow OS). Enabling improves RTT accuracy but adds slight overhead. |
-| `network.protocols.tcp.timer_msec` | `100` | TCP fast timer resolution in milliseconds. |
+| `network.protocols.tcp.timer_msec` | `100` | TCP fast timer cadence in milliseconds. RTO deadlines are stored in monotonic microseconds, but the timer thread checks them on this cadence. |
 | `network.protocols.tcp.nodelay.enable` | `false` | Disable Nagle's algorithm (TCP_NODELAY). Set by `latency`, `ultra_latency`, `nvme_bf3` profiles. |
 | `network.protocols.tcp.wmem` | `1 MB` (1048576) | LWIP TCP send buffer size. `nginx` profile sets 2 MB. Supports suffixes: B, KB, MB, GB. |
 

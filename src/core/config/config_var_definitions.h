@@ -110,6 +110,7 @@ extern const config_var_info_t<uint16_t, int64_t> CONFIG_VAR_WORKER_THREADS;
 extern const config_var_info_t<bool> CONFIG_VAR_OFFLOADED_SOCKETS;
 extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TIMER_RESOLUTION_MSEC;
 extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC;
+extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TCP_RTO_FLOOR_MSEC;
 extern const config_var_info_t<option_tcp_ctl_thread::mode_t, int64_t> CONFIG_VAR_TCP_CTL_THREAD;
 extern const config_var_info_t<tcp_ts_opt_t, int64_t> CONFIG_VAR_TCP_TIMESTAMP_OPTION;
 extern const config_var_info_t<bool> CONFIG_VAR_TCP_NODELAY;

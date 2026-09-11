@@ -1,6 +1,6 @@
 # XLIO Configuration Reference
 
-This file documents all 121 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
+This file documents all 122 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
@@ -68,6 +68,7 @@ This file documents all 121 XLIO runtime configuration parameters with their typ
   - [`network.protocols.tcp.nodelay.enable`](#networkprotocolstcpnodelayenable) — Disable Nagle's algorithm
   - [`network.protocols.tcp.push`](#networkprotocolstcppush) — Set TCP Push flag
   - [`network.protocols.tcp.quickack`](#networkprotocolstcpquickack) — Enable quick ACKs
+  - [`network.protocols.tcp.rto_floor_msec`](#networkprotocolstcprto_floor_msec) — TCP retransmission timeout floor (msec)
   - [`network.protocols.tcp.timer_msec`](#networkprotocolstcptimer_msec) — TCP timer interval (msec)
   - [`network.protocols.tcp.timestamps`](#networkprotocolstcptimestamps) — TCP timestamps mode
   - [`network.protocols.tcp.wmem`](#networkprotocolstcpwmem) — Write buffer size (bytes)
@@ -1511,28 +1512,60 @@ request-response protocols, or when experiencing latency spikes with small messa
 
 **Default:** `false`
 
+### `network.protocols.tcp.rto_floor_msec`
+
+> **Type:** integer (range: 1 to 120000)
+>
+> **Maps to:** `XLIO_TCP_RTO_FLOOR_MSEC`
+
+Additive floor used by the TCP retransmission-timeout estimator:
+`RTO = min(120 s, SRTT + max(4 x RTTVAR, rto_floor_msec))`.
+
+The floor also clamps the 1s initial RTO, the clean-handshake `3 x RTT` seed, and the
+3s fallback after a SYN retransmission whenever it is larger than those values.
+
+The default 600ms preserves XLIO's conservative loss-detection envelope and protects
+high-connection-count workloads from spurious retransmission and congestion collapse
+when scheduling or ACK service is delayed. Latency-sensitive deployments can lower the
+floor, for example to 200ms, when their measured scheduling envelope makes that safe.
+A lower floor detects real packet loss sooner but increases exposure to spurious RTOs.
+
+This value does not change the TCP timer check cadence.
+[`network.protocols.tcp.timer_msec`](#networkprotocolstcptimer_msec) controls when XLIO checks the absolute deadline.
+
+**Default:** `600`
+
 ### `network.protocols.tcp.timer_msec`
 
 > **Type:** integer (min: 0)
 >
 > **Maps to:** `XLIO_TCP_TIMER_RESOLUTION_MSEC`
 
-Resolution in milliseconds for TCP internal timers.
+Resolution in milliseconds for TCP internal timer scheduling.
 
 **Two timer mechanisms:**
 
 - *Fast timer* (fires every timer_msec): Sends delayed ACKs. Maximum ACK delay = timer_msec.
-- *Slow timer* (fires every timer_msec × 2): Retransmission timeout detection, persist probes
-  (zero-window), keepalive probes, connection state cleanup (FIN_WAIT, TIME_WAIT, etc.).
+- *Slow timer* (fires every timer_msec × 2): Schedules when RTO deadline checks run,
+  persist probes (zero-window), keepalive probes, connection state cleanup (FIN_WAIT,
+  TIME_WAIT, etc.).
+
+**Note:** This parameter no longer governs RTT/RTO estimator precision or `TCP_INFO`
+timing fields. RTT samples and the retransmission timeout (`tcpi_rto`, `tcpi_rtt`,
+`tcpi_rttvar`) are now measured directly with monotonic microsecond timestamps and are
+independent of `timer_msec`. The slow timer only decides *when* the RTO deadline check
+runs; the deadline itself uses microsecond precision. [`network.protocols.tcp.timestamps`](#networkprotocolstcptimestamps)
+controls the on-wire RFC 1323 timestamp option and is unaffected.
 
 **Tradeoffs:**
 
-- *Lower (10-50ms):* Faster packet loss detection, lower delayed ACK
+- *Lower (10-50ms):* Faster packet loss detection (RTO check cadence), lower delayed ACK
   latency when quickack is disabled. Higher CPU overhead and more
   frequent internal thread lock contention from timer processing.
 - *Higher (200-500ms):* Lower CPU overhead, less timer thread
   contention, better for high connection counts. Slower loss
-  detection, higher ACK latency, less responsive state machine.
+  detection cadence (deadline value unchanged), higher ACK latency, less responsive
+  state machine.
 
 **Sizing:** Match to your latency tolerance. Default 100ms balances responsiveness and CPU.
 Reduce if delayed ACKs are in use and latency matters. Increase for CPU-constrained servers

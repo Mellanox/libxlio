@@ -48,6 +48,7 @@
 #include "core/util/instrumentation.h"
 
 #include "core/config/config_registry.h"
+#include "core/config/string_utils.h"
 #include "core/config/runtime_registry.h"
 #include "core/config/descriptor_providers/json_descriptor_provider.h"
 #include "core/config/loaders/inline_loader.h"
@@ -846,6 +847,7 @@ void mce_sys_var::get_env_params()
     offloaded_sockets = MCE_DEFAULT_OFFLOADED_SOCKETS;
     timer_resolution_msec = MCE_DEFAULT_TIMER_RESOLUTION_MSEC;
     tcp_timer_resolution_msec = MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC;
+    tcp_rto_floor_msec = MCE_DEFAULT_TCP_RTO_FLOOR_MSEC;
     tcp_ctl_thread = MCE_DEFAULT_TCP_CTL_THREAD;
     tcp_ts_opt = MCE_DEFAULT_TCP_TIMESTAMP_OPTION;
     tcp_nodelay = MCE_DEFAULT_TCP_NODELAY;
@@ -1524,6 +1526,19 @@ void mce_sys_var::get_env_params()
         tcp_timer_resolution_msec = atoi(env_ptr);
     }
 
+    if ((env_ptr = getenv(SYS_VAR_TCP_RTO_FLOOR_MSEC))) {
+        uint32_t parsed_floor_msec;
+        if (string_utils::parse_uint32_decimal(env_ptr, parsed_floor_msec)) {
+            tcp_rto_floor_msec = parsed_floor_msec;
+        } else {
+            vlog_printf(VLOG_WARNING,
+                        "TCP RTO floor [%s=%s] is not an unsigned decimal 32-bit value. "
+                        "Using default [%u] msec.\n",
+                        SYS_VAR_TCP_RTO_FLOOR_MSEC, env_ptr, MCE_DEFAULT_TCP_RTO_FLOOR_MSEC);
+            tcp_rto_floor_msec = MCE_DEFAULT_TCP_RTO_FLOOR_MSEC;
+        }
+    }
+
     if ((env_ptr = getenv(SYS_VAR_TCP_CTL_THREAD))) {
         tcp_ctl_thread = option_tcp_ctl_thread::from_str(env_ptr, MCE_DEFAULT_TCP_CTL_THREAD);
         if (tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
@@ -1591,6 +1606,17 @@ void mce_sys_var::get_env_params()
                     SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec,
                     SYS_VAR_TIMER_RESOLUTION_MSEC, timer_resolution_msec, timer_resolution_msec);
         tcp_timer_resolution_msec = timer_resolution_msec;
+    }
+
+    if (tcp_rto_floor_msec < MCE_MIN_TCP_RTO_FLOOR_MSEC ||
+        tcp_rto_floor_msec > MCE_MAX_TCP_RTO_FLOOR_MSEC) {
+        vlog_printf(VLOG_WARNING,
+                    "TCP RTO floor [%s=%u] is out of range [%u, %u]. "
+                    "Using default [%u] msec.\n",
+                    SYS_VAR_TCP_RTO_FLOOR_MSEC, tcp_rto_floor_msec,
+                    MCE_MIN_TCP_RTO_FLOOR_MSEC, MCE_MAX_TCP_RTO_FLOOR_MSEC,
+                    MCE_DEFAULT_TCP_RTO_FLOOR_MSEC);
+        tcp_rto_floor_msec = MCE_DEFAULT_TCP_RTO_FLOOR_MSEC;
     }
 
     if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_CPUSET))) {

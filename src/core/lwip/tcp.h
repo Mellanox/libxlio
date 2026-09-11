@@ -32,12 +32,15 @@
 #ifndef __LWIP_TCP_H__
 #define __LWIP_TCP_H__
 
+#include <stdint.h>
+#include <stddef.h>
 #include <sys/uio.h>
 
 #include "core/lwip/opt.h"
 
 #include "core/lwip/pbuf.h"
 #include "core/lwip/ip_addr.h"
+#include "core/proto/xlio_cache.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -262,7 +265,7 @@ struct tcp_pcb {
     /** TCP specific PCB members */
 
     enum tcp_state private_state; /* TCP state - should only be touched thru get/set functions */
-    bool is_last_seg_dropped;
+    u8_t nrtx; /* number of retransmissions */
     u8_t prio;
     void *callback_arg;
     void *my_container;
@@ -306,24 +309,30 @@ struct tcp_pcb {
     u8_t tcp_timer; /* Timer counter to handle calling slow-timer from tcp_tmr() */
     u32_t tmr;
 
-    /* Retransmission timer. */
+    /* Retransmission timer marker. Kept as tick-domain counter for
+     * duplicate-ACK / fast-retransmit / TCP_USER_TIMEOUT logic. NOT used
+     * for RTO expiration: that's owned by rto_deadline_us (microseconds).
+     */
     s16_t rtime;
 
     u16_t mss; /* maximum segment size */
     u16_t advtsd_mss; /* advertised maximum segment size */
 
-    /* RTT (round trip time) estimation variables */
-    u32_t rttest; /* RTT estimate in 10ms ticks */
+    /* RTT (round trip time) estimation variables, microsecond domain. */
     u32_t rtseq; /* sequence number being timed */
-    u32_t user_timeout_ms; /* timeout in miliseconds */
+    u32_t user_timeout_ms; /* timeout in milliseconds */
     s32_t ticks_since_data_sent;
 #if TCP_CC_ALGO_MOD
     u32_t t_rttupdated; /* number of RTT estimations taken so far */
 #endif
-    s16_t sa, sv; /* @todo document this */
+    s32_t sa_us; /* 8 * SRTT in microseconds; 0 = "no prior sample" sentinel */
+    s32_t sv_us; /* 4 * RTTVAR in microseconds */
 
-    s16_t rto; /* retransmission time-out */
-    u8_t nrtx; /* number of retransmissions */
+    s32_t rto_us; /* retransmission timeout in microseconds */
+    /* Absolute monotonic time at which the in-flight RTT sample started.
+     * Zero means that no sample is in flight.
+     */
+    int64_t rttest_us;
 
     /* fast retransmit/recovery */
     u32_t lastack; /* Highest acknowledged seqno. */
@@ -356,6 +365,14 @@ struct tcp_pcb {
     struct tcp_seg *last_unsent; /* Last unsent (queued) segment. */
     struct tcp_seg *unacked; /* Sent but unacknowledged segments. */
     struct tcp_seg *last_unacked; /* Last element in unacknowledged segments list. */
+
+    /* Absolute deadline (CLOCK_MONOTONIC microseconds) at which the next
+     * RTO retransmission is due. 0 means "no deadline armed". Co-located
+     * with `unacked` so the tcp_slowtmr() per-PCB hot read of
+     * (rto_deadline_us + unacked-head pointer) hits one cache line. The
+     * static_assert below enforces the layout invariant.
+     */
+    int64_t rto_deadline_us;
 #if TCP_QUEUE_OOSEQ
     struct tcp_seg *ooseq; /* Received out of sequence segments. */
 #endif /* TCP_QUEUE_OOSEQ */
@@ -420,6 +437,54 @@ struct tcp_pcb {
         u32_t max_send_sge;
     } tso;
 };
+
+/* The four TX queue heads form one traversal unit in tcp_output(), ACK
+ * processing, retransmission, and teardown.
+ * Keep them contiguous so queue walks do not interleave unrelated timer state.
+ */
+#if defined(__cplusplus)
+static_assert(offsetof(struct tcp_pcb, last_unacked) - offsetof(struct tcp_pcb, unsent) ==
+                  3 * sizeof(struct tcp_seg *),
+              "TCP TX queue heads must remain contiguous");
+static_assert(!TCP_CC_ALGO_MOD ||
+                  offsetof(struct tcp_pcb, unsent) / CACHELINE_SIZE ==
+                      offsetof(struct tcp_pcb, last_unacked) / CACHELINE_SIZE,
+              "TCP TX queue heads must share a cache window in the default build");
+#else
+_Static_assert(offsetof(struct tcp_pcb, last_unacked) - offsetof(struct tcp_pcb, unsent) ==
+                   3 * sizeof(struct tcp_seg *),
+               "TCP TX queue heads must remain contiguous");
+_Static_assert(!TCP_CC_ALGO_MOD ||
+                   offsetof(struct tcp_pcb, unsent) / CACHELINE_SIZE ==
+                       offsetof(struct tcp_pcb, last_unacked) / CACHELINE_SIZE,
+               "TCP TX queue heads must share a cache window in the default build");
+#endif
+
+/* Intra-struct cache-line co-location of rto_deadline_us with unacked.
+ * tcp_slowtmr()'s per-PCB hot read of (rto_deadline_us, unacked-head)
+ * benefits when both fields share a cache line, sparing a second L1D
+ * miss per active PCB. This static_assert proves only the intra-struct
+ * condition (both fields land in the same 64-byte intra-struct window).
+ *
+ * Sharing the cache line at runtime additionally requires the enclosing
+ * tcp_pcb to be 64-byte aligned at allocation. Today tcp_pcb is embedded
+ * in sockinfo_tcp which is heap-allocated via plain `new`, giving
+ * alignof(std::max_align_t) = 16 on x86_64. As a result this is
+ * best-effort, not guaranteed; the per-pass read often (but not always)
+ * hits one cache line. Promoting tcp_pcb to alignas(CACHELINE_SIZE)
+ * would close the gap if the perf claim ever needs to be load-bearing;
+ * the static_assert below is left in place because the intra-struct
+ * condition is necessary even under that future change.
+ */
+#if defined(__cplusplus)
+static_assert(offsetof(struct tcp_pcb, rto_deadline_us) / CACHELINE_SIZE ==
+                  offsetof(struct tcp_pcb, unacked) / CACHELINE_SIZE,
+              "rto_deadline_us must share a cache line with unacked");
+#else
+_Static_assert(offsetof(struct tcp_pcb, rto_deadline_us) / CACHELINE_SIZE ==
+                   offsetof(struct tcp_pcb, unacked) / CACHELINE_SIZE,
+               "rto_deadline_us must share a cache line with unacked");
+#endif
 
 typedef u16_t (*ip_route_mtu_fn)(struct tcp_pcb *pcb);
 void register_ip_route_mtu(ip_route_mtu_fn fn);

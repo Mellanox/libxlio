@@ -164,6 +164,8 @@ const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TIMER_RESOLUTION_MSEC {
     "performance.threading.internal_handler.timer_msec"};
 const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC {
     "network.protocols.tcp.timer_msec"};
+const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TCP_RTO_FLOOR_MSEC {
+    "network.protocols.tcp.rto_floor_msec"};
 const config_var_info_t<option_tcp_ctl_thread::mode_t, int64_t> CONFIG_VAR_TCP_CTL_THREAD {
     "performance.threading.internal_handler.behavior"};
 const config_var_info_t<tcp_ts_opt_t, int64_t> CONFIG_VAR_TCP_TIMESTAMP_OPTION {
@@ -551,6 +553,9 @@ void sys_var_configurator::initialize_base_variables()
 
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.tcp_timer_resolution_msec,
                                                       CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC);
+
+    m_runtime_registry.register_and_set_default_value(&m_sys_vars.tcp_rto_floor_msec,
+                                                      CONFIG_VAR_TCP_RTO_FLOOR_MSEC);
 
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.tcp_ctl_thread,
                                                       CONFIG_VAR_TCP_CTL_THREAD);

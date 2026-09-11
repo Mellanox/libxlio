@@ -19,6 +19,7 @@
 #include "config/descriptors/config_descriptor.h"
 #include "config/descriptors/parameter_descriptor.h"
 #include "config/runtime_registry.h"
+#include "core/lwip/tcp_rto.h"
 #include "dev/buffer_pool.h"
 #include "dev/net_device_table_mgr.h"
 #include "dev/net_device_val.h"
@@ -97,6 +98,26 @@ struct aggregated_socket_stats {
     uint64_t total_tls_tx_bytes = 0, total_tls_rx_bytes = 0;
 #endif
 
+    // TCP timer trylock-miss observability. The timer-bucket walk uses trylock
+    // on each socket's m_tcp_con_lock; a miss postpones that socket's fast and
+    // slow timer work until its next visit. The high-water marks below expose
+    // sustained contention without claiming that every miss delayed an armed
+    // RTO deadline.
+    //
+    // Two independent high-waters are tracked so the pool-aware report line
+    // does not silently inherit a value sourced from a socket that has since
+    // been destroyed (which used to produce internally contradictory output
+    // like "max: 5 # WARNING ...; 0/N sockets reached"):
+    //   * tcp_timer_skips_pool_max - max across currently-living sockets in
+    //     the stats pool. Same source as tcp_timer_skips_socket_count_at_warn.
+    //   * tcp_timer_skips_global_max - process-wide high-water seeded from
+    //     g_tuning_report_counters.tcp_timer_consecutive_skips_max, which
+    //     retains the value from sockets that have since been destroyed.
+    uint32_t tcp_timer_skips_pool_max = 0;
+    uint32_t tcp_timer_skips_global_max = 0;
+    uint64_t tcp_timer_skips_socket_count_at_warn = 0;
+    uint64_t tcp_timer_skips_socket_count_total = 0;
+
     bool has_per_socket_traffic = false;
     uint64_t pool_socket_count = 0;
 };
@@ -125,6 +146,12 @@ static aggregated_socket_stats aggregate_socket_stats()
 
     // 1. Collect socket counts from destructor counters.
     collect_total_socket_counts(agg);
+    // Seed only the global high-water from the process-wide counter. The
+    // pool max is built up during the per-socket loop below; never seed it
+    // from the global, or a destroyed-socket contribution will silently
+    // taint the pool-aware report line.
+    agg.tcp_timer_skips_global_max =
+        g_tuning_report_counters.tcp_timer_consecutive_skips_max.load(std::memory_order_relaxed);
 
     // 2. If the sock_stats pool is populated, enrich with per-socket traffic
     // stats. Pool entries retain their last socket's data after return
@@ -165,6 +192,19 @@ static aggregated_socket_stats aggregate_socket_stats()
         agg.total_tls_tx_bytes += stat.tls_counters.n_tls_tx_bytes;
         agg.total_tls_rx_bytes += stat.tls_counters.n_tls_rx_bytes;
 #endif
+
+        // TCP timer trylock-miss high-water mark. Count sockets that reached
+        // the warning threshold, and track the cross-socket maximum across
+        // the living pool only. Destroyed-socket contributions stay in the
+        // global maximum and are surfaced on a separate line.
+        uint32_t skips_max = stat.n_tcp_timer_consecutive_skips_max;
+        if (skips_max > agg.tcp_timer_skips_pool_max) {
+            agg.tcp_timer_skips_pool_max = skips_max;
+        }
+        if (skips_max >= XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD) {
+            agg.tcp_timer_skips_socket_count_at_warn++;
+        }
+        agg.tcp_timer_skips_socket_count_total++;
 
         // Offload traffic split — per-socket granularity, only available from pool.
         if (stat.b_is_offloaded) {
@@ -787,6 +827,46 @@ static void write_runtime_stats(FILE *f, const aggregated_socket_stats &agg, dou
             fprintf(f, "tx_retransmits: 0\n");
         }
 
+        /* TCP timer trylock-miss observability. A miss postpones this socket's
+         * complete timer pass, which can affect delayed ACKs, RTO checks, and
+         * other state timers depending on what was due for that socket.
+         *
+         * Two lines are emitted so each reflects exactly one source:
+         *   1. tcp_timer_consecutive_skips_max:        living pool only,
+         *                                              gated on the pool count.
+         *   2. tcp_timer_consecutive_skips_max_global: process high-water,
+         *                                              including destroyed sockets.
+         * Earlier revisions mixed both into one line and produced internally
+         * contradictory "max: 5 # WARNING ...; 0/N sockets reached" output.
+         */
+        if (agg.tcp_timer_skips_socket_count_at_warn > 0) {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max: %" PRIu32
+                    " # WARNING: trylock starvation; %" PRIu64 "/%" PRIu64
+                    " sockets in stats pool reached >=%d consecutive skips\n",
+                    agg.tcp_timer_skips_pool_max, agg.tcp_timer_skips_socket_count_at_warn,
+                    agg.tcp_timer_skips_socket_count_total,
+                    XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD);
+        } else {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max: %" PRIu32 " # 0/%" PRIu64
+                    " sockets reached warning threshold (>=%d)\n",
+                    agg.tcp_timer_skips_pool_max, agg.tcp_timer_skips_socket_count_total,
+                    XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD);
+        }
+        if (agg.tcp_timer_skips_global_max >= XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD) {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max_global: %" PRIu32
+                    " # WARNING: trylock starvation; process high-water includes"
+                    " destroyed sockets no longer in pool\n",
+                    agg.tcp_timer_skips_global_max);
+        } else {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max_global: %" PRIu32
+                    " # process high-water (includes destroyed sockets)\n",
+                    agg.tcp_timer_skips_global_max);
+        }
+
         // Striding RQ stats (relevant for STRQ-enabled configs)
         if (agg.total_strq_strides > 0) {
             fprintf(f, "strq_total_strides: %" PRIu64 "\n", agg.total_strq_strides);
@@ -828,6 +908,26 @@ static void write_runtime_stats(FILE *f, const aggregated_socket_stats &agg, dou
                         "ring_total_tx_retransmits: %" PRIu64 " # WARNING: retransmits detected\n",
                         ring_agg.total_tx_retransmits);
             }
+        }
+        /* No per-socket pool: emit only the process-global high-water under
+         * the `_global` label. The pool-aware
+         * `tcp_timer_consecutive_skips_max:` line is NOT emitted here
+         * because there is no pool to report on; the pool-path
+         * implementation above always emits BOTH lines so the global value
+         * has a consistent label across configurations.
+         */
+        if (agg.tcp_timer_skips_global_max >= XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD) {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max_global: %" PRIu32
+                    " # WARNING: trylock starvation; per-socket distribution unavailable"
+                    " (enable monitor.stats.fd_num for distribution)\n",
+                    agg.tcp_timer_skips_global_max);
+        } else {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max_global: %" PRIu32
+                    " # process high-water; per-socket distribution unavailable"
+                    " (enable monitor.stats.fd_num for distribution)\n",
+                    agg.tcp_timer_skips_global_max);
         }
         fprintf(f, "# Per-socket traffic stats require monitor.stats.fd_num > 0\n");
     } else {

@@ -11,6 +11,27 @@
 
 namespace string_utils {
 
+bool parse_uint32_decimal(const char *value, uint32_t &result)
+{
+    if (value == nullptr || *value == '\0') {
+        return false;
+    }
+
+    uint64_t parsed = 0;
+    for (const char *cursor = value; *cursor; ++cursor) {
+        if (*cursor < '0' || *cursor > '9') {
+            return false;
+        }
+        parsed = parsed * 10U + static_cast<unsigned>(*cursor - '0');
+        if (parsed > UINT32_MAX) {
+            return false;
+        }
+    }
+
+    result = static_cast<uint32_t>(parsed);
+    return true;
+}
+
 std::vector<std::string> split(const std::string &s, char delimiter)
 {
     std::vector<std::string> tokens;
