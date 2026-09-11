@@ -469,17 +469,25 @@ were dropped at the hardware level. This is the most direct cause of TX throughp
 **What to check:**
 - `tx_errors` — should correlate with `ring_tx_dropped_wqes` (every dropped WQE = one TX error)
 - `buffer_pool_tx_alloc_failures` — if also non-zero, memory is the root cause
+- Connection count per worker — with per-interface ring allocation, all connections
+  share one send queue. High connection counts with large `network.protocols.tcp.wmem`
+  can exceed the hardware send queue capacity
 - `performance.rings.tx.ring_elements_count` — controls send queue depth
-- `core.resources.memory_limit` — caps total WQE allocation
+- `core.resources.memory_limit` — caps TX resource headroom; check whether it was
+  explicitly lowered below the default or profile value
 
 **Config fix:**
-- Increase `core.resources.memory_limit` (primary fix — allows more WQEs)
+- Reduce `network.protocols.tcp.wmem` — at high connection counts, each connection's
+  send buffer contributes to aggregate send queue demand. The nginx profile sets 2MB;
+  reduce to 128KB-256KB when many connections share a ring
+- Increase `core.resources.memory_limit` if buffer pool allocation failures are present,
+  or if Effective Config shows it was explicitly lowered below the default/profile value
 - Increase `performance.rings.tx.ring_elements_count` (directly sizes the send queue)
 - Enable TSO (`hardware_features.tcp.tso.enable: enable`) — TSO reduces the number
   of WQEs needed by coalescing multiple segments into one send operation
 
-**Ask the user:** "What is the message send pattern? Many small sends, or fewer
-large sends? Is TSO currently enabled?"
+**Ask the user:** "How many connections per worker? What is
+`network.protocols.tcp.wmem` set to? Is TSO currently enabled?"
 
 ### TX Issues
 
@@ -895,7 +903,7 @@ If the workload is throughput-sensitive:
 **Analysis:** TX errors exactly match dropped WQEs, confirming WQE exhaustion is the
 sole cause of TX errors — no buffer pool failures involved. The `reason: User-configured`
 confirms the customer deliberately lowered memory_limit below the 2 GB default,
-capping the number of WQEs that can be allocated. At 57 Gbps on what is likely a 100 Gbps NIC, the customer is
+capping TX resource headroom. At 57 Gbps on what is likely a 100 Gbps NIC, the customer is
 leaving ~43 Gbps on the table.
 
 **Recommendation:**
@@ -908,7 +916,7 @@ leaving ~43 Gbps on the table.
   }
 }
 ```
-Increase memory limit to allow more WQEs. If TSO is not enabled, also consider:
+Increase memory limit to restore TX resource headroom. If TSO is not enabled, also consider:
 ```
 {
   "hardware_features": {
@@ -1307,7 +1315,7 @@ shows healthy operation at 91/87 Gbps with no anomalies."
 | `buffer_pool_rx_*_alloc_failures` | `core.resources.memory_limit`, `performance.rings.rx.ring_elements_count`, `performance.rings.rx.spare_buffers` |
 | `buffer_pool_tx_alloc_failures` | `core.resources.memory_limit`, `performance.rings.tx.ring_elements_count` |
 | `tcp_seg_pool_alloc_failures` | `core.resources.memory_limit`, `performance.buffers.tcp_segments.socket_batch_size` |
-| `ring_tx_dropped_wqes` | `core.resources.memory_limit`, `performance.rings.tx.ring_elements_count`, `hardware_features.tcp.tso.enable` |
+| `ring_tx_dropped_wqes` | `network.protocols.tcp.wmem`, `core.resources.memory_limit`, `performance.rings.tx.ring_elements_count`, `hardware_features.tcp.tso.enable` |
 | `tx_errors` | (depends on root cause — see troubleshooting rules) |
 | `tx_retransmits` | `network.protocols.tcp.congestion_control`, `network.protocols.tcp.timestamps` |
 | `ring_total_tx_retransmits` | Same as `tx_retransmits` (fallback detail equivalent) |
