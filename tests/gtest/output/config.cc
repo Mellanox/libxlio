@@ -516,3 +516,30 @@ TEST_F(output, config_periodic_drain_max_cqes_zero)
                {// Should NOT show the old combined "CQ Drain Thread" message
                 "CQ Drain Thread"});
 }
+
+/**
+ * @test output.config_ring_elements_count_warning
+ * @brief
+ *    Tests that a warning is shown when ring_elements_count is set too low
+ *
+ * @details
+ *    When ring_elements_count is set to a value < batch_size * 2, it must be
+ *    increased. This test verifies that a warning is logged when this happens.
+ */
+TEST_F(output, config_ring_elements_count_warning)
+{
+    check_file(
+        "config-ring-elements-warning.json",
+        {
+            // clang-format off
+            // TX: ring_elements_count=0 auto-corrected to completion_batch_size * 2 (128)
+            "Config key performance.rings.tx.ring_elements_count changed from 0 to 128: "
+            "reason=Auto-corrected; performance.rings.tx.ring_elements_count must be at least "
+            "performance.rings.tx.completion_batch_size * 2",
+            // RX: ring_elements_count=0 auto-corrected to post_batch_size * 2 (2)
+            "Config key performance.rings.rx.ring_elements_count changed from 0 to 2: "
+            "reason=Auto-corrected; performance.rings.rx.ring_elements_count must be at least "
+            "performance.rings.rx.post_batch_size * 2"
+            // clang-format on
+        });
+}

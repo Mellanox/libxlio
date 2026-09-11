@@ -1172,7 +1172,11 @@ void mce_sys_var::get_env_params()
         tx_num_wr_to_signal =
             std::min<uint32_t>(NUM_TX_WRE_TO_SIGNAL_MAX, std::max(1, atoi(env_ptr)));
     }
-    if (tx_num_wr <= (tx_num_wr_to_signal * 2)) {
+    if (tx_num_wr < (tx_num_wr_to_signal * 2)) {
+        vlog_printf(VLOG_WARNING,
+                    SYS_VAR_TX_NUM_WRE "=%d must be at least " SYS_VAR_TX_NUM_WRE_TO_SIGNAL
+                                       " * 2 (%d). Increasing to %d\n",
+                    tx_num_wr, tx_num_wr_to_signal * 2, tx_num_wr_to_signal * 2);
         tx_num_wr = tx_num_wr_to_signal * 2;
     }
 
@@ -1272,7 +1276,11 @@ void mce_sys_var::get_env_params()
                     MAX_MLX5_CQ_SIZE_ITEMS, rx_num_wr);
     }
 
-    if (rx_num_wr <= (rx_num_wr_to_post_recv * 2)) {
+    if (rx_num_wr < (rx_num_wr_to_post_recv * 2)) {
+        vlog_printf(VLOG_WARNING,
+                    SYS_VAR_RX_NUM_WRE "=%d must be at least " SYS_VAR_RX_NUM_WRE_TO_POST_RECV
+                                       " * 2 (%d). Increasing to %d\n",
+                    rx_num_wr, rx_num_wr_to_post_recv * 2, rx_num_wr_to_post_recv * 2);
         rx_num_wr = rx_num_wr_to_post_recv * 2;
     }
 
