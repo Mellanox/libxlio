@@ -18,7 +18,13 @@ static std::vector<xlio_socket_t> accepted_sockets;
 
 class ultra_api_socket_listen_connect : public ultra_api_base {
 public:
-    virtual void SetUp() { errno = EOK; };
+    virtual void SetUp()
+    {
+        errno = EOK;
+        connected_counter = 0;
+        terminated_counter = 0;
+        accepted_sockets.clear();
+    };
     virtual void TearDown() {};
     void destroy_poll_group(xlio_poll_group_t group) { base_destroy_poll_group(group); }
 
@@ -134,7 +140,7 @@ TEST_F(ultra_api_socket_listen_connect, ti_1)
 
         destroy_poll_group(group);
 
-        wait_fork(pid);
+        EXPECT_EQ(0, wait_fork(pid));
     }
 }
 
