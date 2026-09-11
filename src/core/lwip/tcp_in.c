@@ -231,6 +231,13 @@ void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb)
                     }
 
                     if (in_data.recv_data) {
+                        /* Forward progress: in-sequence data was received. Anchor
+                         * the TCP_USER_TIMEOUT keepalive reference so a receiver
+                         * that is actively getting data is never aborted, and its
+                         * deadline is measured from the last real data - matching
+                         * Linux lrcvtime. Keepalive-probe replies carry no data
+                         * and leave recv_data NULL, so they do not anchor here. */
+                        pcb->last_progress_tmr = tcp_ticks;
                         if (pcb->flags & TF_RXCLOSED) {
                             /* received data although already closed -> abort (send RST) to
                                            notify the remote host that not all data has been
@@ -596,6 +603,10 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
             pcb->snd_wnd_max = pcb->snd_wnd;
             pcb->snd_wl1 = in_data->seqno - 1; /* initialise to seqno - 1 to force window update */
             set_tcp_state(pcb, ESTABLISHED);
+            /* Connection is up: seed the forward-progress anchor so the
+             * TCP_USER_TIMEOUT keepalive deadline is measured from here and not
+             * from a stale pcb creation time. */
+            pcb->last_progress_tmr = tcp_ticks;
 
             syn_retransmitted = tcp_handle_syn_established(pcb);
             pcb->nrtx = 0;
@@ -653,6 +664,9 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
                 u32_t old_cwnd;
                 bool syn_retransmitted;
                 set_tcp_state(pcb, ESTABLISHED);
+                /* Connection is up: seed the forward-progress anchor (see the
+                 * active-open path above). */
+                pcb->last_progress_tmr = tcp_ticks;
 
                 syn_retransmitted = tcp_handle_syn_established(pcb);
                 pcb->nrtx = 0;
@@ -1156,6 +1170,12 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
             /* Reset the fast retransmit variables. */
             pcb->dupacks = 0;
             pcb->lastack = in_data->ackno;
+
+            /* Forward progress: new data has been acknowledged. Anchor the
+             * TCP_USER_TIMEOUT keepalive reference here. Unlike pcb->tmr, this
+             * is not touched by keepalive-probe replies (bare dup-ACKs land in
+             * the TCP_SEQ_LEQ clause above, which never reaches this branch). */
+            pcb->last_progress_tmr = tcp_ticks;
 
             /* Update the congestion control variables (cwnd and ssthresh). */
             if (get_tcp_state(pcb) >= ESTABLISHED) {
