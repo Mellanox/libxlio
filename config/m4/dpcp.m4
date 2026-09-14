@@ -89,6 +89,17 @@ if test "x$dpcp_explicitly_specified" = "xno"; then
     AC_MSG_NOTICE([libdpcp CMake flags: ${with_dpcp_flags:-none}])
 
     (
+        # The story of -DCMAKE_NO_SYSTEM_FROM_IMPORTED:BOOL=ON :
+        # A previous fix by @orshemesh Added this:
+        # -DCMAKE_CXX_FLAGS:STRING=-O2
+        # This over-wrode the distro distro CXXFLAGS (-specs=redhat-hardened-cc1),
+        # which triggered a chain of issues, eventually causing cmake to use
+        # -isystem /usr/include, which breaks the #include_next <stdlib.h> found in <cstdlib>
+        # on some archs, blocking DOCA builds.
+        #
+        # Using -DCMAKE_NO_SYSTEM_FROM_IMPORTED:BOOL=ON tells cmake not to do this.
+        # A more robust fix would prevent the over-riding of CXXFLAGS, but this is for later, after
+        # we unblock the DOCA builds.
         cd "$DPCP_BUILD_DIR" || exit 1
         set -f
         set -- $with_dpcp_flags
@@ -96,6 +107,7 @@ if test "x$dpcp_explicitly_specified" = "xno"; then
         CC="$CC" CXX="$CXX" "$CMAKE" \
             "-DCMAKE_CXX_FLAGS:STRING=-O2" \
             "$[]@" \
+            "-DCMAKE_NO_SYSTEM_FROM_IMPORTED:BOOL=ON" \
             "-DCMAKE_INSTALL_PREFIX:PATH=$DPCP_INSTALL_DIR" \
             "-DCMAKE_INSTALL_LIBDIR:PATH=lib" \
             "-DDPCP_STATIC:BOOL=$DPCP_CMAKE_STATIC" \
