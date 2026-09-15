@@ -700,6 +700,8 @@ void print_env_vars_xlio_global_settings()
                       MCE_DEFAULT_TIMER_RESOLUTION_MSEC, SYS_VAR_TIMER_RESOLUTION_MSEC);
     VLOG_PARAM_NUMBER("TCP Timer Resolution (msec)", safe_mce_sys().tcp_timer_resolution_msec,
                       MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC, SYS_VAR_TCP_TIMER_RESOLUTION_MSEC);
+    VLOG_PARAM_NUMBER("TCP RTO Floor (msec)", safe_mce_sys().tcp_rto_floor_msec,
+                      MCE_DEFAULT_TCP_RTO_FLOOR_MSEC, SYS_VAR_TCP_RTO_FLOOR_MSEC);
     VLOG_PARAM_STRING(
         "TCP control thread", option_tcp_ctl_thread::to_str(safe_mce_sys().tcp_ctl_thread),
         option_tcp_ctl_thread::to_str(MCE_DEFAULT_TCP_CTL_THREAD), SYS_VAR_TCP_CTL_THREAD,

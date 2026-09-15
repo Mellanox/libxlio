@@ -10,6 +10,7 @@
 #include "core/event/event_handler_manager.h"
 #include "core/sock/sockinfo_tcp.h"
 #include "core/lwip/tcp_impl.h"
+#include "core/lwip/tcp_rto.h"
 #include "xlio_lwip.h"
 
 // debugging macros
@@ -29,6 +30,14 @@
 
 int32_t enable_wnd_scale = 0;
 u32_t rcv_wnd_scale = 0;
+
+static_assert((int64_t)MCE_DEFAULT_TCP_RTO_FLOOR_MSEC * 1000 ==
+                  TCP_RTO_FLOOR_DEFAULT_US,
+              "TCP RTO floor defaults must match across config and lwIP");
+static_assert((int64_t)MCE_MIN_TCP_RTO_FLOOR_MSEC * 1000 == TCP_RTO_FLOOR_MIN_US,
+              "TCP RTO floor minimums must match across config and lwIP");
+static_assert((int64_t)MCE_MAX_TCP_RTO_FLOOR_MSEC * 1000 == TCP_RTO_MAX_US,
+              "TCP RTO floor maximums must match across config and lwIP");
 
 u32_t xlio_lwip::sys_now(void)
 {
@@ -105,10 +114,12 @@ xlio_lwip::xlio_lwip()
     register_tcp_state_observer(sockinfo_tcp::tcp_state_observer);
     register_ip_route_mtu(sockinfo_tcp::get_route_mtu);
     register_sys_now(sys_now);
+    tcp_rto_set_floor_us((int64_t)safe_mce_sys().tcp_rto_floor_msec * 1000);
     set_tmr_resolution(safe_mce_sys().tcp_timer_resolution_msec);
     // tcp_ticks increases in the rate of tcp slow_timer
     void *node = g_p_event_handler_manager->register_timer_event(
-        safe_mce_sys().tcp_timer_resolution_msec * 2, this, PERIODIC_TIMER, nullptr);
+        safe_mce_sys().tcp_timer_resolution_msec * TCP_SLOW_INTERVAL_FACTOR, this, PERIODIC_TIMER,
+        nullptr);
     if (!node) {
         lwip_logdbg("LWIP: failed to register timer event");
         free_lwip_resources();

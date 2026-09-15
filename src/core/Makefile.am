@@ -123,6 +123,7 @@ libxlio_la_SOURCES := \
 	lwip/tcp.c \
 	lwip/tcp_in.c \
 	lwip/tcp_out.c \
+	lwip/tcp_rto.c \
 	lwip/cc.c \
 	lwip/cc_lwip.c \
 	lwip/cc_none.c \
@@ -169,6 +170,7 @@ libxlio_la_SOURCES := \
 	util/sys_vars.cpp \
 	util/sys_vars_configurator.cpp \
 	util/data_updater.cpp \
+	util/xlio_time.cpp \
 	\
 	config/change_reason.h \
 	config/config_registry.h \
@@ -282,6 +284,7 @@ libxlio_la_SOURCES := \
 	lwip/pbuf.h \
 	lwip/tcp.h \
 	lwip/tcp_impl.h \
+	lwip/tcp_rto.h \
 	\
 	netlink/link_info.h \
 	netlink/neigh_info.h \
@@ -347,6 +350,8 @@ libxlio_la_SOURCES := \
 	util/valgrind.h \
 	util/xlio_list.h \
 	util/xlio_stats.h \
+	util/xlio_cache.h \
+	util/xlio_time.h \
 	util/xlio_exception.h \
 	util/vtypes.h \
 	util/wakeup.h \

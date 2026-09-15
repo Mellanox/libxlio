@@ -27,12 +27,92 @@ Known limitations:
 import json
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PRINTER_CPP = REPO_ROOT / "src/core/tuning_report_printer.cpp"
 SCHEMA_JSON = REPO_ROOT / "src/core/config/descriptor_providers/xlio_config_schema.json"
 REFERENCE_MD = REPO_ROOT / "docs/xlio_tuning_report_reference.md"
+
+# A "phrase" is a run of letters / whitespace / `-` / `>` / `(` / `)` /
+# `/` starting on a letter and ending on a letter or `)`. The 2+ word
+# filter happens in the caller.
+_PHRASE_RE = re.compile(r"[a-zA-Z][a-zA-Z\s\->()/]+[a-zA-Z)]")
+
+# C printf format specifiers ("%d", "%.0f%%", "%lld") and the PRI* macros
+# from <inttypes.h>. Stripped before phrase extraction so the `d` of
+# `%d` does not leak in as a phantom leading word. Slightly loose: any
+# `%` followed by flag/width/length chars then a single letter (or `%`),
+# plus any PRI<conv><width> macro. False-positive matches just clip a
+# few extra chars from a stretch with no English phrases.
+_FORMAT_SPEC_RE = re.compile(
+    r"%[#\-+ 0\d.*lhjzLt]*[diouxXeEfgGsScpn%]"  # printf conversions
+    r"|PRI[a-z]+\d+"                              # <inttypes.h> macros
+)
+
+_WARNING_TOKEN_RE = re.compile(r"# WARNING:\s*(.*)")
+_STR_LITERAL_RE = re.compile(r'"([^"]*)"')
+
+
+def _strip_format_specs(text: str) -> str:
+    """Replace C printf format specifiers and PRI* macros with whitespace.
+
+    Whitespace (not empty string) so adjacent English text does not fuse
+    across a stripped specifier — e.g. ">=%d consecutive" must become
+    ">=  consecutive" with a separator on each side of where `%d` was,
+    not ">=consecutive".
+    """
+    return _FORMAT_SPEC_RE.sub(" ", text)
+
+
+def _phrases_in(text: str) -> set[str]:
+    """Extract 2+ word lowercase phrases from a single text blob."""
+    phrases: set[str] = set()
+    for m in _PHRASE_RE.finditer(text):
+        words = m.group().split()
+        if len(words) >= 2:
+            phrases.add(" ".join(words).lower())
+    return phrases
+
+
+def _iter_warning_texts(lines: list[str]) -> Iterator[str]:
+    """Yield one folded WARNING text per `# WARNING:` site.
+
+    Each yielded text is the WARNING tail on the `# WARNING:` source
+    line followed by the contents of any subsequent string-literal
+    continuation lines, joined with whitespace. C source often splits a
+    long format string via implicit literal concatenation ("foo " "bar")
+    and/or PRI* macros; this generator folds each WARNING's full
+    format-string argument back into one logical text. No format-spec
+    stripping happens here — the caller composes that step.
+    """
+    i = 0
+    while i < len(lines):
+        match = _WARNING_TOKEN_RE.search(lines[i])
+        if not match:
+            i += 1
+            continue
+        # Trim the trailing close-quote off the WARNING tail so the
+        # yielded text does not contain an artefactual `"`.
+        chunks = [match.group(1).rstrip('"')]
+        # C source splits long format strings via implicit literal
+        # concatenation; a continuation line is one whose stripped form
+        # starts with `"`. Anything else (argument identifiers, closing
+        # `)`, comments, control flow) terminates the format string.
+        j = i + 1
+        while j < len(lines) and lines[j].lstrip().startswith('"'):
+            literals = _STR_LITERAL_RE.findall(lines[j])
+            if literals:
+                chunks.append(" ".join(literals))
+            j += 1
+        yield " ".join(chunks)
+        i = j
+
+
+def _cpp_warning_phrases(text: str) -> set[str]:
+    """Pipeline for code-side WARNING text: strip format specifiers, then extract phrases."""
+    return _phrases_in(_strip_format_specs(text))
 
 
 def load_schema_top_level_keys(schema_path: Path) -> set[str]:
@@ -49,27 +129,19 @@ def load_schema_top_level_keys(schema_path: Path) -> set[str]:
 def extract_warning_phrases_from_code(cpp_path: Path) -> set[str]:
     """Extract distinctive English phrases from WARNING messages in C++ source.
 
-    WARNING messages contain printf format specifiers (%.0f%%, PRIu64) that
-    don't appear in the documentation. This extracts the constant English
-    text (runs of 2+ words) which serves as a matchable signature.
+    Pipeline: `_iter_warning_texts` finds each WARNING and folds its
+    multi-line implicit-concatenation chunks into one text;
+    `_cpp_warning_phrases` strips printf format specifiers and PRI*
+    macros (so the `d` of `%d` does not leak in as a phantom leading
+    word) and then extracts 2+ word phrases.
 
     Known dedup: sw_rx_packets_dropped and sw_rx_bytes_dropped both produce
     "non-zero drops", yielding 20 unique phrases from 21 WARNING conditions.
     """
-    content = cpp_path.read_text()
-    phrases = set()
-    for line in content.splitlines():
-        if "# WARNING:" not in line:
-            continue
-        match = re.search(r"# WARNING:\s*(.*)", line)
-        if not match:
-            continue
-        raw = match.group(1)
-        for m in re.finditer(r"[a-zA-Z][a-zA-Z\s\->()/]+[a-zA-Z)]", raw):
-            phrase = m.group().strip()
-            words = phrase.split()
-            if len(words) >= 2:
-                phrases.add(" ".join(words).lower())
+    lines = cpp_path.read_text().splitlines()
+    phrases: set[str] = set()
+    for text in _iter_warning_texts(lines):
+        phrases |= _cpp_warning_phrases(text)
     return phrases
 
 
@@ -80,14 +152,9 @@ def extract_warning_phrases_from_doc(md_path: Path) -> set[str]:
     check (doc → code) to detect orphaned troubleshooting rules.
     """
     content = md_path.read_text()
-    phrases = set()
+    phrases: set[str] = set()
     for match in re.finditer(r"# WARNING:\s*([^`\n]+)", content):
-        raw = match.group(1).strip().rstrip("`")
-        for m in re.finditer(r"[a-zA-Z][a-zA-Z\s\->()/]+[a-zA-Z)]", raw):
-            phrase = m.group().strip()
-            words = phrase.split()
-            if len(words) >= 2:
-                phrases.add(" ".join(words).lower())
+        phrases |= _phrases_in(match.group(1).strip().rstrip("`"))
     return phrases
 
 
