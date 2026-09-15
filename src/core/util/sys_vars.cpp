@@ -1517,11 +1517,42 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_TIMER_RESOLUTION_MSEC))) {
-        timer_resolution_msec = atoi(env_ptr);
+        long long value = strtoll(env_ptr, nullptr, 10);
+        if (value < MCE_MIN_TIMER_RESOLUTION_MSEC) {
+            vlog_printf(VLOG_WARNING,
+                        "Timer resolution [%s=%s] must be greater than zero. Using default [%d].\n",
+                        SYS_VAR_TIMER_RESOLUTION_MSEC, env_ptr, MCE_DEFAULT_TIMER_RESOLUTION_MSEC);
+            timer_resolution_msec = MCE_DEFAULT_TIMER_RESOLUTION_MSEC;
+        } else if (value > MCE_MAX_TIMER_RESOLUTION_MSEC) {
+            vlog_printf(VLOG_WARNING,
+                        "Timer resolution [%s=%s] exceeds maximum %d. "
+                        "Setting timer resolution to %d msec.\n",
+                        SYS_VAR_TIMER_RESOLUTION_MSEC, env_ptr, MCE_MAX_TIMER_RESOLUTION_MSEC,
+                        MCE_MAX_TIMER_RESOLUTION_MSEC);
+            timer_resolution_msec = MCE_MAX_TIMER_RESOLUTION_MSEC;
+        } else {
+            timer_resolution_msec = static_cast<uint32_t>(value);
+        }
     }
 
     if ((env_ptr = getenv(SYS_VAR_TCP_TIMER_RESOLUTION_MSEC))) {
-        tcp_timer_resolution_msec = atoi(env_ptr);
+        long long value = strtoll(env_ptr, nullptr, 10);
+        if (value < 0) {
+            vlog_printf(VLOG_WARNING,
+                        "TCP timer resolution [%s=%s] cannot be negative. Using default [%d].\n",
+                        SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, env_ptr,
+                        MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC);
+            tcp_timer_resolution_msec = MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC;
+        } else if (value > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC) {
+            vlog_printf(VLOG_WARNING,
+                        "TCP timer resolution [%s=%s] exceeds maximum %d. "
+                        "Setting TCP timer resolution to %d msec.\n",
+                        SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, env_ptr,
+                        MCE_MAX_TCP_TIMER_RESOLUTION_MSEC, MCE_MAX_TCP_TIMER_RESOLUTION_MSEC);
+            tcp_timer_resolution_msec = MCE_MAX_TCP_TIMER_RESOLUTION_MSEC;
+        } else {
+            tcp_timer_resolution_msec = static_cast<uint32_t>(value);
+        }
     }
 
     if ((env_ptr = getenv(SYS_VAR_TCP_CTL_THREAD))) {

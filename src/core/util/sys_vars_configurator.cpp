@@ -1163,6 +1163,26 @@ void sys_var_configurator::configure_after_user_settings()
                                      change_reason::AutoCorrected, "Out of range, using default");
     }
 
+    if (m_sys_vars.timer_resolution_msec < MCE_MIN_TIMER_RESOLUTION_MSEC) {
+        vlog_printf(VLOG_WARNING,
+                    "Timer resolution (%s=%u) must be greater than zero. "
+                    "Using default %d msec.\n",
+                    CONFIG_VAR_TIMER_RESOLUTION_MSEC.name, m_sys_vars.timer_resolution_msec,
+                    MCE_DEFAULT_TIMER_RESOLUTION_MSEC);
+        m_runtime_registry.set_value(CONFIG_VAR_TIMER_RESOLUTION_MSEC,
+                                     static_cast<int64_t>(MCE_DEFAULT_TIMER_RESOLUTION_MSEC),
+                                     change_reason::AutoCorrected, "Must be greater than zero");
+    } else if (m_sys_vars.timer_resolution_msec > MCE_MAX_TIMER_RESOLUTION_MSEC) {
+        vlog_printf(VLOG_WARNING,
+                    "Timer resolution (%s=%u) exceeds maximum %d. "
+                    "Setting timer resolution to %d msec.\n",
+                    CONFIG_VAR_TIMER_RESOLUTION_MSEC.name, m_sys_vars.timer_resolution_msec,
+                    MCE_MAX_TIMER_RESOLUTION_MSEC, MCE_MAX_TIMER_RESOLUTION_MSEC);
+        m_runtime_registry.set_value(
+            CONFIG_VAR_TIMER_RESOLUTION_MSEC, static_cast<int64_t>(MCE_MAX_TIMER_RESOLUTION_MSEC),
+            change_reason::AutoCorrected, "Exceeds maximum TCP timer resolution");
+    }
+
     if (m_sys_vars.tcp_timer_resolution_msec < m_sys_vars.timer_resolution_msec) {
         vlog_printf(VLOG_WARNING,
                     "TCP timer resolution (%s=%d) cannot be smaller than timer resolution "
@@ -1179,13 +1199,12 @@ void sys_var_configurator::configure_after_user_settings()
         vlog_printf(VLOG_WARNING,
                     "TCP timer resolution (%s=%u) exceeds maximum %d. "
                     "Setting TCP timer resolution to %d msec.\n",
-                    CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC.name,
-                    m_sys_vars.tcp_timer_resolution_msec, MCE_MAX_TCP_TIMER_RESOLUTION_MSEC,
-                    MCE_MAX_TCP_TIMER_RESOLUTION_MSEC);
-        m_runtime_registry.set_value(
-            CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC,
-            static_cast<int64_t>(MCE_MAX_TCP_TIMER_RESOLUTION_MSEC),
-            change_reason::AutoCorrected, "Exceeds maximum supported epoll timeout");
+                    CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC.name, m_sys_vars.tcp_timer_resolution_msec,
+                    MCE_MAX_TCP_TIMER_RESOLUTION_MSEC, MCE_MAX_TCP_TIMER_RESOLUTION_MSEC);
+        m_runtime_registry.set_value(CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC,
+                                     static_cast<int64_t>(MCE_MAX_TCP_TIMER_RESOLUTION_MSEC),
+                                     change_reason::AutoCorrected,
+                                     "Exceeds maximum supported TCP timer resolution");
     }
 
     if (strcmp(m_sys_vars.internal_thread_affinity_str, "-1") != 0) {

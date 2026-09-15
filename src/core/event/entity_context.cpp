@@ -265,11 +265,11 @@ void entity_context::arm_cq_notifications()
         bool success = rng->request_notification(CQT_RX);
         if (unlikely(!success)) {
             ctx_logerr("Failed to arm CQ notification for ring %p", rng);
-	    // We should never reach this place because with current code, 
-	    // rng->request_notification() never fails. This code serves to alert
-	    // if this ever changes. If it happens, the error message will fire,
-	    // and we need to deal with it by returning bool and changing 
-	    // wait_for_interrupt() to handle the failure.
+            // We should never reach this place because with current code,
+            // rng->request_notification() never fails. This code serves to alert
+            // if this ever changes. If it happens, the error message will fire,
+            // and we need to deal with it by returning bool and changing
+            // wait_for_interrupt() to handle the failure.
         }
     }
 }
@@ -400,7 +400,14 @@ void entity_context::notify_ring_added(ring *rng)
         ev.events = EPOLLIN;
         ev.data.fd = fds[i];
         if (SYSCALL(epoll_ctl, m_epoll_fd, EPOLL_CTL_ADD, fds[i], &ev) < 0 && errno != EEXIST) {
-            ctx_logerr("Failed to add CQ channel fd %d to epoll (errno=%d %m)", fds[i], errno);
+            ctx_logerr("Failed to add CQ channel fd %d to epoll (errno=%d %m). Switching to "
+                       "busy-poll mode",
+                       fds[i], errno);
+            // This is not an ideal solution - but this condition should never happen, so there is
+            // no point looking for an ideal solution here. By setting this flag to false, at least
+            // the system will keep running. The important part of the error handling is the log
+            // message, which should attract attention and point at the problem.
+            m_intr_setup_ok = false;
         }
     }
 }

@@ -1513,7 +1513,7 @@ request-response protocols, or when experiencing latency spikes with small messa
 
 ### `network.protocols.tcp.timer_msec`
 
-> **Type:** integer (range: 0 to 2147483647)
+> **Type:** integer (range: 0 to 5000)
 >
 > **Maps to:** `XLIO_TCP_TIMER_RESOLUTION_MSEC`
 
@@ -1541,7 +1541,8 @@ with many connections.
 **Constraints:**
 
 - Minimum: [`performance.threading.internal_handler.timer_msec`](#performancethreadinginternal_handlertimer_msec) (auto-clamped if set lower)
-- Maximum: 500ms per RFC 1122 (delayed ACK must be < 500ms)
+- Configured maximum: 5000ms
+- Protocol note: values above 500ms exceed RFC 1122's delayed ACK bound and can significantly delay TCP state processing.
 
 **Default:** `100`
 
@@ -3792,7 +3793,7 @@ lock overhead. Misuse symptoms: hung connections
 
 ### `performance.threading.internal_handler.timer_msec`
 
-> **Type:** integer (min: 0)
+> **Type:** integer (range: 1 to 5000)
 >
 > **Maps to:** `XLIO_TIMER_RESOLUTION_MSEC`
 
