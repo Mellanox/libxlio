@@ -18,7 +18,7 @@
 static void rto_test_pcb_reset(struct tcp_pcb *pcb)
 {
     std::memset(pcb, 0, sizeof(*pcb));
-    tcp_rto_pcb_seed(pcb);
+    tcp_rto_pcb_init(pcb);
     pcb->rtime = -1;
     pcb->ticks_since_data_sent = -1;
 }
@@ -76,8 +76,8 @@ TEST(tcp_rto, rto_from_estimator_additive_floor)
     /* SRTT = 100ms, RTTVAR = 40ms -> 100000 + max(160000, 600000) = 700000 us. */
     EXPECT_EQ(700000, tcp_rto_from_estimator_us(800000, 160000));
     /* SRTT = 1s, RTTVAR = 250ms -> 1000000 + max(1000000, 600000) = 2000000 us:
-     * once the variance term exceeds the floor, the shape matches the legacy
-     * candidate exactly. */
+     * once the variance term exceeds the floor, the floor does not
+     * contribute. */
     EXPECT_EQ(2000000, tcp_rto_from_estimator_us(8000000, 1000000));
 }
 
@@ -270,13 +270,9 @@ TEST(tcp_rto, deadline_elapsed_predicate)
     struct tcp_pcb pcb;
     rto_test_pcb_reset(&pcb);
 
-    /* No unacked, no deadline -> not elapsed. */
+    /* No deadline armed -> not elapsed. The tcp_slowtmr() caller
+     * additionally gates on pcb->unacked != NULL. */
     EXPECT_FALSE(tcp_rto_deadline_elapsed(&pcb, 0));
-    EXPECT_FALSE(tcp_rto_deadline_elapsed(&pcb, 1000000));
-
-    /* unacked set but no deadline -> not elapsed (idempotent invariant). */
-    struct tcp_seg fake_seg = {};
-    pcb.unacked = &fake_seg;
     EXPECT_FALSE(tcp_rto_deadline_elapsed(&pcb, 1000000));
 
     /* Deadline armed, timer before deadline -> not elapsed. */
@@ -284,10 +280,6 @@ TEST(tcp_rto, deadline_elapsed_predicate)
     EXPECT_FALSE(tcp_rto_deadline_elapsed(&pcb, 999999));
     EXPECT_TRUE(tcp_rto_deadline_elapsed(&pcb, 1000000));
     EXPECT_TRUE(tcp_rto_deadline_elapsed(&pcb, 2000000));
-
-    /* unacked dropped (empty queue) -> never elapsed even if deadline non-zero. */
-    pcb.unacked = nullptr;
-    EXPECT_FALSE(tcp_rto_deadline_elapsed(&pcb, 2000000));
 }
 
 TEST(tcp_rto, timer_helpers_maintain_marker_state)
@@ -327,7 +319,11 @@ TEST(tcp_rto, sample_update_before_rearm_uses_fresh_rto)
     pcb.rtseq = 1000;
     pcb.rto_us = (s32_t)TCP_RTO_INITIAL_US;
 
-    tcp_rtt_estimator_update_and_rearm_us(&pcb, 10100, 20000);
+    /* Mirror tcp_receive()'s partial-ACK path: consume the sample, then
+     * re-arm the deadline with the freshly computed RTO. */
+    tcp_rtt_estimator_update_us(&pcb, 10100 - pcb.rttest_us);
+    pcb.rttest_us = 0;
+    tcp_rto_timer_rearm(&pcb, 20000);
 
     /* Sample = 100 us -> first-sample seed sa = 800, sv = 200;
      * additive floor: rto = 100 + max(200, floor) = floor + 100. */
@@ -336,7 +332,7 @@ TEST(tcp_rto, sample_update_before_rearm_uses_fresh_rto)
     EXPECT_EQ(0, pcb.rttest_us);
 }
 
-TEST(tcp_rto, ooseq_timeout_preserves_legacy_floor)
+TEST(tcp_rto, ooseq_timeout_enforces_min_floor)
 {
     /* slow_interval_us assumed = 20 ms (default cadence with
      * tcp_timer_resolution_msec = 10 -> slow_tmr_interval_ms = 20).
@@ -346,9 +342,9 @@ TEST(tcp_rto, ooseq_timeout_preserves_legacy_floor)
     struct tcp_pcb pcb;
     rto_test_pcb_reset(&pcb);
 
-    /* Tiny RTO < legacy floor (3 ticks = 60ms) -> legacy floor wins. */
+    /* Tiny RTO below the floor (3 ticks = 60ms) -> the floor wins. */
     pcb.rto_us = 1000;
-    EXPECT_EQ(slow_interval_us * TCP_RTO_LEGACY_OOSEQ_MIN_TICKS * TCP_OOSEQ_TIMEOUT,
+    EXPECT_EQ(slow_interval_us * TCP_OOSEQ_RTO_MIN_TICKS * TCP_OOSEQ_TIMEOUT,
               tcp_ooseq_timeout_us(&pcb, slow_interval_us));
 
     /* Large RTO above floor -> RTO * TCP_OOSEQ_TIMEOUT. */

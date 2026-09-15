@@ -9,10 +9,11 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <assert.h>
 
 #include "core/lwip/opt.h"
 #include "core/lwip/tcp.h" /* struct tcp_pcb full definition for tcp_rexmit_timer_running() inline */
-#include "core/proto/xlio_time.h"
+#include "core/util/xlio_time.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,12 +21,12 @@ extern "C" {
 
 /* --- RTT/RTO constants (microsecond domain) ---
  */
-#define TCP_RTO_INITIAL_US             ((int64_t)TCP_INITIAL_RTO_MS * 1000)
-#define TCP_RTO_FALLBACK_US            ((int64_t)TCP_FALLBACK_RTO_MS * 1000)
-#define TCP_RTO_FLOOR_MIN_US           ((int64_t)1000)
-#define TCP_RTO_FLOOR_DEFAULT_US       ((int64_t)600000)
-#define TCP_RTO_MAX_US                 ((int64_t)120000000)
-#define TCP_RTO_LEGACY_OOSEQ_MIN_TICKS TCP_MIN_RTO_TICKS
+#define TCP_RTO_INITIAL_US       ((int64_t)TCP_INITIAL_RTO_MS * 1000)
+#define TCP_RTO_FALLBACK_US      ((int64_t)TCP_FALLBACK_RTO_MS * 1000)
+#define TCP_RTO_FLOOR_MIN_US     ((int64_t)1000)
+#define TCP_RTO_FLOOR_DEFAULT_US ((int64_t)600000)
+#define TCP_RTO_MAX_US           ((int64_t)120000000)
+#define TCP_OOSEQ_RTO_MIN_TICKS  TCP_MIN_RTO_TICKS
 
 /* WARN-level log threshold for consecutive TCP timer trylock misses.
  * One miss postpones this socket's fast and slow timer work until its next
@@ -53,7 +54,6 @@ extern "C" {
 /* Pin the compile-time defaults to the legal range. Runtime configuration is
  * independently bounded by tcp_rto_set_floor_us().
  */
-#if defined(__cplusplus)
 static_assert(TCP_RTO_MAX_US <= 0x7FFFFFFF / 8,
               "TCP_RTO_MAX_US too large; sa_us would overflow int32_t");
 static_assert(TCP_RTO_FLOOR_MIN_US > 0, "TCP_RTO_FLOOR_MIN_US must be positive");
@@ -71,25 +71,6 @@ static_assert(TCP_RTO_FALLBACK_US >= TCP_RTO_FLOOR_DEFAULT_US,
               "TCP_RTO_FALLBACK_US must not undershoot TCP_RTO_FLOOR_DEFAULT_US");
 static_assert(TCP_RTO_FALLBACK_US <= TCP_RTO_MAX_US,
               "TCP_RTO_FALLBACK_US must not exceed TCP_RTO_MAX_US");
-#else
-_Static_assert(TCP_RTO_MAX_US <= 0x7FFFFFFF / 8,
-               "TCP_RTO_MAX_US too large; sa_us would overflow int32_t");
-_Static_assert(TCP_RTO_FLOOR_MIN_US > 0, "TCP_RTO_FLOOR_MIN_US must be positive");
-_Static_assert(TCP_RTO_FLOOR_DEFAULT_US > 0, "TCP_RTO_FLOOR_DEFAULT_US must be positive");
-_Static_assert(TCP_RTO_MAX_US > 0, "TCP_RTO_MAX_US must be positive");
-_Static_assert(TCP_RTO_FLOOR_MIN_US <= TCP_RTO_FLOOR_DEFAULT_US,
-               "TCP_RTO_FLOOR_MIN_US must not exceed TCP_RTO_FLOOR_DEFAULT_US");
-_Static_assert(TCP_RTO_FLOOR_DEFAULT_US <= TCP_RTO_MAX_US,
-               "TCP_RTO_FLOOR_DEFAULT_US must not exceed TCP_RTO_MAX_US");
-_Static_assert(TCP_RTO_INITIAL_US >= TCP_RTO_FLOOR_DEFAULT_US,
-               "TCP_RTO_INITIAL_US must not undershoot TCP_RTO_FLOOR_DEFAULT_US");
-_Static_assert(TCP_RTO_INITIAL_US <= TCP_RTO_MAX_US,
-               "TCP_RTO_INITIAL_US must not exceed TCP_RTO_MAX_US");
-_Static_assert(TCP_RTO_FALLBACK_US >= TCP_RTO_FLOOR_DEFAULT_US,
-               "TCP_RTO_FALLBACK_US must not undershoot TCP_RTO_FLOOR_DEFAULT_US");
-_Static_assert(TCP_RTO_FALLBACK_US <= TCP_RTO_MAX_US,
-               "TCP_RTO_FALLBACK_US must not exceed TCP_RTO_MAX_US");
-#endif
 
 /* --- Pure math helpers (no clock reads inside) ---
  *
@@ -147,9 +128,9 @@ void tcp_rtt_estimator_update_us(struct tcp_pcb *pcb, int64_t raw_sample_us);
 bool tcp_rtt_sample_should_start(const struct tcp_pcb *pcb, u32_t seg_seqno, u32_t seg_len,
                                  bool seg_is_syn);
 
-/* Predicate: should tcp_slowtmr() retransmit on this PCB at this timer
- * pass time? True iff outstanding unacked data exists, the deadline is
- * armed, and the timer pass time has reached it.
+/* Predicate: has the armed RTO deadline been reached at this timer pass
+ * time? False while no deadline is armed. The caller gates on outstanding
+ * unacked data (see tcp_slowtmr()).
  */
 bool tcp_rto_deadline_elapsed(const struct tcp_pcb *pcb, int64_t timer_now_us);
 
@@ -163,21 +144,19 @@ s32_t tcp_syn_fallback_rto_us(void);
  *
  * Encode the invariant: any active rto_deadline_us implies non-NULL
  * pcb->unacked. These helpers centralize send, ACK, purge, and blocked-send
- * transitions. Expiry and PCB seeding also write deadline state as part of
+ * transitions. Expiry and PCB init also write deadline state as part of
  * their broader atomic state transitions.
  */
 
-/* Marker predicate for the legacy rtime "timer running" semantic. rtime
- * is no longer compared to pcb->rto for RTO expiration (rto_deadline_us
- * owns that); it is still consumed by fast-retransmit dup-ACK counting
- * and by TCP_USER_TIMEOUT logic as a "did we recently send" marker.
+/* Marker predicate for the tick-domain rtime "timer running" semantic.
+ * RTO expiration is owned by rto_deadline_us; rtime is consumed by
+ * fast-retransmit dup-ACK counting and by TCP_USER_TIMEOUT logic as a
+ * "did we recently send" marker.
  */
 static inline bool tcp_rexmit_timer_running(const struct tcp_pcb *pcb)
 {
     return pcb->rtime >= 0;
 }
-
-bool tcp_rto_timer_active(const struct tcp_pcb *pcb);
 
 /* Clear only the absolute RTO deadline. Keep rtime and
  * ticks_since_data_sent running when an RTO retransmission is parked on
@@ -196,13 +175,6 @@ void tcp_rto_timer_stop(struct tcp_pcb *pcb);
  */
 void tcp_rto_timer_rearm(struct tcp_pcb *pcb, int64_t now_us);
 
-/* Update the RTT estimator from an ACK timestamp and re-arm the deadline
- * against the freshly computed RTO. Used for partial ACKs that leave unacked
- * data outstanding.
- */
-void tcp_rtt_estimator_update_and_rearm_us(struct tcp_pcb *pcb, int64_t ack_now_us,
-                                           int64_t rearm_now_us);
-
 /* Arm rto_deadline_us only if it is currently 0 (RFC 6298 5.1: "if the timer
  * is not running, start it"). Idempotent: a subsequent call within the same
  * flight does not restart the deadline. Caller MUST have just successfully
@@ -210,21 +182,19 @@ void tcp_rtt_estimator_update_and_rearm_us(struct tcp_pcb *pcb, int64_t ack_now_
  */
 void tcp_rto_timer_start_if_needed(struct tcp_pcb *pcb, int64_t now_us);
 
-/* OOSEQ retention timeout in microseconds. Preserves the legacy 3-tick
- * floor: ooseq_rto = max(pcb->rto_us, TCP_RTO_LEGACY_OOSEQ_MIN_TICKS *
- * slow_interval_us) * TCP_OOSEQ_TIMEOUT.
+/* OOSEQ retention timeout in microseconds:
+ * max(pcb->rto_us, TCP_OOSEQ_RTO_MIN_TICKS * slow_interval_us) * TCP_OOSEQ_TIMEOUT.
  */
 uint64_t tcp_ooseq_timeout_us(const struct tcp_pcb *pcb, uint64_t slow_interval_us);
 
-/* Seed/reset the RTT/RTO estimator and deadline state on a PCB. Initial RTO
- * comes from RFC 6298 (1 s), clamped by the configured floor. sa_us == 0 is
- * the "no prior sample" sentinel,
- * so sv_us is seeded to the initial RTO (matches the legacy lwIP seed
- * shape) and rto_us is set explicitly to skip the estimator until the
+/* Initialize/reset the RTT/RTO estimator and deadline state on a PCB.
+ * Initial RTO comes from RFC 6298 (1 s), clamped by the configured floor.
+ * sa_us == 0 is the "no prior sample" sentinel, so sv_us is seeded to the
+ * initial RTO and rto_us is set explicitly to skip the estimator until the
  * first valid sample arrives. Single source of truth used by tcp_pcb_init,
  * tcp_pcb_recycle, and the unit-test PCB reset helper.
  */
-void tcp_rto_pcb_seed(struct tcp_pcb *pcb);
+void tcp_rto_pcb_init(struct tcp_pcb *pcb);
 
 #ifdef __cplusplus
 }

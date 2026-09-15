@@ -31,13 +31,12 @@ extern "C" {
  * fail-safe invariant: a read without a same-batch refresh - reachable only on
  * an RX-refresh coverage bug - always sees 0, so the zero-sample clamp drops it
  * (plus a dev-build assert and debug log), never a stale value from an earlier batch.
- * See the RM#4930789 microsecond RTT/RTO design.
  */
 extern __thread int64_t g_xlio_tls_now_us;
 
-/* --- Debug/test-build clock-read counters (design invariant I2) ---
+/* --- Debug/test-build clock-read counters ---
  *
- * I2: at most one monotonic-clock read per non-empty RX batch, zero on empty
+ * Invariant: at most one monotonic-clock read per non-empty RX batch, zero on empty
  * polls, one per non-empty timer bucket pass; the defensive direct-clock
  * fallbacks stay at zero. These per-thread counters make that invariant
  * observable so unit tests, gtest, and lab runs can assert it directly.
@@ -142,12 +141,6 @@ static inline int64_t clock_gettime_monotonic_us(void)
     int rc = clock_gettime(CLOCK_MONOTONIC, &ts);
     assert(rc == 0);
     (void)rc;
-    /* Suffix the literals to make the int64_t-wide multiply explicit
-     * regardless of where the cast binds. tv_sec is time_t (typically
-     * int64_t on 64-bit ABIs but only int32_t on Y2038-vulnerable 32-bit
-     * ABIs); the LL suffix forces 64-bit math even if a future refactor
-     * relocates the cast.
-     */
     return (int64_t)ts.tv_sec * 1000000LL + ts.tv_nsec / 1000LL;
 }
 

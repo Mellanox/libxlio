@@ -179,7 +179,7 @@ TEST_F(tcp_sockopt, ti_1_getsockopt_tcp_info)
  *    in its upper tail.
  *    `tcpi_rto` is intentionally not upper-bounded in default gtest: loaded
  *    or virtualized runners can legitimately inflate wall-clock RTT/RTTVAR.
- *    Low-latency `<600000` legacy-sentinel checks belong in lab gates or
+ *    Low-latency `<600000` upper-bound checks belong in lab gates or
  *    deterministic estimator tests with controlled timing.
  *
  *    The 1-byte reply path forces the client to recv() before reading

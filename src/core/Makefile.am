@@ -131,7 +131,6 @@ libxlio_la_SOURCES := \
 	proto/ip_frag.cpp \
 	proto/flow_tuple.cpp \
 	proto/xlio_lwip.cpp \
-	proto/xlio_time.cpp \
 	proto/neighbour.cpp \
 	proto/neighbour_table_mgr.cpp \
 	proto/netlink_socket_mgr.cpp \
@@ -171,6 +170,7 @@ libxlio_la_SOURCES := \
 	util/sys_vars.cpp \
 	util/sys_vars_configurator.cpp \
 	util/data_updater.cpp \
+	util/xlio_time.cpp \
 	\
 	config/change_reason.h \
 	config/config_registry.h \
@@ -293,8 +293,6 @@ libxlio_la_SOURCES := \
 	\
 	proto/arp.h \
 	proto/mem_desc.h \
-	proto/xlio_cache.h \
-	proto/xlio_time.h \
 	proto/dst_entry.h \
 	proto/dst_entry_tcp.h \
 	proto/dst_entry_udp.h \
@@ -352,6 +350,8 @@ libxlio_la_SOURCES := \
 	util/valgrind.h \
 	util/xlio_list.h \
 	util/xlio_stats.h \
+	util/xlio_cache.h \
+	util/xlio_time.h \
 	util/xlio_exception.h \
 	util/vtypes.h \
 	util/wakeup.h \

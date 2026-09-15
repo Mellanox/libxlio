@@ -69,8 +69,8 @@ s32_t tcp_rto_from_estimator_us(s32_t sa_us, s32_t sv_us)
 {
     /* Additive floor: RTO = SRTT + max(4*RTTVAR, floor) (sa_us = 8*SRTT,
      * sv_us ~ 4*RTTVAR). The floor rides on the variance term instead of
-     * substituting for the whole RTO, so under load a delayed ACK no longer
-     * trips the timer; at idle (SRTT ~ 0) it is still approximately the floor. */
+     * substituting for the whole RTO, so under load a delayed ACK does not
+     * trip the timer; at idle (SRTT ~ 0) the result is approximately the floor. */
     const s32_t floor_us = tcp_rto_get_floor_us();
     int64_t var_term = (int64_t)sv_us;
     if (var_term < floor_us) {
@@ -148,8 +148,7 @@ bool tcp_rtt_sample_should_start(const struct tcp_pcb *pcb, u32_t seg_seqno, u32
 
 bool tcp_rto_deadline_elapsed(const struct tcp_pcb *pcb, int64_t timer_now_us)
 {
-    return pcb->unacked != NULL && pcb->rto_deadline_us != 0 &&
-        timer_now_us >= pcb->rto_deadline_us;
+    return pcb->rto_deadline_us != 0 && timer_now_us >= pcb->rto_deadline_us;
 }
 
 /* cold: only reached after a SYN/SYN-ACK RTO retransmission. */
@@ -159,11 +158,6 @@ s32_t __attribute__((cold)) tcp_syn_fallback_rto_us(void)
 }
 
 /* --- Timer-state helpers --- */
-
-bool tcp_rto_timer_active(const struct tcp_pcb *pcb)
-{
-    return pcb->unacked != NULL && pcb->rto_deadline_us != 0;
-}
 
 void tcp_rto_deadline_clear(struct tcp_pcb *pcb)
 {
@@ -184,14 +178,6 @@ void tcp_rto_timer_rearm(struct tcp_pcb *pcb, int64_t now_us)
     pcb->rto_deadline_us = now_us + (int64_t)pcb->rto_us;
 }
 
-void tcp_rtt_estimator_update_and_rearm_us(struct tcp_pcb *pcb, int64_t ack_now_us,
-                                           int64_t rearm_now_us)
-{
-    tcp_rtt_estimator_update_us(pcb, ack_now_us - pcb->rttest_us);
-    pcb->rttest_us = 0;
-    tcp_rto_timer_rearm(pcb, rearm_now_us);
-}
-
 void tcp_rto_timer_start_if_needed(struct tcp_pcb *pcb, int64_t now_us)
 {
     if (pcb->rto_deadline_us == 0) {
@@ -207,14 +193,14 @@ void tcp_rto_timer_start_if_needed(struct tcp_pcb *pcb, int64_t now_us)
 
 uint64_t tcp_ooseq_timeout_us(const struct tcp_pcb *pcb, uint64_t slow_interval_us)
 {
-    uint64_t legacy_floor_us = (uint64_t)TCP_RTO_LEGACY_OOSEQ_MIN_TICKS * slow_interval_us;
+    uint64_t min_floor_us = (uint64_t)TCP_OOSEQ_RTO_MIN_TICKS * slow_interval_us;
     uint64_t rto_us_pos = pcb->rto_us > 0 ? (uint64_t)pcb->rto_us : 0;
-    uint64_t ooseq_rto_us = rto_us_pos > legacy_floor_us ? rto_us_pos : legacy_floor_us;
+    uint64_t ooseq_rto_us = rto_us_pos > min_floor_us ? rto_us_pos : min_floor_us;
 
     return ooseq_rto_us * (uint64_t)TCP_OOSEQ_TIMEOUT;
 }
 
-void tcp_rto_pcb_seed(struct tcp_pcb *pcb)
+void tcp_rto_pcb_init(struct tcp_pcb *pcb)
 {
     pcb->rttest_us = 0;
     /* rtseq is dead state when rttest_us == 0 (the eligibility check in

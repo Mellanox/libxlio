@@ -11,7 +11,7 @@
 #include "core/lwip/tcp.h"
 #include "core/lwip/tcp_impl.h"
 #include "core/lwip/tcp_rto.h"
-#include "core/proto/xlio_time.h"
+#include "core/util/xlio_time.h"
 
 /* RX-path (tcp_in.c) integration tests: drive L3_level_tcp_input() with
  * hand-crafted IPv4+TCP frames against a synthetic ESTABLISHED PCB.
@@ -109,7 +109,7 @@ static void register_noop_free_hooks()
 static void init_established_pcb(tcp_pcb &pcb)
 {
     std::memset(&pcb, 0, sizeof(pcb));
-    tcp_rto_pcb_seed(&pcb);
+    tcp_rto_pcb_init(&pcb);
     pcb.private_state = ESTABLISHED;
     pcb.cc_algo = &none_cc_algo;
     pcb.rtime = -1;
@@ -453,7 +453,48 @@ TEST(tcp_in, pcb_purge_clears_dead_timing_ownership)
     EXPECT_EQ(0U, pcb.rtseq);
 }
 
-/* --- ACK re-arm and legacy expiry consequence --- */
+/* --- ACK re-arm and expiry consequence --- */
+
+/* An eligible RTT sample on a partial ACK must feed the estimator BEFORE the
+ * RTO deadline is re-armed, so the new deadline uses the freshly computed RTO
+ * (a stale-RTO re-arm would land at ack_now + the pre-sample RTO). */
+TEST(tcp_in, partial_ack_rearms_deadline_with_fresh_rto)
+{
+    register_noop_free_hooks();
+
+    tcp_pcb pcb;
+    init_established_pcb(pcb);
+
+    test_segment_storage seg1, seg2;
+    attach_two_unacked_segments(pcb, seg1, seg2, 1000, 4);
+
+    /* Live sample covering seg1 only. */
+    pcb.rttest_us = 500000;
+    pcb.rtseq = 1000;
+    pcb.rto_us = (s32_t)TCP_RTO_INITIAL_US;
+    pcb.rto_deadline_us = 500000 + TCP_RTO_INITIAL_US;
+    pcb.rtime = 0;
+    pcb.ticks_since_data_sent = 0;
+
+    const int64_t ack_now_us = 500100; /* raw sample = 100 us */
+    g_xlio_tls_now_us = ack_now_us;
+    test_rx_packet pkt;
+    inject_ack(pcb, pkt, /*ackno*/ 1004, /*seqno*/ 5000);
+    g_xlio_tls_now_us = 0;
+
+    /* Partial ACK: seg2 stays in flight. */
+    EXPECT_EQ(&seg2.seg, pcb.unacked);
+    EXPECT_EQ(0, pcb.rttest_us) << "consumed sample must close";
+
+    /* First sample of 100 us: sa = 800, sv = 200; additive floor:
+     * rto = 100 + max(200, floor) = floor + 100. */
+    const s32_t expected_rto_us = tcp_rto_get_floor_us() + 100;
+    EXPECT_EQ(expected_rto_us, pcb.rto_us);
+
+    EXPECT_EQ(ack_now_us + expected_rto_us, pcb.rto_deadline_us)
+        << "deadline must be re-armed from the ACK time with the fresh RTO";
+    EXPECT_EQ(0, pcb.rtime);
+}
 
 /* A duplicate ACK does not change the retransmission deadline. An advancing
  * full ACK consumes the flight and stops the timer. */
@@ -491,7 +532,7 @@ TEST(tcp_in, duplicate_ack_keeps_deadline_advancing_ack_stops_timer)
 /* The first established-data expiry retains XLIO's existing consequence:
  * congestion response, whole-queue retransmission, Karn suppression, and
  * exponential backoff. */
-TEST(tcp_in, slowtmr_first_data_expiry_keeps_legacy_consequence)
+TEST(tcp_in, slowtmr_first_data_expiry_applies_rto_consequence)
 {
     register_noop_free_hooks();
     set_tmr_resolution(10);
@@ -519,7 +560,7 @@ TEST(tcp_in, slowtmr_first_data_expiry_keeps_legacy_consequence)
     EXPECT_EQ((u32_t)pcb.mss, pcb.cwnd) << "RTO must collapse cwnd to 1 MSS";
     EXPECT_EQ(5000U, pcb.ssthresh) << "RTO halves the effective window (10000 / 2)";
     EXPECT_EQ(0, pcb.rttest_us) << "Karn: a retransmission must not carry an RTT sample";
-    EXPECT_EQ(rto_at_fire << 1, pcb.rto_us) << "first RTO applies the legacy backoff";
+    EXPECT_EQ(rto_at_fire << 1, pcb.rto_us) << "first RTO doubles rto_us";
     EXPECT_EQ(t_fire + (int64_t)pcb.rto_us, pcb.rto_deadline_us);
     EXPECT_EQ(&first.seg, pcb.unacked);
     EXPECT_EQ(&second.seg, pcb.last_unacked);
@@ -529,7 +570,7 @@ TEST(tcp_in, slowtmr_first_data_expiry_keeps_legacy_consequence)
 /* An advancing partial ACK re-arms from the ACK's RX-batch timestamp after the
  * acknowledged segment is removed. If no later ACK arrives, the new deadline
  * expires through the existing congestion-loss path. */
-TEST(tcp_in, partial_ack_rearms_then_expiry_keeps_legacy_consequence)
+TEST(tcp_in, partial_ack_rearms_then_expiry_applies_rto_consequence)
 {
     register_noop_free_hooks();
     set_tmr_resolution(10);
@@ -575,7 +616,7 @@ TEST(tcp_in, partial_ack_rearms_then_expiry_keeps_legacy_consequence)
 }
 
 /* A SYN RTO retains the existing retransmission consequence. */
-TEST(tcp_in, slowtmr_syn_expiry_keeps_legacy_path)
+TEST(tcp_in, slowtmr_syn_expiry_retransmits_syn)
 {
     register_noop_free_hooks();
     set_tmr_resolution(10);
@@ -597,7 +638,7 @@ TEST(tcp_in, slowtmr_syn_expiry_keeps_legacy_path)
     g_ip_output_calls = 0;
     tcp_slowtmr(&pcb, pcb.rto_deadline_us + 5);
 
-    EXPECT_EQ(1, pcb.nrtx) << "SYN expiry must retransmit (legacy path)";
+    EXPECT_EQ(1, pcb.nrtx) << "SYN expiry must retransmit";
     EXPECT_EQ(1, g_ip_output_calls);
     EXPECT_NE(0, pcb.flags & TF_SYN_RTO_REXMITTED);
 }

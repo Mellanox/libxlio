@@ -1550,9 +1550,9 @@ Resolution in milliseconds for TCP internal timer scheduling.
   persist probes (zero-window), keepalive probes, connection state cleanup (FIN_WAIT,
   TIME_WAIT, etc.).
 
-**Note:** This parameter no longer governs RTT/RTO estimator precision or `TCP_INFO`
+**Note:** This parameter does not govern RTT/RTO estimator precision or `TCP_INFO`
 timing fields. RTT samples and the retransmission timeout (`tcpi_rto`, `tcpi_rtt`,
-`tcpi_rttvar`) are now measured directly with monotonic microsecond timestamps and are
+`tcpi_rttvar`) are measured directly with monotonic microsecond timestamps and are
 independent of `timer_msec`. The slow timer only decides *when* the RTO deadline check
 runs; the deadline itself uses microsecond precision. [`network.protocols.tcp.timestamps`](#networkprotocolstcptimestamps)
 controls the on-wire RFC 1323 timestamp option and is unaffected.

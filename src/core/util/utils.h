@@ -20,7 +20,7 @@
 #include "utils/rdtsc.h"
 #include "vlogger/vlogger.h"
 #include "core/proto/mem_buf_desc.h"
-#include "core/proto/xlio_cache.h"
+#include "core/util/xlio_cache.h"
 #include "core/util/xlio_exception.h"
 
 #ifndef ARRAY_SIZE

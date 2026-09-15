@@ -12,7 +12,7 @@
 #include "cq_mgr_rx_inl.h"
 #include "hw_queue_rx.h"
 #include "ring_simple.h"
-#include "core/proto/xlio_time.h"
+#include "core/util/xlio_time.h"
 #include <cinttypes>
 #include "proto/tls.h"
 

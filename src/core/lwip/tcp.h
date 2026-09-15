@@ -34,13 +34,14 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <assert.h>
 #include <sys/uio.h>
 
 #include "core/lwip/opt.h"
 
 #include "core/lwip/pbuf.h"
 #include "core/lwip/ip_addr.h"
-#include "core/proto/xlio_cache.h"
+#include "core/util/xlio_cache.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -309,9 +310,9 @@ struct tcp_pcb {
     u8_t tcp_timer; /* Timer counter to handle calling slow-timer from tcp_tmr() */
     u32_t tmr;
 
-    /* Retransmission timer marker. Kept as tick-domain counter for
+    /* Retransmission timer marker, a tick-domain counter for
      * duplicate-ACK / fast-retransmit / TCP_USER_TIMEOUT logic. NOT used
-     * for RTO expiration: that's owned by rto_deadline_us (microseconds).
+     * for RTO expiration: that is owned by rto_deadline_us (microseconds).
      */
     s16_t rtime;
 
@@ -442,7 +443,6 @@ struct tcp_pcb {
  * processing, retransmission, and teardown.
  * Keep them contiguous so queue walks do not interleave unrelated timer state.
  */
-#if defined(__cplusplus)
 static_assert(offsetof(struct tcp_pcb, last_unacked) - offsetof(struct tcp_pcb, unsent) ==
                   3 * sizeof(struct tcp_seg *),
               "TCP TX queue heads must remain contiguous");
@@ -450,41 +450,16 @@ static_assert(!TCP_CC_ALGO_MOD ||
                   offsetof(struct tcp_pcb, unsent) / CACHELINE_SIZE ==
                       offsetof(struct tcp_pcb, last_unacked) / CACHELINE_SIZE,
               "TCP TX queue heads must share a cache window in the default build");
-#else
-_Static_assert(offsetof(struct tcp_pcb, last_unacked) - offsetof(struct tcp_pcb, unsent) ==
-                   3 * sizeof(struct tcp_seg *),
-               "TCP TX queue heads must remain contiguous");
-_Static_assert(!TCP_CC_ALGO_MOD ||
-                   offsetof(struct tcp_pcb, unsent) / CACHELINE_SIZE ==
-                       offsetof(struct tcp_pcb, last_unacked) / CACHELINE_SIZE,
-               "TCP TX queue heads must share a cache window in the default build");
-#endif
 
-/* Intra-struct cache-line co-location of rto_deadline_us with unacked.
- * tcp_slowtmr()'s per-PCB hot read of (rto_deadline_us, unacked-head)
- * benefits when both fields share a cache line, sparing a second L1D
- * miss per active PCB. This static_assert proves only the intra-struct
- * condition (both fields land in the same 64-byte intra-struct window).
- *
- * Sharing the cache line at runtime additionally requires the enclosing
- * tcp_pcb to be 64-byte aligned at allocation. Today tcp_pcb is embedded
- * in sockinfo_tcp which is heap-allocated via plain `new`, giving
- * alignof(std::max_align_t) = 16 on x86_64. As a result this is
- * best-effort, not guaranteed; the per-pass read often (but not always)
- * hits one cache line. Promoting tcp_pcb to alignas(CACHELINE_SIZE)
- * would close the gap if the perf claim ever needs to be load-bearing;
- * the static_assert below is left in place because the intra-struct
- * condition is necessary even under that future change.
+/* Keep rto_deadline_us and unacked in one 64-byte intra-struct window so
+ * tcp_slowtmr()'s per-PCB read of both touches a single cache line. The
+ * assert checks only the intra-struct condition; runtime sharing also
+ * needs a 64-byte-aligned tcp_pcb allocation (sockinfo_tcp uses plain
+ * `new`, 16-byte alignment on x86_64), so the co-location is best-effort.
  */
-#if defined(__cplusplus)
 static_assert(offsetof(struct tcp_pcb, rto_deadline_us) / CACHELINE_SIZE ==
                   offsetof(struct tcp_pcb, unacked) / CACHELINE_SIZE,
               "rto_deadline_us must share a cache line with unacked");
-#else
-_Static_assert(offsetof(struct tcp_pcb, rto_deadline_us) / CACHELINE_SIZE ==
-                   offsetof(struct tcp_pcb, unacked) / CACHELINE_SIZE,
-               "rto_deadline_us must share a cache line with unacked");
-#endif
 
 typedef u16_t (*ip_route_mtu_fn)(struct tcp_pcb *pcb);
 void register_ip_route_mtu(ip_route_mtu_fn fn);

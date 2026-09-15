@@ -11,7 +11,7 @@
 #include "core/lwip/tcp.h"
 #include "core/lwip/tcp_impl.h"
 #include "core/lwip/tcp_rto.h"
-#include "core/proto/xlio_time.h"
+#include "core/util/xlio_time.h"
 
 extern "C" {
 int32_t enable_wnd_scale = 0;
@@ -73,7 +73,7 @@ static err_t succeed_always(struct pbuf *p, struct tcp_seg *seg, void *pcb, u16_
 static void init_pcb_for_output(tcp_pcb &pcb)
 {
     std::memset(&pcb, 0, sizeof(pcb));
-    tcp_rto_pcb_seed(&pcb);
+    tcp_rto_pcb_init(&pcb);
     pcb.private_state = ESTABLISHED;
     /* Real PCBs get a congestion-control algo at init (tcp.c defaults to
      * &none_cc_algo). The RTO-retransmit path in tcp_slowtmr() calls
@@ -249,8 +249,9 @@ TEST(tcp_output, wouldblock_first_send_idle_pcb_recovered_by_slowtmr)
     EXPECT_EQ(-1, pcb.rtime);
 
     /* The RTO deadline gate cannot fire for the parked segment (no armed
-     * deadline, empty unacked), so the slow timer's RTO path is NOT the recovery
-     * mechanism - the stuck-unsent re-drive is.
+     * deadline; tcp_slowtmr() additionally requires unacked != NULL), so the
+     * slow timer's RTO path is NOT the recovery mechanism - the stuck-unsent
+     * re-drive is.
      */
     const int64_t far_future_us = (int64_t)TCP_RTO_MAX_US * 4;
     EXPECT_FALSE(tcp_rto_deadline_elapsed(&pcb, far_future_us));
@@ -268,6 +269,50 @@ TEST(tcp_output, wouldblock_first_send_idle_pcb_recovered_by_slowtmr)
     EXPECT_EQ(nullptr, pcb.unsent);
     EXPECT_EQ(1004U, pcb.snd_nxt);
     EXPECT_NE(0, pcb.rto_deadline_us) << "successful flush must arm the RTO deadline";
+}
+
+/* tcp_rexmit() (fast retransmit) moves the flight back to unsent without
+ * clearing rto_deadline_us, so tcp_slowtmr() can meet an armed, elapsed
+ * deadline with an empty unacked queue. Nothing is in flight to retransmit:
+ * the RTO consequence (backoff doubling, cwnd collapse) must not fire, and
+ * the stuck-unsent re-drive must recover the parked segment. Regression
+ * guard for the pcb->unacked gate at the tcp_rto_deadline_elapsed() call
+ * site. */
+TEST(tcp_output, armed_elapsed_deadline_with_empty_unacked_takes_redrive_not_rto)
+{
+    tcp_pcb pcb;
+    init_pcb_for_output(pcb);
+    pcb.ip_output = succeed_always;
+
+    test_segment_storage storage;
+    init_unsent_segment(storage, pcb.snd_nxt, 4);
+    pcb.unsent = &storage.seg;
+    pcb.last_unsent = &storage.seg;
+
+    tcp_seg spare_seg {};
+    pcb.seg_alloc = &spare_seg;
+
+    pcb.rto_deadline_us = 1000;
+    pcb.rtime = 0;
+    pcb.ticks_since_data_sent = 0;
+    pcb.cwnd = 20000;
+    pcb.ssthresh = 40000;
+    const s32_t rto_before_us = pcb.rto_us;
+
+    const int64_t past_deadline_us = 2000;
+    ASSERT_TRUE(tcp_rto_deadline_elapsed(&pcb, past_deadline_us));
+
+    g_ip_output_calls = 0;
+    tcp_slowtmr(&pcb, past_deadline_us);
+
+    EXPECT_EQ(rto_before_us, pcb.rto_us) << "RTO backoff fired with empty unacked";
+    EXPECT_EQ(20000U, pcb.cwnd) << "cwnd collapse fired with empty unacked";
+    EXPECT_EQ(40000U, pcb.ssthresh);
+    EXPECT_EQ(0, pcb.nrtx);
+
+    EXPECT_EQ(1, g_ip_output_calls) << "stuck-unsent re-drive did not run";
+    EXPECT_EQ(&storage.seg, pcb.unacked) << "re-drive did not flush the parked segment";
+    EXPECT_EQ(nullptr, pcb.unsent);
 }
 
 /* An RTO moves the whole unacked queue back to unsent before calling
@@ -438,7 +483,7 @@ TEST(tcp_output, rto_retransmit_counter_saturates)
 }
 
 #ifdef XLIO_TIME_DEBUG_COUNTERS
-/* --- Design invariant I2: clock-read counters (debug/test builds only) ---
+/* --- Clock-read counter invariant (debug/test builds only) ---
  *
  * These assert the two TX-side clock-read sites the unit-test binary can reach
  * (tcp_out.c is linked into it; the RX/timer/fallback sites live in files it

@@ -107,7 +107,7 @@ unit_tests_SOURCES = \
 	$(top_builddir)/src/core/lwip/tcp_in.c \
 	$(top_builddir)/src/core/lwip/tcp_out.c \
 	$(top_builddir)/src/core/lwip/tcp_rto.c \
-	$(top_builddir)/src/core/proto/xlio_time.cpp \
+	$(top_builddir)/src/core/util/xlio_time.cpp \
 	$(top_builddir)/src/core/config/loaders/inline_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/json_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/key_resolver.cpp \

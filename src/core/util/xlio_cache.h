@@ -8,12 +8,9 @@
 #define XLIO_CACHE_H_
 
 /* CPU data-cache line size (bytes). 64 on x86_64 and ARMv8 / BlueField-3.
- *
- * Promoted out of src/core/util/utils.h (which is C++-only) into a
- * C-compat header so lwIP C translation units can use it for cache-line
- * layout enforcement via static_assert. Future targets with non-64-byte
- * cache lines become a single edit here, not a hunt for hard-coded
- * literals.
+ * Kept in a C-compatible header so lwIP C translation units can use it for
+ * cache-line layout enforcement via static_assert. Future targets with
+ * non-64-byte cache lines become a single edit here.
  */
 #define CACHELINE_SIZE 64
 

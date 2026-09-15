@@ -45,7 +45,7 @@
 
 #include "core/lwip/tcp_impl.h"
 #include "core/lwip/tcp_rto.h"
-#include "core/proto/xlio_time.h"
+#include "core/util/xlio_time.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -104,8 +104,8 @@ s8_t tcp_quickack(struct tcp_pcb *pcb, tcp_in_data *in_data)
  * initial RTO), but is called from the per-packet tcp_process(). Inlining it
  * here bloats tcp_process()'s steady-state instruction footprint, which lowers
  * IPC and connection-establishment rate on small-I-cache cores (measured ~7%
- * CPS regression at 0KB Connection: close on BlueField-3). noinline keeps the
- * seed code out-of-line and restores CPS to baseline; behavior is unchanged. */
+ * CPS at 0KB Connection: close on BlueField-3). noinline keeps the seed code
+ * out-of-line. */
 static bool __attribute__((noinline))
 tcp_handle_syn_established(struct tcp_pcb *pcb, int64_t now_us)
 {
@@ -136,23 +136,13 @@ tcp_handle_syn_established(struct tcp_pcb *pcb, int64_t now_us)
          * a clean first sample. In particular, do not copy a configured floor
          * above 1 s into sv_us: that would masquerade as the conservative
          * SYN-loss fallback and transiently inflate TCP_INFO.tcpi_rttvar.
-         * now_us == 0 means cold TLS. now_us <= rttest_us means that this
-         * packet reused a batch timestamp captured before an in-batch send.
-         * Neither timestamp can yield a causal RTT, so skip the seed but still
-         * close the sample. */
+         * now_us == 0 or now_us <= rttest_us cannot yield a causal RTT, so
+         * skip the seed but still close the sample. */
         if (now_us > pcb->rttest_us) {
-            const s32_t seed_us = tcp_rto_seed_from_handshake_us(now_us - pcb->rttest_us);
-            pcb->rto_us = seed_us;
+            pcb->rto_us = tcp_rto_seed_from_handshake_us(now_us - pcb->rttest_us);
         } else if (now_us == 0) {
-            /* Cold TLS: the handshake seed reached tcp_process() without a
-             * refreshed RX timestamp. Unreachable today - every path into
-             * tcp_process() routes through the guarded CQ refresh hooks - and
-             * kept as defense in depth: skipping the seed leaves the safe
-             * RFC-compliant 1 s initial RTO, whereas seeding unconditionally
-             * would feed a negative handshake delta and clamp garbage into
-             * rto_us, hiding a future RX-refresh coverage regression.
-             * Contract I3 requires a missed refresh to be loud in dev builds,
-             * matching the SYN-SENT rearm fallback in tcp_process() below. */
+            /* now_us == 0 is not an acceptable timestamp here (asserted
+             * below); skip the seed and keep the RFC 6298 initial RTO. */
             LWIP_DEBUGF(TCP_RTO_DEBUG,
                         ("tcp_handle_syn_established: skipping handshake RTO seed, "
                          "TLS now_us not refreshed\n"));
@@ -1224,9 +1214,7 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                 pcb->flags &= ~TF_INFR;
             }
 
-            /* Forward progress starts a new retry episode. This does not
-             * collapse RTO backoff: rto_us holds the operational value and is
-             * recomputed only when a valid RTT sample is available below. */
+            /* Forward progress starts a new retry episode. */
             pcb->nrtx = 0;
 
             const bool rtt_sample_covered =
@@ -1306,30 +1294,28 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                         ("tcp_receive: pcb->rttest_us %lld rtseq %" U32_F " ackno %" U32_F "\n",
                          (long long)pcb->rttest_us, pcb->rtseq, in_data->ackno));
 
-            /* If there's nothing left to acknowledge, stop the retransmit
-               timer, otherwise re-arm it against the per-batch RX
-               timestamp captured above. RTT estimation must happen before
-               re-arm so partial ACKs schedule the next deadline with the
-               freshly computed RTO. */
-            if (pcb->unacked == NULL) {
-                if (rtt_sample_eligible) {
+            /* Consume the RTT sample before the timer decision below, so a
+               partial ACK re-arms the deadline with the freshly computed RTO. */
+            if (rtt_sample_eligible) {
 #if TCP_CC_ALGO_MOD
-                    pcb->t_rttupdated++;
+                pcb->t_rttupdated++;
 #endif
-                    int64_t raw_sample_us = ack_now_us - pcb->rttest_us;
+                int64_t raw_sample_us = ack_now_us - pcb->rttest_us;
 
-                    LWIP_DEBUGF(
-                        TCP_RTO_DEBUG,
-                        ("tcp_receive: experienced rtt %lld us\n", (long long)raw_sample_us));
+                LWIP_DEBUGF(TCP_RTO_DEBUG,
+                            ("tcp_receive: experienced rtt %lld us\n", (long long)raw_sample_us));
 
-                    tcp_rtt_estimator_update_us(pcb, raw_sample_us);
+                tcp_rtt_estimator_update_us(pcb, raw_sample_us);
+                pcb->rttest_us = 0;
 
-                    LWIP_DEBUGF(TCP_RTO_DEBUG,
-                                ("tcp_receive: RTO %ld us (sa_us %ld sv_us %ld)\n",
-                                 (long)pcb->rto_us, (long)pcb->sa_us, (long)pcb->sv_us));
+                LWIP_DEBUGF(TCP_RTO_DEBUG,
+                            ("tcp_receive: RTO %ld us (sa_us %ld sv_us %ld)\n", (long)pcb->rto_us,
+                             (long)pcb->sa_us, (long)pcb->sv_us));
+            }
 
-                    pcb->rttest_us = 0;
-                }
+            /* Nothing left in flight stops the retransmit timer; otherwise
+               re-arm it against the per-batch RX timestamp captured above. */
+            if (pcb->unacked == NULL) {
                 pcb->last_unacked = NULL;
                 if (persist) {
                     /* start persist timer */
@@ -1338,33 +1324,18 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                 }
                 tcp_rto_timer_stop(pcb);
             } else {
-                if (rtt_sample_eligible) {
-#if TCP_CC_ALGO_MOD
-                    pcb->t_rttupdated++;
-#endif
+                int64_t rearm_now_us = ack_now_us;
+                if (unlikely(!now_us_valid)) {
                     LWIP_DEBUGF(TCP_RTO_DEBUG,
-                                ("tcp_receive: experienced rtt %lld us\n",
-                                 (long long)(ack_now_us - pcb->rttest_us)));
-
-                    tcp_rtt_estimator_update_and_rearm_us(pcb, ack_now_us, ack_now_us);
-
-                    LWIP_DEBUGF(TCP_RTO_DEBUG,
-                                ("tcp_receive: RTO %ld us (sa_us %ld sv_us %ld)\n",
-                                 (long)pcb->rto_us, (long)pcb->sa_us, (long)pcb->sv_us));
-                } else {
-                    int64_t rearm_now_us = ack_now_us;
-                    if (unlikely(!now_us_valid)) {
-                        LWIP_DEBUGF(TCP_RTO_DEBUG,
-                                    ("tcp_receive: rearming RTO with direct clock, "
-                                     "TLS now_us not refreshed\n"));
-                        assert(now_us_valid &&
-                               "partial ACK rearm reached tcp_receive without refreshed RX "
-                               "timestamp");
-                        rearm_now_us = clock_gettime_monotonic_us();
-                        xlio_time_dbg_inc_fallback();
-                    }
-                    tcp_rto_timer_rearm(pcb, rearm_now_us);
+                                ("tcp_receive: rearming RTO with direct clock, "
+                                 "TLS now_us not refreshed\n"));
+                    assert(now_us_valid &&
+                           "partial ACK rearm reached tcp_receive without refreshed RX "
+                           "timestamp");
+                    rearm_now_us = clock_gettime_monotonic_us();
+                    xlio_time_dbg_inc_fallback();
                 }
+                tcp_rto_timer_rearm(pcb, rearm_now_us);
             }
         } else {
             /* Out of sequence ACK, didn't really ack anything */

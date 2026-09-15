@@ -42,7 +42,7 @@
 
 #include "core/lwip/tcp_impl.h"
 #include "core/lwip/tcp_rto.h"
-#include "core/proto/xlio_time.h"
+#include "core/util/xlio_time.h"
 
 #include <string.h>
 #include <stdbool.h>
@@ -1308,9 +1308,10 @@ err_t tcp_output(struct tcp_pcb *pcb)
 
             rc = tcp_output_segment(seg, pcb);
             if (rc != ERR_OK) {
-                /* Transmission failed before the segment reached the wire. Keep it
-                 * on unsent so the next tcp_output() retry does not depend on a
-                 * fake unacked segment or an armed RTO deadline.
+                /* Transmission failed before the segment reached the wire. The
+                 * segment stays on unsent and is retried by the next
+                 * tcp_output() call, an incoming ACK, or the slow-timer
+                 * unsent-stall re-drive in tcp_slowtmr().
                  */
                 break;
             }

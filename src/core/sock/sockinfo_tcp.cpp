@@ -24,7 +24,7 @@
 #include "event/poll_group.h"
 #include "proto/route_table_mgr.h"
 #include "proto/xlio_lwip.h"
-#include "proto/xlio_time.h"
+#include "util/xlio_time.h"
 #include "core/lwip/tcp_rto.h"
 #include "proto/dst_entry_tcp.h"
 #include "iomux/io_mux_call.h"

@@ -13,7 +13,7 @@
 #include "hw_queue_rx.h"
 #include "ring_simple.h"
 #include "proto/tls.h"
-#include "core/proto/xlio_time.h"
+#include "core/util/xlio_time.h"
 #include <netinet/ip6.h>
 
 #define MODULE_NAME "cq_mgr_rx_regrq"

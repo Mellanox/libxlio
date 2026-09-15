@@ -106,7 +106,7 @@ struct aggregated_socket_stats {
     //
     // Two independent high-waters are tracked so the pool-aware report line
     // does not silently inherit a value sourced from a socket that has since
-    // been destroyed (which used to produce internally contradictory output
+    // been destroyed (that would produce internally contradictory output
     // like "max: 5 # WARNING ...; 0/N sockets reached"):
     //   * tcp_timer_skips_pool_max - max across currently-living sockets in
     //     the stats pool. Same source as tcp_timer_skips_socket_count_at_warn.
