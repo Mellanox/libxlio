@@ -32,8 +32,11 @@
  * SOFTWARE.
  */
 
+#include <chrono>
+
 #include "worker_thread.h"
 #include "vlogger/vlogger.h"
+#include "util/sys_vars.h"
 
 #define MODULE_NAME "worker_thread"
 
@@ -65,14 +68,52 @@ void worker_thread::start_thread(entity_context *ctx)
 void worker_thread::stop_thread()
 {
     m_running.store(false);
+    if (m_entity_ctx) {
+        m_entity_ctx->wakeup();
+    }
     m_thread.join();
     wt_logdbg("Worker Thread terminated (tid: %d, entctx: %p)", gettid(), m_entity_ctx);
 }
 
 void worker_thread::worker_thread_loop()
 {
+    using clock = std::chrono::steady_clock;
+
+    const int32_t poll_budget_us = safe_mce_sys().select_poll_num;
+    const uint32_t configured_timeout_ms = safe_mce_sys().tcp_timer_resolution_msec;
+    const int interrupt_timeout_ms =
+        configured_timeout_ms > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC
+        ? MCE_MAX_TCP_TIMER_RESOLUTION_MSEC
+        : static_cast<int>(configured_timeout_ms);
+    const bool interrupt_enabled = (poll_budget_us >= 0);
+
     m_running.store(true);
     while (m_running.load(std::memory_order_relaxed)) {
-        m_entity_ctx->process();
+        if (!interrupt_enabled) {
+            m_entity_ctx->process();
+            continue;
+        }
+
+        auto poll_start = clock::now();
+        auto poll_deadline = poll_start + std::chrono::microseconds(poll_budget_us);
+
+        while (m_running.load(std::memory_order_relaxed)) {
+            bool work_done = m_entity_ctx->process();
+            auto now = clock::now();
+
+            if (work_done) {
+                poll_deadline = now + std::chrono::microseconds(poll_budget_us);
+            } else if (now >= poll_deadline) {
+                break;
+            }
+        }
+
+        if (!m_running.load(std::memory_order_relaxed)) {
+            break;
+        }
+
+        // Transition to interrupt-driven sleep. Return to polling
+        // regardless of the wakeup reason.
+        m_entity_ctx->wait_for_interrupt(interrupt_timeout_ms);
     }
 }

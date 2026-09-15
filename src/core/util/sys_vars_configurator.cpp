@@ -1175,6 +1175,18 @@ void sys_var_configurator::configure_after_user_settings()
             static_cast<int64_t>(m_sys_vars.timer_resolution_msec), change_reason::AutoCorrected,
             std::string("Cannot be smaller than ") + CONFIG_VAR_TIMER_RESOLUTION_MSEC.name);
     }
+    if (m_sys_vars.tcp_timer_resolution_msec > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC) {
+        vlog_printf(VLOG_WARNING,
+                    "TCP timer resolution (%s=%u) exceeds maximum %d. "
+                    "Setting TCP timer resolution to %d msec.\n",
+                    CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC.name,
+                    m_sys_vars.tcp_timer_resolution_msec, MCE_MAX_TCP_TIMER_RESOLUTION_MSEC,
+                    MCE_MAX_TCP_TIMER_RESOLUTION_MSEC);
+        m_runtime_registry.set_value(
+            CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC,
+            static_cast<int64_t>(MCE_MAX_TCP_TIMER_RESOLUTION_MSEC),
+            change_reason::AutoCorrected, "Exceeds maximum supported epoll timeout");
+    }
 
     if (strcmp(m_sys_vars.internal_thread_affinity_str, "-1") != 0) {
         if (mce_sys_var::env_to_cpuset(m_sys_vars.internal_thread_affinity_str,
@@ -1250,9 +1262,6 @@ void sys_var_configurator::configure_after_user_settings()
 
     // From fixup_params
     if (m_sys_vars.worker_threads > 0) {
-        m_runtime_registry.set_value(
-            CONFIG_VAR_SELECT_NUM_POLLS, static_cast<int64_t>(-1), change_reason::AutoCorrected,
-            "Working in threads mode:" + std::string(CONFIG_VAR_WORKER_THREADS.name) + " > 0");
         m_runtime_registry.set_value(
             CONFIG_VAR_PROGRESS_ENGINE_INTERVAL, static_cast<int64_t>(0),
             change_reason::AutoCorrected,

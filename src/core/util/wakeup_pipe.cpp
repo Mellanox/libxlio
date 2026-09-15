@@ -30,6 +30,7 @@ int wakeup_pipe::g_wakeup_pipes[2] = {UNINIT_PIPE_FD, UNINIT_PIPE_FD};
 atomic_t wakeup_pipe::ref_count = ATOMIC_INIT(0);
 
 wakeup_pipe::wakeup_pipe()
+    : m_wakeup_pending(false)
 {
     int ref = atomic_fetch_and_inc(&ref_count);
     if (ref == 0) {
@@ -42,10 +43,6 @@ wakeup_pipe::wakeup_pipe()
         }
         BULLSEYE_EXCLUDE_BLOCK_END
         wkup_logdbg("created wakeup pipe [RD=%d, WR=%d]", g_wakeup_pipes[0], g_wakeup_pipes[1]);
-
-        // ToDo - these pipe should be closed at some point
-        // SYSCALL(close, g_si_wakeup_pipes[1]);
-        // SYSCALL(close, g_si_wakeup_pipes[0]);
     }
 
     m_ev.events = EPOLLIN;
@@ -56,29 +53,25 @@ void wakeup_pipe::do_wakeup()
 {
     wkup_logfuncall("");
 
-    // m_wakeup_lock.lock();
-    // This func should be called under socket / epoll lock
-
     // Call to wakeup only in case there is some thread that is sleeping on epoll
     if (!m_is_sleeping) {
         wkup_logfunc("There is no thread in epoll_wait, therefore not calling for wakeup");
-        // m_wakeup_lock.unlock();
         return;
     }
 
+    if (m_wakeup_pending) {
+        return;
+    }
     wkup_entry_dbg("");
 
     int errno_tmp = errno; // don't let wakeup affect errno, as this can fail with EEXIST
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if ((SYSCALL(epoll_ctl, m_wakeup_epfd, EPOLL_CTL_ADD, g_wakeup_pipes[0], &m_ev)) &&
-        (errno != EEXIST)) {
+    int rc = SYSCALL(epoll_ctl, m_wakeup_epfd, EPOLL_CTL_ADD, g_wakeup_pipes[0], &m_ev);
+    if (rc == -1 && errno != EEXIST) {
         wkup_logerr("Failed to add wakeup fd to internal epfd (errno=%d %m)", errno);
+    } else {
+        m_wakeup_pending = true;
     }
-    BULLSEYE_EXCLUDE_BLOCK_END
     errno = errno_tmp;
-
-    // m_wakeup_lock.unlock();
-    // sched_yield();
 }
 
 void wakeup_pipe::remove_wakeup_fd()
@@ -87,15 +80,16 @@ void wakeup_pipe::remove_wakeup_fd()
         return;
     }
     wkup_entry_dbg("");
+
     int tmp_errno = errno;
-    if (SYSCALL(epoll_ctl, m_wakeup_epfd, EPOLL_CTL_DEL, g_wakeup_pipes[0], nullptr)) {
-        BULLSEYE_EXCLUDE_BLOCK_START
-        if (errno == ENOENT) {
-            wkup_logdbg("Failed to delete global pipe from internal epfd it was already deleted");
-        } else {
-            wkup_logerr("failed to delete global pipe from internal epfd (errno=%d %m)", errno);
-        }
-        BULLSEYE_EXCLUDE_BLOCK_END
+    int rc = SYSCALL(epoll_ctl, m_wakeup_epfd, EPOLL_CTL_DEL, g_wakeup_pipes[0], nullptr);
+    if (rc == -1 && errno != ENOENT) {
+        wkup_logerr("failed to delete global pipe from internal epfd (errno=%d %m)", errno);
+    } else {
+        m_wakeup_pending = false;
+    }
+    if (rc == -1 && errno == ENOENT) {
+        wkup_logdbg("Failed to delete global pipe from internal epfd, it has been already deleted");
     }
     errno = tmp_errno;
 }
@@ -104,8 +98,8 @@ wakeup_pipe::~wakeup_pipe()
 {
     int ref = atomic_fetch_and_dec(&ref_count);
     if (ref == 1) {
-        close(g_wakeup_pipes[0]);
-        close(g_wakeup_pipes[1]);
+        SYSCALL(close, g_wakeup_pipes[0]);
+        SYSCALL(close, g_wakeup_pipes[1]);
         g_wakeup_pipes[0] = UNINIT_PIPE_FD;
         g_wakeup_pipes[1] = UNINIT_PIPE_FD;
     }

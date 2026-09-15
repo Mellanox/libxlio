@@ -8,6 +8,7 @@
 #define SYS_VARS_H
 
 #include <experimental/optional>
+#include <limits.h>
 #include <netinet/in.h>
 #include <sched.h>
 #include <stdio.h>
@@ -135,6 +136,7 @@ public:
 
     void get_params();
     bool is_threads_mode() const { return worker_threads > 0; }
+    bool is_interrupt_mode() const { return select_poll_num >= 0; }
 
     // Returns the runtime registry (optional reference)
     const std::experimental::optional<runtime_registry> &get_runtime_registry() const
@@ -593,7 +595,7 @@ extern const mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_UDP_3T_RULES                  (true)
 #define MCE_DEFAULT_ETH_MC_L2_ONLY_RULES          (false)
 #define MCE_DEFAULT_MC_FORCE_FLOWTAG              (false)
-#define MCE_DEFAULT_SELECT_NUM_POLLS              (100000)
+#define MCE_DEFAULT_SELECT_NUM_POLLS              (10000)
 #define MCE_DEFAULT_SELECT_POLL_OS_RATIO          (10)
 #define MCE_DEFAULT_SELECT_SKIP_OS                (4)
 #define MCE_DEFAULT_SELECT_CPU_USAGE_STATS        (false)
@@ -616,6 +618,7 @@ extern const mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_OFFLOADED_SOCKETS              (true)
 #define MCE_DEFAULT_TIMER_RESOLUTION_MSEC          (10)
 #define MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC      (100)
+#define MCE_MAX_TCP_TIMER_RESOLUTION_MSEC          (INT_MAX)
 #define MCE_DEFAULT_TCP_CTL_THREAD                 (option_tcp_ctl_thread::CTL_THREAD_DISABLE)
 #define MCE_DEFAULT_TCP_TIMESTAMP_OPTION           (TCP_TS_OPTION_DISABLE)
 #define MCE_DEFAULT_TCP_NODELAY                    (false)

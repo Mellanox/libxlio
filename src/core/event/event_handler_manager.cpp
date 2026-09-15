@@ -358,7 +358,11 @@ void event_handler_manager::stop_thread()
 
     if (!g_is_forked_child) {
 
+        // do_wakeup() and remove_wakeup_fd() must be serialized by the same lock,
+        // otherwise the wakeup_pipe pending state can be left stale.
+        m_reg_action_q_lock.lock();
         do_wakeup();
+        m_reg_action_q_lock.unlock();
 
         // Wait for thread exit
         if (m_event_handler_tid) {
@@ -434,14 +438,16 @@ void event_handler_manager::post_new_reg_action(reg_action_t &reg_action)
 
     evh_logfunc("add event action %s (%d)", reg_action_str(reg_action.type), reg_action.type);
 
-    bool is_empty;
+    // The wakeup decision and the wakeup itself are taken under the queue lock,
+    // which the consumer also holds while it drains the queue and removes the
+    // wakeup fd. Otherwise the wakeup_pipe pending state can be left stale.
     m_reg_action_q_lock.lock();
-    is_empty = m_p_reg_action_q_to_push_to->empty();
+    bool is_empty = m_p_reg_action_q_to_push_to->empty();
     m_p_reg_action_q_to_push_to->push_back(reg_action);
-    m_reg_action_q_lock.unlock();
     if (is_empty) {
         do_wakeup();
     }
+    m_reg_action_q_lock.unlock();
 }
 
 void event_handler_manager::priv_register_timer_handler(timer_reg_info_t &info)
