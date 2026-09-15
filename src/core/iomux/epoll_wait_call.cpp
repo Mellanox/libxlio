@@ -208,8 +208,9 @@ bool epoll_wait_call::_wait(int timeout)
             continue;
         }
 
-        // If it's CQ
-        if (m_epfd_info->is_cq_fd(m_p_ready_events[i].data.u64)) {
+        if (epfd_info::is_cq_event(m_p_ready_events[i].data.u64)) {
+            fd = epfd_info::cq_event_fd(m_p_ready_events[i].data.u64);
+            m_epfd_info->enqueue_ready_cq_fd(fd);
             cq_ready = true;
             continue;
         }
