@@ -65,12 +65,19 @@ public:
     void get_offloaded_fds_arr_and_size(int **p_p_num_offloaded_fds, int **p_p_offloadded_fds);
 
     /**
-     * check if fd is cq fd according to the data.
-     * if it is, save the fd in ready cq fds queue.
-     * @param data field from event data
-     * @return true if fd is cq fd
+     * Return true when epoll user data contains the XLIO CQ marker.
      */
-    bool is_cq_fd(uint64_t data);
+    static inline bool is_cq_event(uint64_t data) { return (data >> 32) == CQ_FD_MARK; }
+
+    /**
+     * Extract the CQ channel fd encoded in epoll user data.
+     */
+    static inline int cq_event_fd(uint64_t data) { return static_cast<int>(data & CQ_FD_MASK); }
+
+    /**
+     * Queue a ready CQ channel fd for deferred event acknowledgment and processing.
+     */
+    void enqueue_ready_cq_fd(int fd);
 
     /**
      * Get the original user data posted with this fd.
@@ -131,6 +138,9 @@ public:
     list_node<epfd_info, epfd_info::epfd_info_node_offset> epfd_info_node;
 
 private:
+    static constexpr uint64_t CQ_FD_MARK = 0xabcd;
+    static constexpr uint64_t CQ_FD_MASK = 0xffffffffULL;
+
     const int m_epfd;
     int m_size;
     int *m_p_offloaded_fds;

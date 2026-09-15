@@ -16,9 +16,6 @@
 #define NUM_LOG_INVALID_EVENTS 10
 #define EPFD_MAX_OFFLOADED_STR 150
 
-#define CQ_FD_MARK 0xabcd
-#define CQ_FD_MASK 0xffffffffULL
-
 int epfd_info::remove_fd_from_epoll_os(int fd)
 {
     int ret = SYSCALL(epoll_ctl, m_epfd, EPOLL_CTL_DEL, fd, nullptr);
@@ -160,19 +157,12 @@ void epfd_info::get_offloaded_fds_arr_and_size(int **p_p_num_offloaded_fds,
     *p_p_offloadded_fds = m_p_offloaded_fds;
 }
 
-bool epfd_info::is_cq_fd(uint64_t data)
+void epfd_info::enqueue_ready_cq_fd(int fd)
 {
-    if ((data >> 32) != CQ_FD_MARK) {
-        return false;
-    }
-
     lock();
     // todo consider making m_ready_cq_fd_q a set instead of queue
-    // TODO: Modifying the queue is unexpected and confusing in the method with name is_cq_fd().
-    m_ready_cq_fd_q.push_back(static_cast<int>(data & CQ_FD_MASK));
+    m_ready_cq_fd_q.push_back(fd);
     unlock();
-
-    return true;
 }
 
 int epfd_info::add_fd(int fd, epoll_event *event)
