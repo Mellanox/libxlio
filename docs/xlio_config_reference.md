@@ -1,6 +1,6 @@
 # XLIO Configuration Reference
 
-This file documents all 121 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
+This file documents all 120 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
@@ -27,7 +27,6 @@ This file documents all 121 XLIO runtime configuration parameters with their typ
   - [`core.signals.sigsegv.backtrace`](#coresignalssigsegvbacktrace) — Print backtrace on SIGSEGV
   - [`core.syscall.avoid_ctl_syscalls`](#coresyscallavoid_ctl_syscalls) — Avoid system control calls on TCP
   - [`core.syscall.deferred_close`](#coresyscalldeferred_close) — Defer closing of file descriptors
-  - [`core.syscall.dup2_close_fd`](#coresyscalldup2_close_fd) — Support dup2 calls
   - [`core.syscall.fork_support`](#coresyscallfork_support) — Enable fork support
   - [`core.syscall.sendfile_cache_limit`](#coresyscallsendfile_cache_limit) — Sendfile byte limit
 - **[HARDWARE_FEATURES](#hardware_features)**
@@ -664,27 +663,6 @@ incoming (accepted) TCP sockets are generally unaffected.
 or applications experiencing steering rule creation failures after socket close.
 
 **Default:** `false`
-
-### `core.syscall.dup2_close_fd`
-
-> **Type:** boolean
->
-> **Maps to:** `XLIO_CLOSE_ON_DUP2`
-
-When enabled, XLIO cleans up internal socket structures before dup2() forwards to the kernel.
-
-**How it works:**
-dup2(oldfd, newfd) atomically closes newfd and makes it a copy of oldfd.
-When newfd is an XLIO-managed socket, XLIO must release its internal resources first.
-
-**Tradeoffs:**
-
-- *true* (default): Small per-call overhead. Prevents resource leaks and undefined behavior
-  when dup2() closes XLIO sockets.
-- *false*: No interception overhead. Only safe if application never uses dup2() to close
-  XLIO-offloaded sockets; otherwise causes memory leaks and stale internal state.
-
-**Default:** `true`
 
 ### `core.syscall.fork_support`
 

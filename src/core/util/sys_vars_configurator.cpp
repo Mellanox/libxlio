@@ -186,7 +186,6 @@ const config_var_info_t<size_t, int64_t> CONFIG_VAR_HEAP_METADATA_BLOCK {
     "core.resources.heap_metadata_block_size"};
 const config_var_info_t<size_t, int64_t> CONFIG_VAR_HUGEPAGE_SIZE {"core.resources.hugepages.size"};
 const config_var_info_t<bool> CONFIG_VAR_FORK {"core.syscall.fork_support"};
-const config_var_info_t<bool> CONFIG_VAR_CLOSE_ON_DUP2 {"core.syscall.dup2_close_fd"};
 const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_MTU {"network.protocols.ip.mtu"};
 #if defined(DEFINED_NGINX)
 const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_SIZE {
@@ -608,8 +607,6 @@ void sys_var_configurator::initialize_base_variables()
 #endif /* DEFINED_UTLS */
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.enable_lro, CONFIG_VAR_LRO);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.handle_fork, CONFIG_VAR_FORK);
-    m_runtime_registry.register_and_set_default_value(&m_sys_vars.close_on_dup2,
-                                                      CONFIG_VAR_CLOSE_ON_DUP2);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.mtu, CONFIG_VAR_MTU);
 #if defined(DEFINED_NGINX)
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.nginx_udp_socket_pool_size,
