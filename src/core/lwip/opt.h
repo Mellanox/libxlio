@@ -45,6 +45,12 @@
 #include "config.h"
 #endif
 
+/* Compile-time element count of a fixed-size array. Defined here so it is
+ * shared across the lwIP C sources (utils.h carries a C++-leaning copy). */
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
+#endif
+
 /*
    ---------------------------------
    ---------- TCP options ----------
@@ -153,6 +159,17 @@
  */
 #ifndef TCP_FALLBACK_RTO_MS
 #define TCP_FALLBACK_RTO_MS 3000
+#endif
+
+/**
+ * TCP_RTO_MAX: Upper bound for the (exponentially backed-off) retransmission
+ * timeout, in milliseconds. RFC 6298 2.5 requires the cap be >= 60s; we match
+ * the Linux kernel's 120s. Without this bound the data-path RTO grows to
+ * base<<tcp_backoff[max] (~150s from the ~1s initial RTO), overshooting the
+ * doubling-to-120s behavior expected by peers and the TCP_USER_TIMEOUT tests.
+ */
+#ifndef TCP_RTO_MAX
+#define TCP_RTO_MAX 120000
 #endif
 
 /**
