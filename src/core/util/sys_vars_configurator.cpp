@@ -191,8 +191,6 @@ const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_MTU {"network.protocols.ip
 #if defined(DEFINED_NGINX)
 const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_SIZE {
     "applications.nginx.udp_pool_size"};
-const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE {
-    "applications.nginx.udp_socket_pool_reuse"};
 #endif
 const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_WORKERS_NUM {
     "applications.nginx.workers_num"};
@@ -614,9 +612,6 @@ void sys_var_configurator::initialize_base_variables()
 #if defined(DEFINED_NGINX)
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.nginx_udp_socket_pool_size,
                                                       CONFIG_VAR_NGINX_UDP_POOL_SIZE);
-    m_runtime_registry.register_and_set_default_value(
-        &m_sys_vars.nginx_udp_socket_pool_rx_num_buffs_reuse,
-        CONFIG_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE);
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     m_sys_vars.app.type = APP_NONE; // not a config key
