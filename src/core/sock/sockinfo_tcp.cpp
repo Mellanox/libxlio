@@ -559,6 +559,10 @@ int sockinfo_tcp::detach_xlio_group()
         errno = EINVAL;
         return -1;
     }
+    if (has_pending_tx_express_zc()) {
+        errno = EBUSY;
+        return -1;
+    }
     // We rely on the flow tag feature to drop RX packets during 2-step migration.
     if (safe_mce_sys().disable_flow_tag) {
         static bool already_warned = false;
@@ -614,6 +618,10 @@ int sockinfo_tcp::attach_xlio_group(poll_group *group)
     if (m_p_group) {
         si_tcp_logwarn("Cannot attach a non-detached XLIO socket %p, group %p, new-group %p", this,
                        m_p_group, group);
+        return -1;
+    }
+    if (has_pending_tx_express_zc()) {
+        errno = EBUSY;
         return -1;
     }
 
