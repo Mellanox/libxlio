@@ -101,16 +101,24 @@ if test "x$dpcp_explicitly_specified" = "xno"; then
         # A more robust fix would prevent the over-riding of CXXFLAGS, but this is for later, after
         # we unblock the DOCA builds.
         cd "$DPCP_BUILD_DIR" || exit 1
+        case "$with_dpcp_flags" in
+            *[[!A-Za-z0-9._,+:/\"\'\ =-]]*)
+                AC_MSG_ERROR([--with-dpcp-flags contains unsupported characters])
+                ;;
+        esac
         set -f
-        set -- $with_dpcp_flags
+        # Reparse trusted configure input so quoted CMake values can contain whitespace.
+        # For example, --with-dpcp-flags="-DCMAKE_CXX_FLAGS='-O3 -g'" remains one CMake argument.
+        # The user-supplied parameters $[]@ come last so they can over-ride built-in values
+        eval "set -- $with_dpcp_flags"
         set +f
         CC="$CC" CXX="$CXX" "$CMAKE" \
             "-DCMAKE_CXX_FLAGS:STRING=-O2" \
-            "$[]@" \
             "-DCMAKE_NO_SYSTEM_FROM_IMPORTED:BOOL=ON" \
             "-DCMAKE_INSTALL_PREFIX:PATH=$DPCP_INSTALL_DIR" \
             "-DCMAKE_INSTALL_LIBDIR:PATH=lib" \
             "-DDPCP_STATIC:BOOL=$DPCP_CMAKE_STATIC" \
+            "$[]@" \
             "$DPCP_SOURCE_DIR"
     ) || AC_MSG_ERROR([failed to configure the built-in libdpcp with CMake])
 
