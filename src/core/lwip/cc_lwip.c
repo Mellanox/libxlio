@@ -81,25 +81,46 @@ static void lwip_ack_received(struct tcp_pcb *pcb, uint16_t type)
             pcb->cwnd += pcb->mss;
         }
     } else if (type == CC_ACK) {
-        if (pcb->cwnd < pcb->ssthresh) {
-            u32_t increase = tcp_calc_slow_start_increment(pcb->acked, pcb->mss);
-            if ((u32_t)(pcb->cwnd + increase) > pcb->cwnd) {
-                pcb->cwnd += increase;
-            }
-            LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_receive: slow start cwnd %" U32_F "\n", pcb->cwnd));
-        } else {
-            u32_t increment = ((u32_t)pcb->mss * (u32_t)pcb->mss) / pcb->cwnd;
+        /* Congestion window validation (RFC 2861 Section 3, the rule behind
+         * Linux's tcp_is_cwnd_limited()): increase cwnd only if the window was
+         * full when the ACK arrived. On a loss-free, receive-window-limited
+         * flow the in-flight data stays below cwnd (the established-state
+         * ssthresh is effectively infinite, so such a flow lives in slow
+         * start), so ungated growth inflates cwnd on every ACK without bound -
+         * in slow start and congestion avoidance alike - and saturates,
+         * destabilizing the steady state. RFC 7661 (obsoletes 2861) allows
+         * growth more broadly (validated phase); this gate is conservative
+         * with respect to it. Utilization is measured as of before this ACK
+         * (see tcp_inflight_pre_ack). */
+        u32_t inflight_pre_ack = tcp_inflight_pre_ack(pcb->snd_nxt, pcb->lastack, pcb->acked);
 
-            if (increment == 0) {
-                increment = 1;
-            }
+        if (tcp_cwnd_may_grow(inflight_pre_ack, pcb->cwnd)) {
+            if (pcb->cwnd < pcb->ssthresh) {
+                u32_t increase = tcp_calc_slow_start_increment(pcb->acked, pcb->mss);
+                if ((u32_t)(pcb->cwnd + increase) > pcb->cwnd) {
+                    pcb->cwnd += increase;
+                }
+                LWIP_DEBUGF(TCP_CWND_DEBUG,
+                            ("tcp_receive: slow start cwnd %" U32_F "\n", pcb->cwnd));
+            } else {
+                /* Congestion avoidance. mss^2/cwnd truncates to 0 once cwnd >
+                 * mss^2; the floor at 1 (from 7c7981dc) keeps CA progressing and
+                 * must be kept - removing it reintroduces the original stall. It
+                 * is safe now that growth is gated on utilization above: the floor
+                 * can only fire when the flow is genuinely cwnd-limited. */
+                u32_t increment = ((u32_t)pcb->mss * (u32_t)pcb->mss) / pcb->cwnd;
 
-            u32_t new_cwnd = pcb->cwnd + increment;
-            if (new_cwnd > pcb->cwnd) {
-                pcb->cwnd = new_cwnd;
+                if (increment == 0) {
+                    increment = 1;
+                }
+
+                u32_t new_cwnd = pcb->cwnd + increment;
+                if (new_cwnd > pcb->cwnd) {
+                    pcb->cwnd = new_cwnd;
+                }
+                LWIP_DEBUGF(TCP_CWND_DEBUG,
+                            ("tcp_receive: congestion avoidance cwnd %" U32_F "\n", pcb->cwnd));
             }
-            LWIP_DEBUGF(TCP_CWND_DEBUG,
-                        ("tcp_receive: congestion avoidance cwnd %" U32_F "\n", pcb->cwnd));
         }
     }
 }
