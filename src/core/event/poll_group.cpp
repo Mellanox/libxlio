@@ -100,8 +100,9 @@ poll_group::~poll_group()
         sockinfo_tcp *si = m_pending_to_remove_lst.front();
         m_pending_to_remove_lst.pop_front();
 
-        if (si->has_pending_tx_express_zc()) {
-            grp_loginfo("Socket %p still has pending express-ZC TX references; keeping it alive",
+        if (unlikely(si->has_pending_tx_express_zc())) {
+            grp_loginfo("Unable to retire all express-ZC TX references for socket %p; "
+                        "leaving the socket allocated",
                         si);
             continue;
         }

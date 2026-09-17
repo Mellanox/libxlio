@@ -203,11 +203,29 @@ int cq_mgr_tx::poll_and_process_element_tx()
             m_hqtx_ptr->m_sq_wqe_idx_to_prop[index].buf->m_flags |= mem_buf_desc_t::HAD_CQE_ERROR;
         }
 
-        handle_sq_wqe_prop(index);
+        handle_sq_wqe_prop(m_hqtx_ptr, index);
         ret = 1;
     }
 
     return ret;
+}
+
+bool cq_mgr_tx::retire_pending_tx_wqes(hw_queue_tx *hqtx)
+{
+    if (!hqtx->has_pending_tx_wqes()) {
+        return true;
+    }
+
+    sq_wqe_prop *last = hqtx->m_sq_wqe_prop_last;
+    if (!last) {
+        cq_loginfo("Cannot retire pending TX WQEs without a tracked descriptor");
+        return false;
+    }
+
+    unsigned index = static_cast<unsigned>(last - hqtx->m_sq_wqe_idx_to_prop);
+    cq_loginfo("Retiring pending TX WQEs through index %u", index);
+    handle_sq_wqe_prop(hqtx, index);
+    return !hqtx->has_pending_tx_wqes();
 }
 
 void cq_mgr_tx::log_cqe_error(struct xlio_mlx5_cqe *cqe, uint16_t wqe_index, uint32_t credits) const
@@ -228,11 +246,12 @@ void cq_mgr_tx::log_cqe_error(struct xlio_mlx5_cqe *cqe, uint16_t wqe_index, uin
     }
 }
 
-void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
+void cq_mgr_tx::handle_sq_wqe_prop(hw_queue_tx *hqtx, unsigned index)
 {
-    sq_wqe_prop *p = &m_hqtx_ptr->m_sq_wqe_idx_to_prop[index];
+    sq_wqe_prop *p = &hqtx->m_sq_wqe_idx_to_prop[index];
     sq_wqe_prop *prev;
     unsigned credits = 0;
+    uint32_t completed = 0;
 
     /*
      * TX completions can be signalled for a set of WQEs as an optimization.
@@ -263,14 +282,20 @@ void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
             }
         }
         credits += p->credits;
+        ++completed;
 
         prev = p;
         p = p->next;
-    } while (prev != m_hqtx_ptr->m_last_sq_wqe_prop_to_complete);
+    } while (prev != hqtx->m_last_sq_wqe_prop_to_complete);
 
+    assert(hqtx->m_sq_wqe_count >= completed);
+    hqtx->m_sq_wqe_count -= completed;
+    if (hqtx->m_sq_wqe_count == 0U) {
+        hqtx->m_sq_wqe_prop_last = nullptr;
+    }
     m_p_ring->return_tx_pool_to_global_pool();
-    m_hqtx_ptr->credits_return(credits);
-    m_hqtx_ptr->m_last_sq_wqe_prop_to_complete =
-        &m_hqtx_ptr->m_sq_wqe_idx_to_prop[(index + m_hqtx_ptr->m_sq_wqe_idx_to_prop[index].wqebbs) %
-                                          m_hqtx_ptr->m_tx_num_wr];
+    hqtx->credits_return(credits);
+    hqtx->m_last_sq_wqe_prop_to_complete =
+        &hqtx->m_sq_wqe_idx_to_prop[(index + hqtx->m_sq_wqe_idx_to_prop[index].wqebbs) %
+                                    hqtx->m_tx_num_wr];
 }
