@@ -20,6 +20,7 @@
 #include <execinfo.h>
 #include <libgen.h>
 #include <linux/igmp.h>
+#include <atomic>
 #include <string>
 #include <vector>
 #include <sstream>
@@ -86,6 +87,8 @@ const char *xlio_version_str = "XLIO_VERSION: " PACKAGE_VERSION "-" STR(PRJ_LIBR
     ; // End of xlio_version_str - used in "$ strings libxlio.so | grep XLIO_VERSION"
 
 bool g_b_exit = false;
+std::atomic<bool> g_xlio_api_shutdown {false};
+std::atomic<uint64_t> g_xlio_api_inflight {0};
 bool g_init_ibv_fork_done = false;
 enum ibv_fork_status g_ibv_fork_status = IBV_FORK_DISABLED;
 bool g_is_forked_child = false;
@@ -96,11 +99,49 @@ static command_netlink *s_cmd_nl = nullptr;
 
 global_stats_t g_global_stat_static;
 
+// Drain in-flight offload calls before teardown frees their sockets/rings.
+// Bounded: a wedged caller must not block process exit, so we proceed after the cap.
+static void drain_offloaded_api_inflight()
+{
+    static const unsigned DRAIN_MAX_WAIT_USEC = 5 * 1000 * 1000;
+    static const unsigned DRAIN_STEP_USEC = 50;
+    unsigned waited_usec = 0;
+
+    while (g_xlio_api_inflight.load(std::memory_order_acquire) != 0) {
+        // Wake blocking waiters each pass so they observe g_b_exit and leave; one parking just
+        // after a wake is caught next pass. Sockets/epfds via fd_collection, poll/select via the
+        // global ring.
+        if (g_p_fd_collection) {
+            g_p_fd_collection->wakeup_offloaded_sockets();
+        }
+        if (g_p_net_device_table_mgr) {
+            g_p_net_device_table_mgr->global_ring_wakeup();
+        }
+        if (waited_usec >= DRAIN_MAX_WAIT_USEC) {
+            vlog_printf(VLOG_WARNING,
+                        "%s: timed out waiting for %llu in-flight socket call(s) to drain; "
+                        "proceeding with teardown\n",
+                        __FUNCTION__,
+                        static_cast<unsigned long long>(
+                            g_xlio_api_inflight.load(std::memory_order_relaxed)));
+            break;
+        }
+        struct timespec ts = {0, static_cast<long>(DRAIN_STEP_USEC) * 1000};
+        nanosleep(&ts, nullptr);
+        waited_usec += DRAIN_STEP_USEC;
+    }
+}
+
 static int free_libxlio_resources()
 {
     vlog_printf(VLOG_DEBUG, "%s: Closing libxlio resources\n", __FUNCTION__);
 
     g_b_exit = true;
+
+    // Publish shutdown then seq_cst fence so offload_api_enter's StoreLoad sees it, then drain.
+    g_xlio_api_shutdown.store(true, std::memory_order_relaxed);
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    drain_offloaded_api_inflight();
 
     worker_thread_manager::destroy();
 
@@ -1208,6 +1249,9 @@ int do_global_ctors()
 
 void reset_globals()
 {
+    // Child inherits parent's drain state across fork; reset it.
+    g_xlio_api_shutdown.store(false, std::memory_order_relaxed);
+    g_xlio_api_inflight.store(0, std::memory_order_relaxed);
     safe_mce_sys().unfreeze();
     worker_thread_manager::fork_nullify();
     entity_context_manager::fork_nullify();
