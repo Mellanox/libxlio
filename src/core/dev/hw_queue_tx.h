@@ -76,6 +76,7 @@ public:
     void modify_queue_to_ready_state();
     void modify_queue_to_error_state();
     void release_tx_buffers();
+    bool has_pending_tx_wqes() const { return m_sq_free_credits != m_sq_total_credits; }
     uint32_t is_ratelimit_change(struct xlio_rate_limit_t &rate_limit);
     int modify_qp_ratelimit(struct xlio_rate_limit_t &rate_limit, uint32_t rl_changes);
     void dm_release_data(mem_buf_desc_t *buff) { m_dm_mgr.release_data(buff); }
@@ -263,6 +264,7 @@ private:
     const uint32_t m_n_sysvar_tx_num_wr_to_signal;
     uint32_t m_tx_num_wr;
     unsigned m_sq_free_credits = 0U;
+    unsigned m_sq_total_credits = 0U;
     uint32_t m_n_unsignaled_count = 0U;
     int m_sq_wqe_hot_index = 0;
     uint16_t m_sq_wqe_counter = 0U;

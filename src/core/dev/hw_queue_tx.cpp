@@ -305,9 +305,35 @@ void hw_queue_tx::down()
 void hw_queue_tx::release_tx_buffers()
 {
     hwqtx_logdbg("draining cq_mgr_tx %p", m_p_cq_mgr_tx);
-    while (m_p_cq_mgr_tx && m_mlx5_qp.qp && (m_p_cq_mgr_tx->poll_and_process_element_tx() > 0) &&
-           (errno != EIO && !m_p_ib_ctx_handler->is_removed())) {
+    int poll_errno = 0;
+    while (m_p_cq_mgr_tx && m_mlx5_qp.qp && !m_p_ib_ctx_handler->is_removed()) {
+        errno = 0;
+        int ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
+        poll_errno = errno;
+        if (ret <= 0 || poll_errno == EIO) {
+            break;
+        }
         hwqtx_logdbg("draining completed on cq_mgr_tx");
+    }
+
+    if (!has_pending_tx_wqes()) {
+        return;
+    }
+
+    if (!m_p_cq_mgr_tx || !m_mlx5_qp.qp) {
+        hwqtx_loginfo("TX drain stopped without CQ or QP (%u/%u SQ credits available)",
+                      m_sq_free_credits, m_sq_total_credits);
+    } else if (poll_errno == EIO) {
+        hwqtx_loginfo("TX drain stopped after CQ polling failed with EIO "
+                      "(%u/%u SQ credits available)",
+                      m_sq_free_credits, m_sq_total_credits);
+    } else if (m_p_ib_ctx_handler->is_removed()) {
+        hwqtx_loginfo("TX drain stopped after device removal (%u/%u SQ credits available)",
+                      m_sq_free_credits, m_sq_total_credits);
+    } else {
+        hwqtx_loginfo("TX drain stopped before all CQ completions were processed "
+                      "(%u/%u SQ credits available)",
+                      m_sq_free_credits, m_sq_total_credits);
     }
 }
 
@@ -417,7 +443,8 @@ void hw_queue_tx::init_queue()
     m_tx_num_wr = (m_sq_wqes_end - (uint8_t *)m_sq_wqe_hot) / WQEBB;
 
     // We use the min between CQ size and the QP size (that might be increases by ibv creation).
-    m_sq_free_credits = std::min(m_tx_num_wr, old_wr_val);
+    m_sq_total_credits = std::min(m_tx_num_wr, old_wr_val);
+    m_sq_free_credits = m_sq_total_credits;
     hwqtx_logdbg("SQ total credits: %u", m_sq_free_credits);
 
     /* Maximum BF inlining consists of:
@@ -1319,10 +1346,8 @@ void hw_queue_tx::trigger_completion_for_all_sent_packets()
         // Post a dummy WQE and request a signal to complete all the unsignaled WQEs in SQ
         hwqtx_logdbg("Need to send closing tx wr...");
         mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(0, true, PBUF_RAM);
-        // Align Tx buffer accounting since we will be bypassing the normal send calls
-        m_p_ring->m_missing_buf_ref_count--;
         if (!p_mem_buf_desc) {
-            hwqtx_logerr("no buffer in pool");
+            hwqtx_loginfo("no buffer in pool");
             return;
         }
 
@@ -1357,10 +1382,13 @@ void hw_queue_tx::trigger_completion_for_all_sent_packets()
             // TODO Wait for available space in SQ to post the WQE. This method mustn't fail,
             // because we may want to wait until all the WQEs are completed and we need to post
             // something and request signal.
-            hwqtx_logdbg("No space in SQ to trigger completions with a post operation");
+            hwqtx_loginfo("No space in SQ to trigger completions with a post operation");
+            m_p_ring->mem_buf_tx_release(p_mem_buf_desc, true);
             return;
         }
 
+        // Align Tx buffer accounting since we will be bypassing the normal send calls.
+        m_p_ring->m_missing_buf_ref_count--;
         send_to_wire(&send_wr,
                      (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM),
                      true, nullptr, credits);

@@ -98,8 +98,13 @@ poll_group::~poll_group()
     // that were already pending before destruction, and sockets added by close_socket().
     while (!m_pending_to_remove_lst.empty()) {
         sockinfo_tcp *si = m_pending_to_remove_lst.front();
-        // We expect that all ZC references are released.
-        assert(!si->has_pending_tx_express_zc());
+        m_pending_to_remove_lst.pop_front();
+
+        if (si->has_pending_tx_express_zc()) {
+            grp_loginfo("Socket %p still has pending express-ZC TX references; keeping it alive",
+                        si);
+            continue;
+        }
 
         // If ZC buffers were drained by drain_tx_for_poll_group_teardown for this socket,
         // only now we can inform the app about the termination.
@@ -107,7 +112,6 @@ poll_group::~poll_group()
         si->maybe_notify_terminated_locked();
         si->unlock_tcp_con();
 
-        m_pending_to_remove_lst.pop_front();
         si->clean_socket_obj();
     }
 
