@@ -9,7 +9,6 @@
             "external_memory_limit": 0,
             "heap_metadata_block_size": 33554432
         },
-        "quick_init": false,
         "exception_handling": {
             "mode": -1
         },

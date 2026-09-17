@@ -35,7 +35,6 @@ const config_var_info_t<bool> CONFIG_VAR_LOG_COLORS {"monitor.log.colors"};
 const config_var_info_t<bool> CONFIG_VAR_HANDLE_SIGINTR {"core.signals.sigint.exit"};
 const config_var_info_t<bool> CONFIG_VAR_HANDLE_SIGSEGV {"core.signals.sigsegv.backtrace"};
 const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_STATS_FD_NUM {"monitor.stats.fd_num"};
-const config_var_info_t<bool> CONFIG_VAR_QUICK_START {"core.quick_init"};
 
 const config_var_info_t<ring_logic_t, int64_t> CONFIG_VAR_RING_ALLOCATION_LOGIC_TX {
     "performance.rings.tx.allocation_logic"};
@@ -385,8 +384,6 @@ void sys_var_configurator::initialize_base_variables()
     m_runtime_registry.register_char_array_and_set_default_value(
         m_sys_vars.report_file_path, sizeof(m_sys_vars.report_file_path),
         CONFIG_VAR_REPORT_FILE_PATH);
-    m_runtime_registry.register_and_set_default_value(&m_sys_vars.quick_start,
-                                                      CONFIG_VAR_QUICK_START);
 
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.log_level, CONFIG_VAR_LOG_LEVEL);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.log_details,
