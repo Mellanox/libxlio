@@ -1,3 +1,15 @@
+Version 3.80.1-1:
+Date + Time 2026-09-17
+=============================================================
+Added:
+	- RM #4975332 Add hardware TLS support for worker-thread mode
+	- RM #4942208 Add interrupt mode support for worker threads
+	- RM #4930786 Add blocking socket operations in worker-thread mode
+	- RM #4930789 Add microsecond TCP RTT/RTO timing and a configurable RTO floor
+
+Fixed:
+	- RM #5271097 Fix DPCP CMake include handling for DOCA builds
+
 Version 3.80.0-1:
 Date + Time 2026-09-10
 =============================================================
