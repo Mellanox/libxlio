@@ -601,22 +601,18 @@ TEST_P(tcp_sockopt_positive, set_and_get_value)
 INSTANTIATE_TEST_CASE_P(
     keep_alive, tcp_sockopt_positive,
     testing::Values(
-#if LWIP_TCP_KEEPALIVE
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, 1),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, std::numeric_limits<int16_t>::max()),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, 1),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max()),
-#endif
         std::make_tuple(AF_INET, SOL_SOCKET, SO_KEEPALIVE, 1),
         std::make_tuple(AF_INET, SOL_SOCKET, SO_KEEPALIVE, 0),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, 1),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, std::numeric_limits<int16_t>::max()),
-#if LWIP_TCP_KEEPALIVE
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, 1),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, std::numeric_limits<int16_t>::max()),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, 1),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max()),
-#endif
         std::make_tuple(AF_INET6, SOL_SOCKET, SO_KEEPALIVE, 1),
         std::make_tuple(AF_INET6, SOL_SOCKET, SO_KEEPALIVE, 0),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE, 1),
@@ -648,33 +644,29 @@ TEST_P(tcp_setsockopt_negative, set_invalid_value)
  * There may be multiple instantiations of the tcp_setsockopt_negative class and
  * it's test cases.
  */
-INSTANTIATE_TEST_CASE_P(
-    keep_alive, tcp_setsockopt_negative,
-    testing::Values(
-#if LWIP_TCP_KEEPALIVE
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, -1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, 0),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
-                        std::numeric_limits<int16_t>::max() + 1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, -1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, 0),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max() + 1),
-#endif
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, -1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
-                        std::numeric_limits<int16_t>::max() + 1),
-#if LWIP_TCP_KEEPALIVE
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, -1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, 0),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
-                        std::numeric_limits<int16_t>::max() + 1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, -1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, 0),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max() + 1),
-#endif
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE, -1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
-                        std::numeric_limits<int16_t>::max() + 1)));
+INSTANTIATE_TEST_CASE_P(keep_alive, tcp_setsockopt_negative,
+                        testing::Values(std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, -1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, 0),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        std::numeric_limits<int16_t>::max() + 1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, -1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, 0),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        std::numeric_limits<int8_t>::max() + 1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, -1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        std::numeric_limits<int16_t>::max() + 1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, -1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, 0),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        std::numeric_limits<int16_t>::max() + 1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, -1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, 0),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        std::numeric_limits<int8_t>::max() + 1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE, -1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        std::numeric_limits<int16_t>::max() + 1)));
 
 using getscokopt_params = std::tuple<int, int, int, const char *>;
 using tcp_sockopt_default = testing::TestWithParam<getscokopt_params>;
@@ -712,21 +704,18 @@ TEST_P(tcp_sockopt_default, matches_the_value_in_the_file)
 }
 
 INSTANTIATE_TEST_CASE_P(keep_alive, tcp_sockopt_default,
-                        testing::Values(
-#if LWIP_TCP_KEEPALIVE
-                            std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
-                            std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_probes"),
-                            std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
-                            std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_probes"),
-#endif
-                            std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_time"),
-                            std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_time")));
+                        testing::Values(std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_probes"),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_probes"),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_time"),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_time")));
 
 using setsockopt_param = std::tuple<int, int, int>;
 class tcp_with_fifo : public testing::TestWithParam<setsockopt_param> {
@@ -808,12 +797,10 @@ TEST_P(tcp_with_fifo, accepted_socket_inherits_the_setsockopt_param)
     }
 }
 
-INSTANTIATE_TEST_CASE_P(keep_alive, tcp_with_fifo,
-                        testing::Values(
-#if LWIP_TCP_KEEPALIVE
-                            std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPINTVL, 12345),
-                            std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPCNT, 123),
-#endif
-                            std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 0),
-                            std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 1),
-                            std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPIDLE, 1234)));
+INSTANTIATE_TEST_CASE_P(
+    keep_alive, tcp_with_fifo,
+    testing::Values(std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPINTVL, 12345),
+                    std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPCNT, 123),
+                    std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 0),
+                    std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 1),
+                    std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPIDLE, 1234)));

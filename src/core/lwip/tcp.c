@@ -642,6 +642,18 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                      * update without sending any data (which will force us to split the segment).
                      * tcp_zero_window_probe(pcb); */
                     tcp_keepalive(pcb);
+                    /* Anchor the TCP_USER_TIMEOUT clock for this zero-window /
+                     * persist probe: there is pending send data that cannot be
+                     * delivered because the peer's advertised window is closed.
+                     * This preserves the pre-existing behavior of aborting a
+                     * persist-stuck connection after user_timeout via
+                     * tcp_user_timeout_occured(). Pure keepalive probes (the
+                     * SOF_KEEPALIVE branch below) intentionally do NOT anchor
+                     * this - an idle connection has no unacknowledged data, so
+                     * its user_timeout is measured from last_progress_tmr. */
+                    if (pcb->ticks_since_data_sent == -1) {
+                        pcb->ticks_since_data_sent = 0;
+                    }
                 }
             } else {
                 /* Increase the retransmission timer if it is running */
@@ -714,13 +726,31 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
         /* Check if KEEPALIVE should be sent */
         if ((pcb->so_options & SOF_KEEPALIVE) &&
             ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT))) {
-#if LWIP_TCP_KEEPALIVE
-            if ((u32_t)(tcp_ticks - pcb->tmr) >
-                tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt * pcb->keep_intvl))
-#else
-            if ((u32_t)(tcp_ticks - pcb->tmr) > tcp_ms_to_ticks(pcb->keep_idle + TCP_MAXIDLE))
-#endif /* LWIP_TCP_KEEPALIVE */
-            {
+            u32_t ka_elapsed = (u32_t)(tcp_ticks - pcb->tmr);
+            u8_t ka_abort = 0;
+
+            if (pcb->user_timeout_ms != 0) {
+                /* TCP_USER_TIMEOUT: abort once user_timeout has elapsed since the
+                 * connection last made forward progress (in-sequence data
+                 * received or new data acknowledged), NOT since pcb->tmr.
+                 * pcb->tmr is bumped by every received segment - including a
+                 * keepalive-probe reply (a bare dup-ACK) - which would push the
+                 * deadline out to keep_idle + user_timeout instead of just
+                 * user_timeout. last_progress_tmr is immune to those probe
+                 * replies, matching Linux tcp_keepalive_timer(), which measures
+                 * the keepalive elapsed from rcv_tstamp/lrcvtime. The keep_idle
+                 * guard ensures a probe has been attempted before we abort an
+                 * otherwise-idle connection (relevant when user_timeout is
+                 * shorter than keep_idle). */
+                u32_t ut_elapsed = (u32_t)(tcp_ticks - pcb->last_progress_tmr);
+                ka_abort = (ut_elapsed >= tcp_ms_to_ticks(pcb->user_timeout_ms)) &&
+                    (ut_elapsed >= tcp_ms_to_ticks(pcb->keep_idle));
+            } else {
+                ka_abort = (ka_elapsed >
+                            tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt * pcb->keep_intvl));
+            }
+
+            if (ka_abort) {
                 LWIP_DEBUGF_IP_ADDR(TCP_DEBUG,
                                     "tcp_slowtmr: KEEPALIVE timeout. Aborting connection to ",
                                     pcb->remote_ip, pcb->is_ipv6);
@@ -728,17 +758,12 @@ void tcp_slowtmr(struct tcp_pcb *pcb)
                 ++pcb_remove;
                 err = ERR_TIMEOUT;
                 ++pcb_reset;
-            }
-#if LWIP_TCP_KEEPALIVE
-            else if ((u32_t)(tcp_ticks - pcb->tmr) >
-                     tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt_sent * pcb->keep_intvl))
-#else
-            else if ((u32_t)(tcp_ticks - pcb->tmr) >
-                     tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt_sent * TCP_KEEPINTVL_DEFAULT))
-#endif /* LWIP_TCP_KEEPALIVE */
-            {
+            } else if (ka_elapsed >
+                       tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt_sent * pcb->keep_intvl)) {
                 tcp_keepalive(pcb);
-                pcb->keep_cnt_sent++;
+                if (pcb->keep_cnt_sent < UINT8_MAX) {
+                    pcb->keep_cnt_sent++;
+                }
             }
         }
 
@@ -967,6 +992,7 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     pcb->lastack = iss;
     pcb->snd_lbb = iss;
     pcb->tmr = tcp_ticks;
+    pcb->last_progress_tmr = tcp_ticks;
     pcb->snd_sml_snt = 0;
     pcb->snd_sml_add = 0;
 
@@ -975,11 +1001,8 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
 
     /* Init KEEPALIVE timer */
     pcb->keep_idle = TCP_KEEPIDLE_DEFAULT;
-
-#if LWIP_TCP_KEEPALIVE
     pcb->keep_intvl = TCP_KEEPINTVL_DEFAULT;
     pcb->keep_cnt = TCP_KEEPCNT_DEFAULT;
-#endif /* LWIP_TCP_KEEPALIVE */
 
     pcb->keep_cnt_sent = 0;
     pcb->quickack = 0;
@@ -1016,6 +1039,7 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     pcb->lastack = iss;
     pcb->snd_lbb = iss;
     pcb->tmr = tcp_ticks;
+    pcb->last_progress_tmr = tcp_ticks;
     pcb->snd_sml_snt = 0;
     pcb->snd_sml_add = 0;
     pcb->tcp_timer = 0;
@@ -1296,13 +1320,8 @@ u16_t tcp_send_mss(struct tcp_pcb *pcb)
 void tcp_set_keepalive(struct tcp_pcb *pcb, u32_t idle, u32_t intvl, u32_t cnt)
 {
     pcb->keep_idle = idle;
-#if LWIP_TCP_KEEPALIVE
     pcb->keep_intvl = intvl;
     pcb->keep_cnt = cnt;
-#else
-    (void)intvl;
-    (void)cnt;
-#endif /* LWIP_TCP_KEEPALIVE */
 }
 
 #if TCP_DEBUG || TCP_INPUT_DEBUG || TCP_OUTPUT_DEBUG

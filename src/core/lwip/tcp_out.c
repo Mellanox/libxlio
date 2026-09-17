@@ -1758,9 +1758,13 @@ void tcp_keepalive(struct tcp_pcb *pcb)
     pcb->ip_output(p, NULL, pcb, 0);
     tcp_tx_pbuf_free(pcb, p);
 
-    if (pcb->ticks_since_data_sent == -1) {
-        pcb->ticks_since_data_sent = 0;
-    }
+    /* NOTE: a keepalive probe does NOT anchor pcb->ticks_since_data_sent. That
+     * counter drives tcp_user_timeout_occured() (the unacknowledged-data
+     * TCP_USER_TIMEOUT path); anchoring it here would make an idle keepalive
+     * connection abort at keep_idle + user_timeout instead of user_timeout.
+     * The zero-window/persist caller in tcp_slowtmr() anchors it explicitly
+     * (it has real pending data), and the idle keepalive user_timeout is
+     * handled in tcp_slowtmr() via pcb->last_progress_tmr. */
 
     LWIP_DEBUGF(
         TCP_DEBUG,
