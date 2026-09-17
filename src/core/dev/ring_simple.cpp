@@ -500,7 +500,7 @@ int ring_simple::drain_and_proccess()
 
 void ring_simple::drain_tx_for_poll_group_teardown()
 {
-    if (m_hqtx && !stop_active_queue_tx()) {
+    if (m_hqtx && !stop_active_queue_tx(true)) {
         ring_loginfo("Poll-group teardown left TX descriptors pending");
     }
 }
@@ -996,14 +996,16 @@ void ring_simple::start_active_queue_rx()
     m_lock_ring_rx.unlock();
 }
 
-bool ring_simple::stop_active_queue_tx()
+bool ring_simple::stop_active_queue_tx(bool retire_pending)
 {
     m_lock_ring_tx.lock();
     if (m_up_tx) {
         m_up_tx = false;
         /* TODO: consider avoid using sleep */
         /* coverity[sleep] */
-        m_hqtx->down();
+        m_hqtx->down(retire_pending);
+    } else if (retire_pending) {
+        m_hqtx->retire_pending_tx_wqes_for_teardown();
     }
     bool drained = !m_hqtx->has_pending_tx_wqes();
     m_lock_ring_tx.unlock();
