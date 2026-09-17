@@ -63,7 +63,7 @@ public:
     virtual void ti_released(xlio_ti *ti) override;
 
     void up();
-    void down();
+    void down(bool retire_pending = false);
 
     void send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
                   unsigned credits);
@@ -74,8 +74,11 @@ public:
     uint32_t get_max_send_sge() const { return m_mlx5_qp.cap.max_send_sge; }
 
     void modify_queue_to_ready_state();
-    void modify_queue_to_error_state();
+    // Return positive on transition, zero when the device is gone, and negative on failure.
+    int modify_queue_to_error_state();
     void release_tx_buffers();
+    bool retire_pending_tx_wqes_for_teardown();
+    bool has_pending_tx_wqes() const { return m_sq_wqe_count != 0U; }
     uint32_t is_ratelimit_change(struct xlio_rate_limit_t &rate_limit);
     int modify_qp_ratelimit(struct xlio_rate_limit_t &rate_limit, uint32_t rl_changes);
     void dm_release_data(mem_buf_desc_t *buff) { m_dm_mgr.release_data(buff); }
@@ -184,6 +187,7 @@ private:
 
     int configure(const slave_data_t *slave);
     int prepare_queue(xlio_ibv_qp_init_attr &qp_init_attr);
+    bool destroy_qp_for_teardown();
     void init_queue();
     void init_device_memory();
     void trigger_completion_for_all_sent_packets();
@@ -263,10 +267,13 @@ private:
     const uint32_t m_n_sysvar_tx_num_wr_to_signal;
     uint32_t m_tx_num_wr;
     unsigned m_sq_free_credits = 0U;
+    unsigned m_sq_total_credits = 0U;
+    uint32_t m_sq_wqe_count = 0U;
     uint32_t m_n_unsignaled_count = 0U;
     int m_sq_wqe_hot_index = 0;
     uint16_t m_sq_wqe_counter = 0U;
     uint8_t m_port_num;
+    bool m_qp_quiesced = false;
     bool m_b_fence_needed = false;
     bool m_dm_enabled = false;
     dm_mgr m_dm_mgr;

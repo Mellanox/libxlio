@@ -47,6 +47,7 @@ public:
     void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
     int drain_and_proccess() override;
     void ack_cq_events() override;
+    void drain_tx_for_poll_group_teardown() override;
     void wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr) override;
     void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
@@ -56,7 +57,7 @@ public:
     bool is_up() override;
     void start_active_queue_tx();
     void start_active_queue_rx();
-    void stop_active_queue_tx();
+    bool stop_active_queue_tx(bool retire_pending = false);
     void stop_active_queue_rx();
     mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                    int n_num_mem_bufs = 1 /* default = 1 */,
