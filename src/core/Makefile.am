@@ -259,6 +259,7 @@ libxlio_la_SOURCES := \
 	event/timer_handler.h \
 	event/vlogger_timer_handler.h \
 	event/worker_thread.h \
+	event/worker_thread_loop.h \
 	event/worker_thread_manager.h \
 	event/entity_context.h \
 	event/entity_context_manager.h \
