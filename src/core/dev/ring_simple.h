@@ -57,7 +57,7 @@ public:
     bool is_up() override;
     void start_active_queue_tx();
     void start_active_queue_rx();
-    bool stop_active_queue_tx(bool retire_pending = false);
+    bool stop_active_queue_tx();
     void stop_active_queue_rx();
     mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
                                    int n_num_mem_bufs = 1 /* default = 1 */,

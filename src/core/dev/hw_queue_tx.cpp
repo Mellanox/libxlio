@@ -268,6 +268,14 @@ int hw_queue_tx::configure(const slave_data_t *slave)
 
 void hw_queue_tx::up()
 {
+    bool restarting = m_qp_quiesced || has_pending_tx_wqes();
+    if (has_pending_tx_wqes() && !retire_pending_tx_wqes_for_teardown()) {
+        hwqtx_logpanic("Cannot restart TX queue with pending WQEs");
+    }
+    if (!m_mlx5_qp.qp) {
+        hwqtx_logpanic("Cannot restart TX queue after QP destruction");
+    }
+
     init_queue();
 
     // Add buffers
@@ -275,7 +283,12 @@ void hw_queue_tx::up()
 
     m_p_cq_mgr_tx->add_qp_tx(this);
 
-    release_tx_buffers();
+    if (restarting) {
+        // Old WQE ownership was retired in software, so do not process its delayed CQEs again.
+        m_p_cq_mgr_tx->discard_cq();
+    } else {
+        release_tx_buffers();
+    }
 
     modify_queue_to_ready_state();
     m_qp_quiesced = false;
@@ -283,7 +296,7 @@ void hw_queue_tx::up()
     init_device_memory();
 }
 
-void hw_queue_tx::down(bool retire_pending)
+void hw_queue_tx::down()
 {
     if (m_dm_enabled) {
         m_dm_mgr.release_resources();
@@ -304,7 +317,7 @@ void hw_queue_tx::down(bool retire_pending)
         release_tx_buffers();
     }
 
-    if (retire_pending && !retire_pending_tx_wqes_for_teardown()) {
+    if (!retire_pending_tx_wqes_for_teardown()) {
         hwqtx_loginfo("Failed to retire all pending TX WQEs");
     }
     m_p_cq_mgr_tx->del_qp_tx(this);
@@ -508,9 +521,10 @@ void hw_queue_tx::init_queue()
             hwqtx_logerr("Failed allocating m_sq_wqe_idx_to_prop (errno=%d %m)", errno);
             return;
         }
-        m_last_sq_wqe_prop_to_complete = m_sq_wqe_idx_to_prop;
-        m_sq_wqe_prop_last = nullptr;
     }
+    m_last_sq_wqe_prop_to_complete = m_sq_wqe_idx_to_prop;
+    m_sq_wqe_prop_last = nullptr;
+    m_sq_wqe_count = 0U;
 
     hwqtx_logfunc("m_tx_num_wr=%d max_inline_data: %d m_sq_wqe_idx_to_prop=%p", m_tx_num_wr,
                   get_max_inline_data(), m_sq_wqe_idx_to_prop);

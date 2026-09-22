@@ -228,6 +228,15 @@ bool cq_mgr_tx::retire_pending_tx_wqes(hw_queue_tx *hqtx)
     return !hqtx->has_pending_tx_wqes();
 }
 
+void cq_mgr_tx::discard_cq()
+{
+    int discarded = 0;
+    while (get_cqe_tx()) {
+        ++discarded;
+    }
+    cq_logdbg("Discarded %d stale TX CQEs", discarded);
+}
+
 void cq_mgr_tx::log_cqe_error(struct xlio_mlx5_cqe *cqe, uint16_t wqe_index, uint32_t credits) const
 {
     struct mlx5_err_cqe *ecqe = (struct mlx5_err_cqe *)cqe;
