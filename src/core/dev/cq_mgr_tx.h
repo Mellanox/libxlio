@@ -43,6 +43,7 @@ public:
     int poll_and_process_element_tx();
 
     bool retire_pending_tx_wqes(hw_queue_tx *hqtx);
+    void discard_cq();
 
     void reset_notification_armed() { m_b_notification_armed = false; }
 

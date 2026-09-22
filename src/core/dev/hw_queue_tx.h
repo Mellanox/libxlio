@@ -63,7 +63,7 @@ public:
     virtual void ti_released(xlio_ti *ti) override;
 
     void up();
-    void down(bool retire_pending = false);
+    void down();
 
     void send_wqe(xlio_ibv_send_wr *p_send_wqe, xlio_wr_tx_packet_attr attr, xlio_tis *tis,
                   unsigned credits);
