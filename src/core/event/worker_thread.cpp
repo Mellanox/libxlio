@@ -35,6 +35,7 @@
 #include <chrono>
 
 #include "worker_thread.h"
+#include "worker_thread_loop.h"
 #include "vlogger/vlogger.h"
 #include "util/sys_vars.h"
 
@@ -81,39 +82,24 @@ void worker_thread::worker_thread_loop()
 
     const int32_t poll_budget_us = safe_mce_sys().select_poll_num;
     const uint32_t configured_timeout_ms = safe_mce_sys().tcp_timer_resolution_msec;
-    const int interrupt_timeout_ms =
-        configured_timeout_ms > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC
+    const int interrupt_timeout_ms = configured_timeout_ms > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC
         ? MCE_MAX_TCP_TIMER_RESOLUTION_MSEC
         : static_cast<int>(configured_timeout_ms);
     const bool interrupt_enabled = (poll_budget_us >= 0);
 
     m_running.store(true);
+    entity_context::wakeup_reason wakeup_reason = entity_context::WAKEUP_NONE;
+
     while (m_running.load(std::memory_order_relaxed)) {
         if (!interrupt_enabled) {
             m_entity_ctx->process();
             continue;
         }
 
-        auto poll_start = clock::now();
-        auto poll_deadline = poll_start + std::chrono::microseconds(poll_budget_us);
-
-        while (m_running.load(std::memory_order_relaxed)) {
-            bool work_done = m_entity_ctx->process();
-            auto now = clock::now();
-
-            if (work_done) {
-                poll_deadline = now + std::chrono::microseconds(poll_budget_us);
-            } else if (now >= poll_deadline) {
-                break;
-            }
-        }
-
-        if (!m_running.load(std::memory_order_relaxed)) {
-            break;
-        }
-
-        // Transition to interrupt-driven sleep. Return to polling
-        // regardless of the wakeup reason.
-        m_entity_ctx->wait_for_interrupt(interrupt_timeout_ms);
+        wakeup_reason = worker_thread_detail::run_interrupt_cycle(
+            *m_entity_ctx, wakeup_reason, entity_context::WAKEUP_CQ_EVENT,
+            std::chrono::microseconds(poll_budget_us), interrupt_timeout_ms,
+            [] { return clock::now(); },
+            [this] { return m_running.load(std::memory_order_relaxed); });
     }
 }

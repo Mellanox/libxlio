@@ -160,7 +160,7 @@ bool entity_context::process()
 
     flush();
 
-    return m_last_poll_hit || m_last_job_size;
+    return m_last_poll_hit;
 }
 
 void entity_context::add_job(const job_desc &job)
