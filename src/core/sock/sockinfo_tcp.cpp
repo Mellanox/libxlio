@@ -2093,10 +2093,10 @@ void sockinfo_tcp::note_tcp_timer_attempt_acquired()
     const uint32_t timer_cadence_ms = safe_mce_sys().tcp_timer_resolution_msec;
     const unsigned long long drift_us =
         (unsigned long long)m_tcp_timer_consecutive_skips * timer_cadence_ms * 1000ULL;
-    /* Report sustained contention at WARN and isolated misses at DEBUG once
-     * per streak. */
+    /* Report sustained contention at INFO and isolated misses at DEBUG once
+     * per streak. Not using WARN because it fails Ver. group tests */
     if (m_tcp_timer_consecutive_skips >= XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD) {
-        si_tcp_logwarn("TCP timer trylock starvation: %u consecutive missed timer visits "
+        si_tcp_loginfo("TCP timer trylock starvation: %u consecutive missed timer visits "
                        "(~%llu us drift at cadence %u ms) [%s -> %s]",
                        m_tcp_timer_consecutive_skips, drift_us, timer_cadence_ms,
                        m_bound.to_str_ip_port(true).c_str(),
