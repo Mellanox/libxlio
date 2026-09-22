@@ -19,11 +19,16 @@ namespace worker_thread_detail {
  * types and therefore need neither a real thread nor hardware nor elapsed wall
  * time.
  *
+ * A CQ channel event is only a notification hint. If the verification poll
+ * finds no activity, production calls wait_for_interrupt() again; that method
+ * always arms CQ notifications and performs one final poll before epoll_wait().
+ * This preserves the no-lost-event sleep transition.
+ *
  * Production invocation parameters:
  * - context: entity_context
  * - WakeupReason: entity_context::wakeup_reason
  * - wakeup_reason: reason returned by the previous interrupt wait
- * - cq_wakeup_reason: entity_context::WAKEUP_CQ_EVENT
+ * - cq_activity_reason: entity_context::WAKEUP_CQ_ACTIVITY
  * - poll_budget: XLIO_SELECT_POLL converted to microseconds
  * - interrupt_timeout_ms: configured TCP timer resolution
  * - now: callable returning std::chrono::steady_clock::now()
@@ -32,19 +37,19 @@ namespace worker_thread_detail {
  * Test invocation parameters:
  * - context: scripted fake_context recording process and wait calls
  * - WakeupReason: test_wakeup_reason
- * - wakeup_reason/cq_wakeup_reason: scripted test enum values
+ * - wakeup_reason/cq_activity_reason: scripted test enum values
  * - poll_budget/interrupt_timeout_ms: test-controlled values
  * - now: callable returning fake_clock::now()
  * - running: test-controlled predicate
  */
 template <typename Context, typename WakeupReason, typename Clock, typename Running>
 WakeupReason run_interrupt_cycle(Context &context, WakeupReason wakeup_reason,
-                                 WakeupReason cq_wakeup_reason,
+                                 WakeupReason cq_activity_reason,
                                  std::chrono::microseconds poll_budget, int interrupt_timeout_ms,
                                  Clock now, Running running)
 {
-    if (wakeup_reason != cq_wakeup_reason) {
-        // Process jobs and timer work once after a non-CQ wakeup.
+    if (wakeup_reason != cq_activity_reason) {
+        // Verify unconfirmed CQ events and process jobs or timer work once.
         if (!context.process()) {
             if (!running()) {
                 return wakeup_reason;

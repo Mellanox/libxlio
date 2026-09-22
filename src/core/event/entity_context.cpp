@@ -385,7 +385,7 @@ entity_context::wakeup_reason entity_context::wait_for_interrupt(int timeout_ms)
     // is acknowledged on the next wakeup - there is no disarm primitive.
     if (poll()) {
         m_job_queue.wake();
-        return WAKEUP_CQ_EVENT;
+        return WAKEUP_CQ_ACTIVITY;
     }
 
     static constexpr int MAX_EVENTS = 8;

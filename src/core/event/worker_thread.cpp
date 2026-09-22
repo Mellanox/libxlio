@@ -97,7 +97,7 @@ void worker_thread::worker_thread_loop()
         }
 
         wakeup_reason = worker_thread_detail::run_interrupt_cycle(
-            *m_entity_ctx, wakeup_reason, entity_context::WAKEUP_CQ_EVENT,
+            *m_entity_ctx, wakeup_reason, entity_context::WAKEUP_CQ_ACTIVITY,
             std::chrono::microseconds(poll_budget_us), interrupt_timeout_ms,
             [] { return clock::now(); },
             [this] { return m_running.load(std::memory_order_relaxed); });

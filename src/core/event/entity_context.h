@@ -50,7 +50,8 @@ class entity_context : public poll_group {
 public:
     enum wakeup_reason {
         WAKEUP_NONE = 0,
-        WAKEUP_CQ_EVENT,
+        WAKEUP_CQ_EVENT, // CQ channel notification; hardware work is not yet verified.
+        WAKEUP_CQ_ACTIVITY, // CQ poll found hardware work.
         WAKEUP_JOB_POSTED,
         WAKEUP_TIMEOUT,
     };
