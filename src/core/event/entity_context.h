@@ -101,6 +101,7 @@ public:
     virtual ~entity_context();
 
     size_t get_index() const { return m_index; }
+    // Returns true when hardware CQ polling found work.
     bool process();
     void add_job(const job_desc &job);
 
