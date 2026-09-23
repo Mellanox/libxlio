@@ -336,6 +336,9 @@ void entity_context::close_socket_job(const job_desc &job)
 void entity_context::arm_cq_notifications()
 {
     for (ring *rng : get_rings()) {
+        // We request notifications only for the RX queue. There is no need for notifications
+        // regarding TX because TCP sends data immediately in response to ACK packets
+        // being received, not in response to TX packets which finished being sent.
         bool success = rng->request_notification(CQT_RX);
         if (unlikely(!success)) {
             ctx_logerr("Failed to arm CQ notification for ring %p", rng);
