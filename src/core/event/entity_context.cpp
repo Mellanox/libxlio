@@ -160,7 +160,7 @@ bool entity_context::process()
 
     flush();
 
-    return m_last_poll_hit || m_last_job_size;
+    return m_last_poll_hit;
 }
 
 void entity_context::add_job(const job_desc &job)
@@ -336,6 +336,9 @@ void entity_context::close_socket_job(const job_desc &job)
 void entity_context::arm_cq_notifications()
 {
     for (ring *rng : get_rings()) {
+        // We request notifications only for the RX queue. There is no need for notifications
+        // regarding TX because TCP sends data immediately in response to ACK packets
+        // being received, not in response to TX packets which finished being sent.
         bool success = rng->request_notification(CQT_RX);
         if (unlikely(!success)) {
             ctx_logerr("Failed to arm CQ notification for ring %p", rng);
@@ -385,7 +388,7 @@ entity_context::wakeup_reason entity_context::wait_for_interrupt(int timeout_ms)
     // is acknowledged on the next wakeup - there is no disarm primitive.
     if (poll()) {
         m_job_queue.wake();
-        return WAKEUP_CQ_EVENT;
+        return WAKEUP_CQ_ACTIVITY;
     }
 
     static constexpr int MAX_EVENTS = 8;

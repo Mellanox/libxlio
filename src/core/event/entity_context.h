@@ -50,7 +50,8 @@ class entity_context : public poll_group {
 public:
     enum wakeup_reason {
         WAKEUP_NONE = 0,
-        WAKEUP_CQ_EVENT,
+        WAKEUP_CQ_EVENT, // CQ channel notification; hardware work is not yet verified.
+        WAKEUP_CQ_ACTIVITY, // CQ poll found hardware work.
         WAKEUP_JOB_POSTED,
         WAKEUP_TIMEOUT,
     };
@@ -70,7 +71,8 @@ public:
         JOB_FLAG_TX_LAST_CHUNK = 0x0001,
         JOB_FLAG_TLS_TX = 0x0002,
         JOB_FLAG_TLS_RX = 0x0004,
-        JOB_FLAG_SOCK_BLOCKING = 0x0008, // ADD_AND_CONNECT: snapshot at post, not live is_blocking()
+        JOB_FLAG_SOCK_BLOCKING =
+            0x0008, // ADD_AND_CONNECT: snapshot at post, not live is_blocking()
     };
 
     struct job_desc {
@@ -100,6 +102,7 @@ public:
     virtual ~entity_context();
 
     size_t get_index() const { return m_index; }
+    // Returns true when hardware CQ polling found work.
     bool process();
     void add_job(const job_desc &job);
 

@@ -71,14 +71,18 @@ public:
     /**
      * Read and acknowledge a pending CQ event from the notification channel.
      * Resets the notification armed flag so the CQ can be re-armed.
+     * @return == true if a pending CQ event was read and acked
+     *            false if not
      */
-    void ack_cq_events();
+    bool ack_cq_events();
 
     /**
      * Block on the CQ's notification channel for the next event and process
      * it before exiting.
+     * @return == true if a pending CQ event was found and processed
+     *            false if not
      */
-    void wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr);
+    bool wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr);
 
     /**
      * Poll RX CQ. Each CQE processed directly.
