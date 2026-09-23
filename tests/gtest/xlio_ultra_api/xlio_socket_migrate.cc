@@ -107,7 +107,7 @@ public:
 /**
  * @test ultra_api_socket_migrate.ti_1
  * @brief
- *    Create TCP socket/connect/send(initiator)/receive(target)
+ *    Migrate a TCP socket and reject migration while express-ZC TX is pending
  * @details
  */
 TEST_F(ultra_api_socket_migrate, ti_1)
@@ -184,11 +184,45 @@ TEST_F(ultra_api_socket_migrate, ti_1)
         ASSERT_EQ(0, rc);
 
         int sent_bytes = 0;
+        bool pending_detach_checked = false;
         while (data_sent_completed < data_bytes_to_be_sent) {
             xlio_api->xlio_poll_group_poll(group);
             if (connected_counter > 0 && sent_bytes < data_bytes_to_be_sent) {
-                base_send_single_msg(sock, data_to_send, strlen(data_to_send), strlen(data_to_send),
-                                     0, mr_buf, sndbuf);
+                if (!pending_detach_checked) {
+                    const size_t length = strlen(data_to_send);
+                    struct xlio_socket_send_attr attr = {
+                        .flags = 0,
+                        .mkey = mr_buf->lkey,
+                        .userdata_op = length,
+                    };
+                    memcpy(sndbuf, data_to_send, length);
+                    rc = xlio_api->xlio_socket_send(sock, sndbuf, length, &attr);
+                    ASSERT_EQ(0, rc);
+
+                    errno = 0;
+                    rc = xlio_api->xlio_socket_detach_group(sock);
+                    EXPECT_EQ(-1, rc);
+                    EXPECT_EQ(EBUSY, errno);
+                    if (rc == 0) {
+                        // Keep the old implementation running so the expectations above report
+                        // the regression without leaving the peer blocked.
+                        EXPECT_EQ(0, xlio_api->xlio_socket_attach_group(sock, group));
+                    }
+
+                    xlio_api->xlio_socket_flush(sock);
+                    while (data_sent_completed < static_cast<int>(length)) {
+                        xlio_api->xlio_poll_group_poll(group);
+                    }
+
+                    rc = xlio_api->xlio_socket_detach_group(sock);
+                    ASSERT_EQ(0, rc);
+                    rc = xlio_api->xlio_socket_attach_group(sock, group);
+                    ASSERT_EQ(0, rc);
+                    pending_detach_checked = true;
+                } else {
+                    base_send_single_msg(sock, data_to_send, strlen(data_to_send),
+                                         strlen(data_to_send), 0, mr_buf, sndbuf);
+                }
                 sent_bytes += strlen(data_to_send);
             }
         }
@@ -196,6 +230,7 @@ TEST_F(ultra_api_socket_migrate, ti_1)
         base_wait_for_delayed_acks(group);
 
         ASSERT_EQ(data_sent_completed, data_bytes_to_be_sent);
+        ASSERT_TRUE(pending_detach_checked);
 
         barrier_fork(pid, true); // wait for child to accept + receive last ack
 
