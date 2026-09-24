@@ -79,13 +79,13 @@ void *xlio_allocator::alloc(size_t size)
         }
         // Fallthrough
     case ALLOC_TYPE_ANON:
-        long page_size;
-        page_size = sysconf(_SC_PAGESIZE);
-        if (page_size > 0) {
-            m_data = alloc_posix_memalign(size, (size_t)page_size);
-        }
+        m_data = alloc_mmap(size);
         if (!m_data) {
-            m_data = alloc_malloc(size);
+            long page_size = sysconf(_SC_PAGESIZE);
+            if (page_size <= 0) {
+                page_size = 4096;
+            }
+            m_data = alloc_posix_memalign(size, (size_t)page_size);
         }
         break;
     case ALLOC_TYPE_EXTERNAL:
@@ -118,7 +118,7 @@ void *xlio_allocator::alloc_aligned(size_t size, size_t align)
 
     if (m_type == ALLOC_TYPE_HUGEPAGES || m_type == ALLOC_TYPE_PREFER_HUGE) {
         // We should check that hugepage provides requested alignment, however,
-        // it is unlikely to have alignment bigger than a hugepage (at least 2MB).
+        // it is unlikely to have alignment bigger than a hugepage.
         m_data = alloc_huge(size);
     }
     if (!m_data) {
@@ -151,25 +151,37 @@ void *xlio_allocator::alloc_huge(size_t size)
 
 void *xlio_allocator::alloc_posix_memalign(size_t size, size_t align)
 {
-    int rc = posix_memalign(&m_data, align, size);
+    size_t aligned_size = ((size + align - 1) / align) * align;
+    int rc = posix_memalign(&m_data, align, aligned_size);
     if (rc == 0 && m_data) {
         m_type = ALLOC_TYPE_ANON;
-        m_size = size;
+        m_size = aligned_size;
     } else {
         m_data = nullptr;
-        __log_info_dbg("posix_memalign failed: error=%d size=%zu align=%zu", rc, size, align);
+        __log_info_dbg("posix_memalign failed: error=%d size=%zu aligned_size=%zu align=%zu", rc,
+                       size, aligned_size, align);
     }
     return m_data;
 }
 
-void *xlio_allocator::alloc_malloc(size_t size)
+void *xlio_allocator::alloc_mmap(size_t size)
 {
-    m_data = malloc(size);
-    if (m_data) {
-        m_type = ALLOC_TYPE_ANON;
-        m_size = size;
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) {
+        page_size = 4096;
+    }
+
+    size_t aligned_size = (size + (size_t)page_size - 1) & ~((size_t)page_size - 1);
+
+    m_data = mmap(nullptr, aligned_size, PROT_READ | PROT_WRITE,
+                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+    if (m_data == MAP_FAILED) {
+        __log_info_dbg("mmap failed: errno=%d size=%zu aligned_size=%zu", errno, size,
+                       aligned_size);
+        m_data = nullptr;
     } else {
-        __log_info_dbg("malloc failed: errno=%d size=%zu", errno, size);
+        m_type = ALLOC_TYPE_MMAP;
+        m_size = aligned_size;
     }
     return m_data;
 }
@@ -187,6 +199,11 @@ void xlio_allocator::dealloc()
         break;
     case ALLOC_TYPE_ANON:
         free(m_data);
+        break;
+    case ALLOC_TYPE_MMAP:
+        if (munmap(m_data, m_size) != 0) {
+            __log_info_dbg("munmap failed (errno=%d)", errno);
+        }
         break;
     case ALLOC_TYPE_EXTERNAL:
         if (m_memfree) {
