@@ -1,0 +1,6 @@
+{
+    "patternRepositories": [
+        "lwip-tcpip/lwip"
+    ],
+    "context": "libxlio is a high-performance kernel-bypass TCP/IP networking library. libxlio embeds a modified lwip TCP/IP stack in src/core/lwip/ for protocol handling. When analyzing this codebase, patterns from lwip inform the TCP state machine and protocol implementation."
+}
