@@ -299,10 +299,12 @@ TEST_F(tcp_connect, ti_5_multi_connect)
         close(fd);
 
         if (0 != rc) {
+            // The child is killed on purpose, its exit status is not meaningful.
             kill(pid, SIGKILL);
+            wait_fork(pid);
+        } else {
+            EXPECT_EQ(0, wait_fork(pid));
         }
-
-        wait_fork(pid);
     }
 }
 

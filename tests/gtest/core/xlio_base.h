@@ -80,6 +80,12 @@ public:
         rc = xlio_api->xlio_socket_destroy(sock);
         ASSERT_TRUE(rc == 0);
     }
+    /*
+     * Keep driving the poll group so that the TCP stack can send/process the pending
+     * (delayed) ACKs before the sockets are destroyed. This must be the group which
+     * owns the data connection - a socket which was migrated to another group is
+     * serviced only by that group.
+     */
     void base_wait_for_delayed_acks(xlio_poll_group_t group, int timeout_seconds = 5)
     {
         struct timespec start_time;
