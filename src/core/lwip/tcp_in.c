@@ -1585,8 +1585,12 @@ static void tcp_receive(struct tcp_pcb *pcb, tcp_in_data *in_data)
                 }
 #endif /* TCP_QUEUE_OOSEQ */
 
-                /* Acknowledge the segment(s). */
-                if ((in_data->recv_data && in_data->recv_data->next) ||
+                /* Acknowledge the segment(s) now if one of these hold:
+                   - GRO (== in_data->recv_data->next)
+                   - LRO packets with total size > 1 MSS
+                   - quickack is enabled */
+                if ((in_data->recv_data &&
+                     (in_data->recv_data->next || in_data->recv_data->tot_len > pcb->advtsd_mss)) ||
                     tcp_quickack(pcb, in_data)) {
                     tcp_ack_now(pcb);
                 } else {
