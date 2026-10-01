@@ -3808,22 +3808,29 @@ XLIO's internal thread or on each application thread.
 - *"disable" (0, default):* Internal thread handles all
   TCP timers. Sockets use real locks — safe to share
   across threads. poll(), select(), and epoll all work.
-- *"delegate" (1):* Thread-local timers with no-op locks
-  (lock-free). Each socket must stay on one thread for
-  its lifetime (violation causes silent corruption; no
-  runtime check). Incompatible with blocking
-  poll()/select() — timers freeze, stalling
-  retransmissions. Epoll is safe (wakes periodically).
+- *"delegate" (1):* Thread-local timers. When
+  [`performance.threading.worker_threads`](#performancethreadingworker_threads) is 0, socket
+  locks are no-ops (lock-free), and each socket must stay
+  on one application thread for its lifetime (violation
+  causes silent corruption; no runtime check). With worker
+  threads enabled, sockets retain real locks because worker
+  and application threads access them concurrently.
+  Incompatible with blocking poll()/select() — timers
+  freeze, stalling retransmissions. Epoll is safe (wakes
+  periodically).
 
 **Forced** when delegate: ring allocation per_thread
 (both directions), progress engine interval disabled.
 
-**Sizing:** Default suits most applications. Use
-"delegate" only for busy-polling or epoll event loops
-with strict one-thread-per-socket ownership (trading,
-single-threaded servers). Benefit: zero per-operation
-lock overhead. Misuse symptoms: hung connections
-(poll/select); silent corruption (shared sockets).
+**Sizing:** Default suits most applications. Without worker
+threads, use "delegate" only for busy-polling or epoll
+event loops with strict one-thread-per-socket ownership
+(trading, single-threaded servers). Benefit in that mode:
+zero per-operation lock overhead. With worker threads,
+correctness requires socket locking, so that lock-elision
+benefit does not apply. Misuse symptoms without worker
+threads: hung connections (poll/select); silent corruption
+(shared sockets).
 
 **Default:** `"disable" (0)`
 
@@ -3895,7 +3902,10 @@ virtual machines, containers, CPU-limited cgroups).
 "perf lock report". If mutex latency is unacceptable,
 reduce contention via ring allocation (per-thread or
 higher ring limits) instead. No effect when behavior
-is "delegate" (locks become no-ops).
+is "delegate" and [`performance.threading.worker_threads`](#performancethreadingworker_threads)
+is 0 (socket locks become no-ops). With worker threads
+enabled, delegate mode uses real socket locks, so this
+option still applies.
 
 **Default:** `false`
 
