@@ -433,6 +433,11 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
 
 void sockinfo_tcp::set_entity_context(entity_context *ctx)
 {
+    // The worker and the application threads share the socket from here on.
+    if (unlikely(m_tcp_con_lock.is_dummy())) {
+        si_tcp_logpanic("Entity context socket %p uses a dummy socket lock", this);
+    }
+
     m_entity_context = ctx;
     // To reuse Ultra API path, TX completions for instance
     m_p_group = ctx;

@@ -58,6 +58,7 @@ public:
         vlog_printf(VLOG_ERROR, "is_locked_by_me() used for not supported class.\n");
         return 0;
     }
+    virtual bool is_dummy() const { return false; }
 
     const char *to_str() { return m_lock_name; }
 
@@ -105,6 +106,7 @@ public:
     virtual inline int unlock() { return 0; };
 
     virtual inline int is_locked_by_me() { return 0; }
+    virtual bool is_dummy() const { return false; }
 
     const char *to_str() { return m_lock_name; }
 
@@ -425,6 +427,7 @@ public:
     int trylock() override { return 0; }
     int unlock() override { return 0; }
     int is_locked_by_me() override { return 1; }
+    bool is_dummy() const override { return true; }
 };
 
 // Users of lock_dummy may wish to alignas(64) to place this lock in in a different cache-line and
@@ -480,6 +483,7 @@ public:
     inline int unlock() { return m_lock->unlock(); }
     lock_base &get_lock_base() { return *m_lock; }
     inline int is_locked_by_me() { return m_lock->is_locked_by_me(); }
+    inline bool is_dummy() const { return m_lock->is_dummy(); }
     inline const char *to_str() { return m_lock->to_str(); }
 
 private:

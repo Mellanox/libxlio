@@ -129,7 +129,7 @@ rc=$(($rc+$?))
 
 
 # Worker Threads Mode test filter
-worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event*:-tcp_bind.mapped_ipv4_bind"
+worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event*:tcp_stream_integrity*:-tcp_bind.mapped_ipv4_bind"
 
 worker_threads_failures=()
 worker_threads_samples=0
@@ -165,6 +165,11 @@ do
 
 	run_worker_threads_test "$poll_mode/ipv4/3-workers" \
 		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-not-pow2.xml"
+
+	# Worker threads with delegated TCP timers: sockets are shared by the worker and the
+	# application threads, so they must still get real socket locks.
+	run_worker_threads_test "$poll_mode/ipv4/1-worker-delegate" \
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_TCP_CTL_THREAD=delegate XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-delegate.xml"
 done
 
 echo "Worker Threads Mode tests: $worker_threads_samples samples, ${#worker_threads_failures[@]} failures"
