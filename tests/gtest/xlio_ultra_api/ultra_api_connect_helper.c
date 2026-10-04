@@ -5,17 +5,16 @@
  */
 
 /*
- * Smoke-test helper for verifying Ultra API sockets are NOT dispatched
- * to XLIO worker threads.  Exercises the xlio_socket_connect() path with
- * worker_threads=1 configured.  The gtest wrapper asserts that worker-
- * thread dispatch messages (connect_socket_job / "New TCP socket added")
- * are absent from the debug output.
+ * Connect an Ultra API socket in a fresh process so tests can supply their
+ * own XLIO configuration. By default, poll and clean up all resources. With
+ * --exit-with-live-socket, call xlio_exit() while the socket and group live.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -25,7 +24,8 @@
 
 /* Arbitrary unused TCP port -- the connect() is only used to drive the
  * XLIO connect code path, not to actually communicate. */
-#define PEER_PORT 1
+#define PEER_PORT                 1
+#define EXIT_WITH_LIVE_SOCKET_ARG "--exit-with-live-socket"
 
 /* Iterations of xlio_poll_group_poll() to drain pending socket events
  * between connect() and teardown. */
@@ -73,6 +73,18 @@ static int find_local_ipv4(struct in_addr *out)
 
 int main(int argc, char **argv)
 {
+    int arg_index = 1;
+    int exit_with_live_socket = 0;
+
+    if (argc > arg_index && strcmp(argv[arg_index], EXIT_WITH_LIVE_SOCKET_ARG) == 0) {
+        exit_with_live_socket = 1;
+        ++arg_index;
+    }
+    if (argc > arg_index + 1) {
+        fprintf(stderr, "FAIL: usage: %s [%s] [peer-ip]\n", argv[0], EXIT_WITH_LIVE_SOCKET_ARG);
+        return EXIT_FAILURE;
+    }
+
     /* Parse the peer address up-front so that sattr.domain can be set
      * correctly, and so a malformed literal short-circuits to SKIP before
      * we touch any XLIO resources.  Three independent cases:
@@ -80,7 +92,7 @@ int main(int argc, char **argv)
      *   - argument contains ':' -> parse as IPv6;
      *   - otherwise             -> parse as IPv4.
      */
-    const char *arg = (argc > 1) ? argv[1] : NULL;
+    const char *arg = (argc > arg_index) ? argv[arg_index] : NULL;
     struct sockaddr_storage peer;
     socklen_t peer_len;
     sa_family_t family;
@@ -153,9 +165,30 @@ int main(int argc, char **argv)
         return EXIT_SUCCESS;
     }
 
-    /* Connect will likely fail (ECONNREFUSED / timeout) but that is fine.
-     * The goal is to exercise the connect code path inside XLIO. */
-    api->xlio_socket_connect(sock, (struct sockaddr *)&peer, peer_len);
+    /* Connect will likely fail asynchronously (ECONNREFUSED / timeout), but
+     * the goal is to exercise the connect code path inside XLIO. */
+    int connect_rc = api->xlio_socket_connect(sock, (struct sockaddr *)&peer, peer_len);
+    int connect_error = errno;
+
+    if (exit_with_live_socket) {
+        if (connect_rc != 0) {
+            api->xlio_exit();
+            if (connect_error == ENODEV) {
+                fprintf(stderr, "SKIP: peer is not offloadable\n");
+                return EXIT_SUCCESS;
+            }
+            fprintf(stderr, "FAIL: xlio_socket_connect: %s\n", strerror(connect_error));
+            return EXIT_FAILURE;
+        }
+
+        fprintf(stderr, "LIVE_TIMER_SOCKET 0x%" PRIxPTR "\n", (uintptr_t)sock);
+        if (api->xlio_exit() != 0) {
+            fprintf(stderr, "FAIL: xlio_exit\n");
+            return EXIT_FAILURE;
+        }
+        fprintf(stderr, "PASS\n");
+        return EXIT_SUCCESS;
+    }
 
     for (int i = 0; i < POLL_ITERATIONS; i++) {
         api->xlio_poll_group_poll(group);

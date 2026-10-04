@@ -1,0 +1,14 @@
+{
+  "monitor": {
+    "log": {
+      "level": 5
+    }
+  },
+  "performance": {
+    "threading": {
+      "internal_handler": {
+        "behavior": "delegate"
+      }
+    }
+  }
+}
