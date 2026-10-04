@@ -936,7 +936,10 @@ void sockinfo_tcp::clean_socket_obj()
     unlock_tcp_con();
 
     event_handler_manager *p_event_mgr = get_event_mgr();
-    bool delegated_timers_exit = g_b_exit &&
+    // Poll-group sockets keep their timers in the group collection even in delegate mode.
+    // Unregister those timers before deleting the socket so the group cannot retain a stale
+    // pointer.
+    bool delegated_timers_exit = g_b_exit && !m_p_group &&
         (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
 
     if (p_event_mgr->is_running() && !delegated_timers_exit) {
@@ -1205,8 +1208,8 @@ unsigned sockinfo_tcp::tx_wait_threads_mode(loops_timer &send_timeout)
 
     // Terminals (!is_rts, exit) must be in pred: producers wake without sndbuf space.
     const blocking_wait::result r = blocking_wait::wait_until(
-        lock_adapter, waiter,
-        [this]() { return sndbuf_available() > 0 || g_b_exit || !is_rts(); }, timeout_ms);
+        lock_adapter, waiter, [this]() { return sndbuf_available() > 0 || g_b_exit || !is_rts(); },
+        timeout_ms);
 
     const unsigned sz = sndbuf_available();
     const tx_wait_outcome outcome = map_tx_wait_result(r, sz > 0, g_b_exit);
@@ -1580,10 +1583,9 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32
     NOT_IN_USE(tx_ctx);
 #endif /* DEFINED_UTLS */
 
-    rc = tcp_tx_express(&iov, 1, buf->lkey,
-                        XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE |
-                            XLIO_EXPRESS_TX_COMMITTED,
-                        buf);
+    rc = tcp_tx_express(
+        &iov, 1, buf->lkey,
+        XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE | XLIO_EXPRESS_TX_COMMITTED, buf);
     if (rc < 0) {
         /* TODO
          * tcp_tx_express() doesn't fail socket properly on ENOMEM. m_sock_state remains connected
@@ -2760,8 +2762,7 @@ int sockinfo_tcp::rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_tim
     // This conditions ensures that m_rx_pkt_ready_list.front() is not null later.
     if (m_rx_ready_byte_count < min_ready_bytes) {
         bool blocking = BLOCK_THIS_RUN(m_b_blocking, in_flags);
-        if ((!blocking && (errno = EAGAIN)) ||
-            (rx_sleep_wait(rcv_timeout, min_ready_bytes) < 1)) {
+        if ((!blocking && (errno = EAGAIN)) || (rx_sleep_wait(rcv_timeout, min_ready_bytes) < 1)) {
             int ret = handle_rx_error(blocking);
             if (__msg && ret == 0) {
                 /* We don't return a control message in this case. */
@@ -2877,7 +2878,8 @@ int sockinfo_tcp::rx_sleep_wait_poll(loops_timer &rcv_timeout, size_t min_ready_
 
     rmb(); // For the CPU to fetch m_rx_ready_byte_count which can be updated from another core.
 
-    if (m_rx_ready_byte_count < min_ready_bytes && prev_sndbuf == sndbuf_available()) { // Final check
+    if (m_rx_ready_byte_count < min_ready_bytes &&
+        prev_sndbuf == sndbuf_available()) { // Final check
         errno = EAGAIN;
         return -1;
     }
@@ -4814,8 +4816,8 @@ int sockinfo_tcp::shutdown(int __how)
         // FIN behind queued SOCK_TX. App-thread tcp_shutdown() overtakes the tail.
         m_sock_wakeup_pipe.do_wakeup();
         unlock_tcp_con();
-        m_entity_context->add_job(entity_context::job_desc {
-            entity_context::JOB_TYPE_SOCK_SHUTDOWN, __how, this, nullptr, 0U, 0U});
+        m_entity_context->add_job(entity_context::job_desc {entity_context::JOB_TYPE_SOCK_SHUTDOWN,
+                                                            __how, this, nullptr, 0U, 0U});
         return 0;
     } else {
         err = tcp_shutdown(&m_pcb, shut_rx, shut_tx);
