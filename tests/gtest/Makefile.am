@@ -113,6 +113,7 @@ gtest_SOURCES = \
 	tcp/tcp_sendfile.cc \
 	tcp/tcp_socket.cc \
 	tcp/tcp_sockopt.cc \
+	tcp/tcp_stream_integrity.cc \
 	tcp/tcp_tls.cc \
 	\
 	udp/udp_socket.cc \
