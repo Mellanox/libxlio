@@ -4288,6 +4288,8 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     // Recycle is a new life. The first close already consumed the one-shot latch.
     new_sock->m_worker_close_routed = false;
     new_sock->m_parent = listen_sock;
+    /* Inherit TCP_USER_TIMEOUT so it bounds the SYN-ACK retransmit phase. */
+    newpcb->user_timeout_ms = listen_sock->m_pcb.user_timeout_ms;
     tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
     tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb);
     tcp_acked(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);

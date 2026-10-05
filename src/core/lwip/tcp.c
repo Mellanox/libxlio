@@ -582,7 +582,8 @@ static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
 
     return pcb->user_timeout_ms != 0 && pcb->ticks_since_data_sent > 0 &&
         (u32_t)pcb->ticks_since_data_sent > user_timeout_ticks &&
-        (get_tcp_state(pcb) == ESTABLISHED || get_tcp_state(pcb) == SYN_SENT);
+        (get_tcp_state(pcb) == ESTABLISHED || get_tcp_state(pcb) == SYN_SENT ||
+         get_tcp_state(pcb) == SYN_RCVD);
 }
 
 /**
@@ -621,13 +622,14 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
             err = ERR_TIMEOUT;
             pcb_reset += (pcb->so_options & SOF_KEEPALIVE);
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: user timeout occurred\n"));
-        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= TCP_SYNMAXRTX) {
+        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= TCP_SYNMAXRTX &&
+                   pcb->user_timeout_ms == 0) {
             ++pcb_remove;
             err = ERR_TIMEOUT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max SYN retries reached\n"));
             /* >= not ==: retransmission paths can advance nrtx between timer
              * passes, so the counter can step past the exact limit. */
-        } else if (pcb->nrtx >= TCP_MAXRTX) {
+        } else if (pcb->nrtx >= TCP_MAXRTX && pcb->user_timeout_ms == 0) {
             ++pcb_remove;
             err = ERR_ABRT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max DATA retries reached\n"));

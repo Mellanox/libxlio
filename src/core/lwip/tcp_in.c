@@ -396,6 +396,8 @@ static void tcp_listen_input(struct tcp_pcb *pcb, tcp_in_data *in_data)
         npcb->accept = pcb->accept;
         /* inherit socket options */
         npcb->so_options = pcb->so_options & SOF_INHERITED;
+        /* Inherit TCP_USER_TIMEOUT so it bounds the SYN-ACK retransmit phase. */
+        npcb->user_timeout_ms = pcb->user_timeout_ms;
 
         npcb->snd_scale = 0;
         npcb->rcv_scale = 0;
@@ -430,6 +432,8 @@ static void tcp_listen_input(struct tcp_pcb *pcb, tcp_in_data *in_data)
         /* Send a SYN|ACK together with the MSS option. */
         if (ERR_OK == tcp_enqueue_flags(npcb, TCP_SYN | TCP_ACK)) {
             tcp_output(npcb);
+            /* Arm the user-timeout clock from the first SYN-ACK. */
+            npcb->ticks_since_data_sent = 0;
         } else {
             tcp_abandon(npcb, 0);
         }
@@ -473,7 +477,10 @@ static err_t tcp_pcb_reuse(struct tcp_pcb *pcb, tcp_in_data *in_data)
         tcp_abandon(pcb, 0);
         return rc;
     }
-    return tcp_output(pcb);
+    rc = tcp_output(pcb);
+    /* Arm the user-timeout clock from the first SYN-ACK. */
+    pcb->ticks_since_data_sent = 0;
+    return rc;
 }
 
 /**
