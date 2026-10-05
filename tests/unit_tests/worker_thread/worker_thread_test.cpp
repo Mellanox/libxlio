@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <cstdint>
 #include <deque>
 
 #include "core/event/worker_thread_loop.h"
@@ -51,8 +52,10 @@ public:
         return result;
     }
 
+    // timeout_ms: requested maximum interrupt wait, in milliseconds.
     test_wakeup_reason wait_for_interrupt(int timeout_ms)
     {
+        EXPECT_EQ(process_calls, account_calls);
         ++wait_calls;
         last_timeout_ms = timeout_ms;
         if (wait_results.empty()) {
@@ -64,9 +67,18 @@ public:
         return result;
     }
 
+    // end: timestamp supplied by the loop after its most recent process call.
+    void account_process_time(fake_clock::time_point end)
+    {
+        ++account_calls;
+        last_account_time = end;
+    }
+
     std::deque<bool> process_results;
     std::deque<test_wakeup_reason> wait_results;
     int process_calls = 0;
+    int account_calls = 0;
+    fake_clock::time_point last_account_time {};
     int wait_calls = 0;
     int last_timeout_ms = 0;
 
@@ -74,6 +86,75 @@ private:
     fake_clock &m_clock;
     std::chrono::microseconds m_process_duration;
 };
+
+TEST(worker_thread_test, accounts_every_process_call_using_deadline_timestamp)
+{
+    fake_clock clock;
+    fake_context context(clock, std::chrono::microseconds(4));
+    int clock_calls = 0;
+
+    worker_thread_detail::run_interrupt_cycle(
+        context, TEST_WAKEUP_CQ_ACTIVITY, TEST_WAKEUP_CQ_ACTIVITY, std::chrono::microseconds(10),
+        77,
+        [&] {
+            ++clock_calls;
+            return clock.now();
+        },
+        [] { return true; });
+
+    EXPECT_EQ(3, context.process_calls);
+    EXPECT_EQ(context.process_calls, context.account_calls);
+    EXPECT_EQ(clock.now(), context.last_account_time);
+    EXPECT_EQ(context.process_calls + 1, clock_calls);
+}
+
+struct process_time_stats {
+    int64_t idle_time = 0;
+    int64_t hit_poll_time = 0;
+    int64_t job_proc_time = 0;
+};
+
+TEST(worker_thread_test, process_time_classifies_poll_jobs_and_idle_gap)
+{
+    using std::chrono::nanoseconds;
+    const fake_clock::time_point origin {};
+
+    for (bool poll_hit : {false, true}) {
+        for (bool jobs_processed : {false, true}) {
+            process_time_stats stats;
+            worker_thread_detail::account_process_time(
+                stats, origin, origin + nanoseconds(10), origin + nanoseconds(13),
+                origin + nanoseconds(18), poll_hit, jobs_processed);
+
+            EXPECT_EQ(poll_hit ? 3 : 0, stats.hit_poll_time);
+            EXPECT_EQ(jobs_processed ? 5 : 0, stats.job_proc_time);
+            EXPECT_EQ(10 + (poll_hit ? 0 : 3) + (jobs_processed ? 0 : 5), stats.idle_time);
+            EXPECT_EQ(18, stats.idle_time + stats.hit_poll_time + stats.job_proc_time);
+        }
+    }
+}
+
+TEST(worker_thread_test, interrupt_sleep_after_jobs_is_accounted_as_idle)
+{
+    using std::chrono::nanoseconds;
+    const fake_clock::time_point origin {};
+    process_time_stats stats;
+
+    worker_thread_detail::account_process_time(stats, origin, origin, origin + nanoseconds(2),
+                                               origin + nanoseconds(5), false, true);
+    // Job time is finalized before a wait can overwrite the polling timestamp.
+    EXPECT_EQ(3, stats.job_proc_time);
+    EXPECT_EQ(2, stats.idle_time);
+
+    worker_thread_detail::account_process_time(
+        stats, origin + nanoseconds(5), origin + nanoseconds(10005), origin + nanoseconds(10007),
+        origin + nanoseconds(10008), false, false);
+
+    EXPECT_EQ(3, stats.job_proc_time);
+    EXPECT_EQ(0, stats.hit_poll_time);
+    EXPECT_EQ(10005, stats.idle_time);
+    EXPECT_EQ(10008, stats.idle_time + stats.hit_poll_time + stats.job_proc_time);
+}
 
 TEST(worker_thread_test, unverified_wakeup_processes_once_before_waiting)
 {

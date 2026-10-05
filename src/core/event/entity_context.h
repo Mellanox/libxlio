@@ -102,8 +102,18 @@ public:
     virtual ~entity_context();
 
     size_t get_index() const { return m_index; }
-    // Returns true when hardware CQ polling found work.
+    // Process CQ, timer and queued job work using a fresh start timestamp.
+    // No parameters. Returns true when hardware CQ polling found work;
+    // follow each call with account_process_time().
     bool process();
+    // Process work with a supplied start timestamp, avoiding a clock read.
+    // start: preceding iteration's end timestamp in continuous polling, or a
+    // fresh timestamp for the first iteration. Includes loop overhead in poll time.
+    // Returns true on CQ activity; follow each call with account_process_time().
+    bool process(event_handler_manager_local::time_point start);
+    // Finalize the preceding process call before any further poll or wait.
+    // end: steady-clock timestamp taken by the worker after process() returns.
+    void account_process_time(event_handler_manager_local::time_point end);
     void add_job(const job_desc &job);
 
     void notify_ring_added(ring *rng) override;
@@ -135,6 +145,7 @@ private:
     size_t m_index;
     size_t m_last_job_size = 0U;
     event_handler_manager_local::time_point m_prev_proc_time;
+    event_handler_manager_local::time_point m_process_start_time;
     bool m_last_poll_hit : 1;
     bool m_intr_setup_ok : 1;
     entity_context_stats_t m_stats;
