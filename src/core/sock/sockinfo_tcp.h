@@ -773,12 +773,18 @@ private:
 
         void init(bool use_atomic)
         {
+            if (m_use_atomic == use_atomic) {
+                return;
+            }
+
+            // Transfer outstanding references before changing the active union member.
+            const uint32_t pending = get_value();
             m_use_atomic = use_atomic;
             if (m_use_atomic) {
                 // Make sure atomic ctor is called
-                new (&data.atomic) std::atomic<uint32_t>(0);
+                new (&data.atomic) std::atomic<uint32_t>(pending);
             } else {
-                data.plain = 0;
+                data.plain = pending;
             }
         }
 

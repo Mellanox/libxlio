@@ -410,6 +410,7 @@ void sockinfo_tcp::set_xlio_socket(const struct xlio_socket_attr *attr)
 
     m_xlio_socket_userdata = attr->userdata_sq;
     m_p_group = reinterpret_cast<poll_group *>(attr->group);
+    // Reattachment must preserve references held by outstanding ZC TX descriptors.
     m_tx_express_zc_pending.init(bool(m_p_group->get_flags() & XLIO_GROUP_FLAG_SAFE));
 
     m_ring_alloc_log_rx.set_ring_alloc_logic(RING_LOGIC_PER_USER_ID);
