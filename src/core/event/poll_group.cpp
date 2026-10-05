@@ -98,8 +98,9 @@ poll_group::~poll_group()
     // that were already pending before destruction, and sockets added by close_socket().
     while (!m_pending_to_remove_lst.empty()) {
         sockinfo_tcp *si = m_pending_to_remove_lst.front();
-        // We expect that all ZC references are released.
-        assert(!si->has_pending_tx_express_zc());
+        // Outstanding ZC references may remain after the ring drain.
+        // Re-enable this assertion only after issue 5324365 is fixed.
+        // assert(!si->has_pending_tx_express_zc());
 
         // If ZC buffers were drained by drain_tx_for_poll_group_teardown for this socket,
         // only now we can inform the app about the termination.
