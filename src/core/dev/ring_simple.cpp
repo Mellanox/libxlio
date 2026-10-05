@@ -500,9 +500,7 @@ int ring_simple::drain_and_proccess()
 
 void ring_simple::drain_tx_for_poll_group_teardown()
 {
-    if (m_hqtx) {
-        stop_active_queue_tx();
-    }
+    stop_active_queue_tx();
 }
 
 mem_buf_desc_t *ring_simple::mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
@@ -999,7 +997,7 @@ void ring_simple::start_active_queue_rx()
 void ring_simple::stop_active_queue_tx()
 {
     m_lock_ring_tx.lock();
-    if (m_up_tx) {
+    if (m_hqtx && m_up_tx) {
         m_up_tx = false;
         /* TODO: consider avoid using sleep */
         /* coverity[sleep] */

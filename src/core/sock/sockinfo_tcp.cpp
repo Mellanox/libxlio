@@ -6189,7 +6189,7 @@ struct pbuf *sockinfo_tcp::tcp_tx_pbuf_alloc(void *p_conn, pbuf_type type, pbuf_
     }
     if (likely(p_desc) && p_desc->lwip_pbuf.type == PBUF_ZEROCOPY) {
         if (p_desc->lwip_pbuf.desc.attr == PBUF_DESC_EXPRESS) {
-            p_desc->m_flags |= mem_buf_desc_t::ZCOPY + mem_buf_desc_t::ZCOPY_PENDING;
+            p_desc->m_flags |= (mem_buf_desc_t::ZCOPY | mem_buf_desc_t::ZCOPY_PENDING);
             p_desc->tx.zc.callback = tcp_express_zc_callback;
             if (p_buff) {
                 mem_buf_desc_t *p_prev_desc = reinterpret_cast<mem_buf_desc_t *>(p_buff);
