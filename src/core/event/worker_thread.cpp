@@ -76,6 +76,8 @@ void worker_thread::stop_thread()
     wt_logdbg("Worker Thread terminated (tid: %d, entctx: %p)", gettid(), m_entity_ctx);
 }
 
+// Run this worker's context until stopped. No parameters; uses the context and
+// running flag owned by this worker and the configured polling/interrupt budget.
 void worker_thread::worker_thread_loop()
 {
     using clock = std::chrono::steady_clock;
@@ -88,14 +90,19 @@ void worker_thread::worker_thread_loop()
     const bool interrupt_enabled = (poll_budget_us >= 0);
 
     m_running.store(true);
+    if (!interrupt_enabled) {
+        auto process_start = clock::now();
+        while (m_running.load(std::memory_order_relaxed)) {
+            m_entity_ctx->process(process_start);
+            process_start = clock::now();
+            m_entity_ctx->account_process_time(process_start);
+        }
+        return;
+    }
+
     entity_context::wakeup_reason wakeup_reason = entity_context::WAKEUP_NONE;
 
     while (m_running.load(std::memory_order_relaxed)) {
-        if (!interrupt_enabled) {
-            m_entity_ctx->process();
-            continue;
-        }
-
         wakeup_reason = worker_thread_detail::run_interrupt_cycle(
             *m_entity_ctx, wakeup_reason, entity_context::WAKEUP_CQ_ACTIVITY,
             std::chrono::microseconds(poll_budget_us), interrupt_timeout_ms,
