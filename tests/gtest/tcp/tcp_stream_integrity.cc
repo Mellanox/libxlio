@@ -31,15 +31,29 @@ protected:
     static constexpr int MAX_EVENTS = 64;
 
     struct conn_state {
+        // Accepted socket descriptor for this stream.
         int fd = -1;
+
+        // Client-provided connection ID, or UINT32_MAX until the full ID is received.
         uint32_t id = UINT32_MAX;
+
+        // Staging buffer for the connection ID, which may span multiple recv() calls.
         uint8_t hdr[sizeof(uint32_t)] = {};
+
+        // Number of connection-ID bytes currently stored in hdr.
         size_t hdr_len = 0U;
+
+        // Number of payload bytes consumed, excluding the connection ID.
         uint64_t received = 0U;
+
+        // True after EOF or a terminal receive error removes the socket from epoll.
         bool eof = false;
+
+        // True after a validation failure; suppresses further data and byte-count checks.
         bool corrupt = false;
     };
 
+    // Initialize the test duration, connection count, and deterministic payload pattern.
     void SetUp() override
     {
         tcp_base::SetUp();
@@ -53,20 +67,21 @@ protected:
         }
     }
 
+    // Read a positive integer from an environment variable, or return the supplied default.
     static int env_int(const char *name, int def)
     {
         const char *val = getenv(name);
         return (val && atoi(val) > 0) ? atoi(val) : def;
     }
 
-    // Mostly sub-segment reads, so receive buffers are often only partly consumed.
+    // Choose a randomized receive size biased toward sub-segment reads and partial consumption.
     static size_t next_read_size(unsigned &seed)
     {
         unsigned r = static_cast<unsigned>(rand_r(&seed));
         return 1U + ((r & 3U) ? r % 2048U : r % MAX_READ);
     }
 
-    // Returns the contiguous expected bytes of a connection stream at an offset; trims len.
+    // Return expected stream data at an offset, trimming len at the pattern wrap boundary.
     const uint8_t *stream_at(uint32_t conn, uint64_t offset, size_t &len) const
     {
         size_t pos = (offset + static_cast<uint64_t>(conn) * CONN_SHIFT) % PATTERN_SIZE;
@@ -74,6 +89,7 @@ protected:
         return &m_pattern[pos];
     }
 
+    // Compare received payload with the expected per-connection stream across pattern wraps.
     bool matches(uint32_t conn, uint64_t offset, const uint8_t *data, size_t len) const
     {
         while (len) {
@@ -89,6 +105,7 @@ protected:
         return true;
     }
 
+    // Assemble and validate the connection ID, then verify and account for received payload.
     void consume(conn_state &cs, std::vector<bool> &seen, const uint8_t *data, size_t len)
     {
         size_t off = 0U;
@@ -118,6 +135,7 @@ protected:
         cs.received += payload;
     }
 
+    // Open all client streams, send patterned data, report byte totals, and close cleanly.
     void run_client(int totals_fd)
     {
         std::vector<int> fds(m_nconns, -1);
@@ -175,6 +193,7 @@ protected:
         close(efd);
     }
 
+    // Accept and verify all streams, then compare received byte counts with the client totals.
     void run_server(int l_fd, int totals_fd)
     {
         std::vector<conn_state> conns(m_nconns);
