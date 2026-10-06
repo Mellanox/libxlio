@@ -2959,16 +2959,31 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     }
 #endif
 
-    if (sock == this) {
-        L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
-    } else {
+    if (sock != this) {
         sock->m_tcp_con_lock.lock();
-        L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
+    }
+    L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
+
+    // Take the wake target from the PCB socket: a reused TIME_WAIT connection
+    // can receive the handshake directly through its existing steering rule.
+    sockinfo_tcp *parent_to_wake = sock->m_accept_parent_to_wake;
+    sock->m_accept_parent_to_wake = nullptr;
+    if (sock != this) {
         sock->m_tcp_con_lock.unlock();
     }
 
     m_iomux_ready_fd_array = nullptr;
     unlock_tcp_con();
+
+    if (parent_to_wake) {
+        // Both receive locks must be released: accept() harvests in the
+        // opposite order (parent then RSS child).
+        // Listener close waits for this worker's child-close job, so the
+        // parent remains alive until this RX callback has returned.
+        std::lock_guard<decltype(parent_to_wake->m_tcp_con_lock)> lock(
+            parent_to_wake->m_tcp_con_lock);
+        parent_to_wake->m_sock_wakeup_pipe.do_wakeup();
+    }
 
     return true;
 }
@@ -4145,18 +4160,13 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
 
     conn->unlock_tcp_con();
 
-    // RSS child enqueue: child's do_wakeup does not reach the parent acceptor. Lock parent.
-    // Order: child then parent (sequential). Harvest is parent then child. No inversion.
-    if (conn->is_sockinfo_tcp_listen_rss_child()) {
-        sockinfo_tcp *parent = conn->m_listen_ctx->get_parent_listen_socket();
-        if (parent) {
-            parent->lock_tcp_con();
-            parent->m_sock_wakeup_pipe.do_wakeup();
-            parent->unlock_tcp_con();
-        }
-    }
-
     new_sock->lock_tcp_con();
+
+    // Defer the RSS parent wake until rx_input_cb() releases both receive
+    // locks. conn's unlock above may only drop a recursive acquisition.
+    if (conn->is_sockinfo_tcp_listen_rss_child()) {
+        new_sock->m_accept_parent_to_wake = conn->m_listen_ctx->get_parent_listen_socket();
+    }
 
     return ERR_OK;
 }
