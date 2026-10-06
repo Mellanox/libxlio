@@ -1,4 +1,4 @@
-noinst_PROGRAMS = gtest ultra_api_connect_helper
+noinst_PROGRAMS = gtest ultra_api_connect_helper tcp_accept_worker_helper
 
 # google test shows some warnings that are suppressed
 AM_CXXFLAGS = \
@@ -59,7 +59,8 @@ EXTRA_DIST = \
 	googletest/src \
 	googletest/README.md \
 	googletest/LICENSE \
-	xlio_ultra_api/config-ultra-api-delegate.json
+	xlio_ultra_api/config-ultra-api-delegate.json \
+	tcp/config-accept-worker.json
 
 libgtest_la_SOURCES = \
 	googletest/src/gtest-all.cc \
@@ -101,6 +102,7 @@ gtest_SOURCES = \
 	output/tuning_report.cc \
 	\
 	tcp/tcp_accept.cc \
+	tcp/tcp_accept_worker.cc \
 	tcp/tcp_bind.cc \
 	tcp/tcp_cc.cc \
 	tcp/tcp_connect.cc \
@@ -169,3 +171,8 @@ ultra_api_connect_helper_SOURCES = xlio_ultra_api/ultra_api_connect_helper.c
 ultra_api_connect_helper_CPPFLAGS = -I$(top_srcdir)/src/core
 ultra_api_connect_helper_CFLAGS = -Wall
 ultra_api_connect_helper_LDFLAGS = -no-install
+
+# Fresh XLIO processes are needed to set worker counts before initialization.
+tcp_accept_worker_helper_SOURCES = tcp/tcp_accept_worker_helper.cc
+tcp_accept_worker_helper_CXXFLAGS = $(AM_CXXFLAGS)
+tcp_accept_worker_helper_LDFLAGS = -no-install

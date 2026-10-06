@@ -341,7 +341,6 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
             BULLSEYE_EXCLUDE_BLOCK_END
 
             p_rfs = p_tmp_rfs;
-            sink->set_rfs_ptr(p_rfs);
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
             if (g_p_app->type == APP_NONE || !g_p_app->add_second_4t_rule)
 #endif
@@ -351,6 +350,9 @@ bool steering_handler<KEY4T, KEY2T, HDR>::attach_flow(flow_tuple &flow_spec_5t, 
         } else {
             p_rfs = itr->second;
         }
+        // A reconnect can share the flow with a socket still closing on the
+        // worker. Flow-tag dispatch needs the RFS pointer on every attached sink.
+        sink->set_rfs_ptr(p_rfs);
         BULLSEYE_EXCLUDE_BLOCK_START
     } else {
         ring_logerr("Could not find map (TCP, UC or MC) for requested flow");
@@ -654,7 +656,8 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                          transport_header_len, ip_hdr_len, protocol,
                          p_rx_wc_buf_desc->rx.flow_tag_id);
 
-            if (likely(protocol == IPPROTO_TCP)) {
+            rfs *tcp_rfs = si->get_rfs_ptr();
+            if (likely(protocol == IPPROTO_TCP) && likely(tcp_rfs)) {
                 struct tcphdr *p_tcp_h = (struct tcphdr *)((uint8_t *)p_ip_h + ip_hdr_len);
 
                 // Update packet descriptor with datagram base address and length
@@ -675,7 +678,7 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                              p_tcp_h->fin ? "F" : "", ntohl(p_tcp_h->seq), ntohl(p_tcp_h->ack_seq),
                              ntohs(p_tcp_h->window), p_rx_wc_buf_desc->rx.sz_payload);
 
-                return si->get_rfs_ptr()->rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
+                return tcp_rfs->rx_dispatch_packet(p_rx_wc_buf_desc, pv_fd_ready_array);
             }
 
             if (likely(protocol == IPPROTO_UDP)) {
@@ -701,7 +704,11 @@ bool ring_slave::rx_process_buffer(mem_buf_desc_t *p_rx_wc_buf_desc, void *pv_fd
                 return check_rx_packet(si, p_rx_wc_buf_desc, pv_fd_ready_array);
             }
 
-            return false;
+            if (protocol != IPPROTO_TCP) {
+                return false;
+            }
+            // A stale flow tag can resolve a reused fd before its new socket
+            // attaches a flow. Use tuple lookup while its RFS cache is empty.
         }
     }
 

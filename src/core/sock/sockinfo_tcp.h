@@ -673,6 +673,8 @@ private:
     std::atomic<int32_t> m_snd_buf;
     uint32_t m_snd_buf_max;
     sockinfo_tcp *m_parent;
+    // Set by accept_lwip_cb and consumed under the socket lock by rx_input_cb.
+    sockinfo_tcp *m_accept_parent_to_wake = nullptr;
     // received packet source (true if its from internal thread)
     bool m_b_incoming;
     bool m_b_attached;
