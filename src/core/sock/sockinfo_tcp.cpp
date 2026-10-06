@@ -5534,7 +5534,10 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
         break;
     case SOL_SOCKET:
         switch (__optname) {
-        case SO_ERROR:
+        case SO_ERROR: {
+            // Read and clear only after the worker finishes publishing the
+            // connection result, even if readiness was already observed.
+            std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
             if (*__optlen >= sizeof(int)) {
                 *(int *)__optval = m_error_status;
                 si_tcp_logdbg("(SO_ERROR) status: %d", m_error_status);
@@ -5544,6 +5547,7 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                 errno = EINVAL;
             }
             break;
+        }
         case SO_REUSEADDR:
             if (*__optlen >= sizeof(int)) {
                 *(int *)__optval = m_pcb.so_options & SOF_REUSEADDR;
