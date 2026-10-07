@@ -227,7 +227,8 @@ TEST(blocking_wait, ready_without_sleep_when_condition_true)
     bool ready = true;
 
     lock.lock();
-    blocking_wait::result r = blocking_wait::wait_until(lock, w, [&] { return ready; }, 1000);
+    blocking_wait::result r = blocking_wait::wait_until(
+        lock, w, [&] { return ready; }, 1000);
     lock.unlock();
 
     EXPECT_EQ(blocking_wait::result::READY, r);
@@ -241,7 +242,8 @@ TEST(blocking_wait, timeout_when_condition_stays_false)
 
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     lock.lock();
-    blocking_wait::result r = blocking_wait::wait_until(lock, w, [&] { return ready; }, 100);
+    blocking_wait::result r = blocking_wait::wait_until(
+        lock, w, [&] { return ready; }, 100);
     lock.unlock();
     long took = elapsed_ms(start);
 
@@ -265,7 +267,8 @@ TEST(blocking_wait, worker_wakes_sleeping_app)
 
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     lock.lock();
-    blocking_wait::result r = blocking_wait::wait_until(lock, w, [&] { return ready; }, 5000);
+    blocking_wait::result r = blocking_wait::wait_until(
+        lock, w, [&] { return ready; }, 5000);
     lock.unlock();
     long took = elapsed_ms(start);
 
@@ -474,15 +477,17 @@ TEST(blocking_wait_sock, classify_isolates_wakeup_and_watched)
 
     struct epoll_event watched_only[1] = {};
     watched_only[0].data.fd = watched_fd;
-    classify_wake_events(watched_only, 1, [&](int fd) { return fd == wakeup_fd; }, watched_fd,
-                         woken_wakeup, woken_watched);
+    classify_wake_events(
+        watched_only, 1, [&](int fd) { return fd == wakeup_fd; }, watched_fd, woken_wakeup,
+        woken_watched);
     EXPECT_FALSE(woken_wakeup);
     EXPECT_TRUE(woken_watched);
 
     struct epoll_event wakeup_only[1] = {};
     wakeup_only[0].data.fd = wakeup_fd;
-    classify_wake_events(wakeup_only, 1, [&](int fd) { return fd == wakeup_fd; }, watched_fd,
-                         woken_wakeup, woken_watched);
+    classify_wake_events(
+        wakeup_only, 1, [&](int fd) { return fd == wakeup_fd; }, watched_fd, woken_wakeup,
+        woken_watched);
     EXPECT_TRUE(woken_wakeup);
     EXPECT_FALSE(woken_watched);
 }

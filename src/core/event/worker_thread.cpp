@@ -81,8 +81,7 @@ void worker_thread::worker_thread_loop()
 
     const int32_t poll_budget_us = safe_mce_sys().select_poll_num;
     const uint32_t configured_timeout_ms = safe_mce_sys().tcp_timer_resolution_msec;
-    const int interrupt_timeout_ms =
-        configured_timeout_ms > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC
+    const int interrupt_timeout_ms = configured_timeout_ms > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC
         ? MCE_MAX_TCP_TIMER_RESOLUTION_MSEC
         : static_cast<int>(configured_timeout_ms);
     const bool interrupt_enabled = (poll_budget_us >= 0);
