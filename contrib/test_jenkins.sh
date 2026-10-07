@@ -104,6 +104,9 @@ i=0
 if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
     export jenkins_target="default"
     export prefix=${jenkins_test_custom_prefix}/${jenkins_target}
+    # No extra configure options: libdpcp is built from the bundled submodule
+    target_list[$i]="default:"
+    i=$((i+1))
 fi
 
 echo

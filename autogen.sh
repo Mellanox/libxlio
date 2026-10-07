@@ -2,9 +2,9 @@
 
 set -e
 
-# Initialize git submodules if git is available and we're in a git repo
-if command -v git >/dev/null 2>&1 &&
-    git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+# Initialize submodules in git checkouts; source archives have no .git entry.
+# Keep git commands outside conditional tests so set -e propagates failures.
+if test -e .git; then
     GIT_TOPLEVEL=$(git rev-parse --show-toplevel)
     if test "$(cd "$GIT_TOPLEVEL" && pwd -P)" = "$(pwd -P)"; then
         echo "Updating git submodules..."
