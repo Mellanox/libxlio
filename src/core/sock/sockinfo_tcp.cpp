@@ -936,7 +936,10 @@ void sockinfo_tcp::clean_socket_obj()
     unlock_tcp_con();
 
     event_handler_manager *p_event_mgr = get_event_mgr();
-    bool delegated_timers_exit = g_b_exit &&
+    // Poll-group sockets keep their timers in the group collection even in delegate mode.
+    // Unregister those timers before deleting the socket so the group cannot retain a stale
+    // pointer.
+    bool delegated_timers_exit = g_b_exit && !m_p_group &&
         (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
 
     if (p_event_mgr->is_running() && !delegated_timers_exit) {
@@ -2956,16 +2959,31 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     }
 #endif
 
-    if (sock == this) {
-        L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
-    } else {
+    if (sock != this) {
         sock->m_tcp_con_lock.lock();
-        L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
+    }
+    L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
+
+    // Take the wake target from the PCB socket: a reused TIME_WAIT connection
+    // can receive the handshake directly through its existing steering rule.
+    sockinfo_tcp *parent_to_wake = sock->m_accept_parent_to_wake;
+    sock->m_accept_parent_to_wake = nullptr;
+    if (sock != this) {
         sock->m_tcp_con_lock.unlock();
     }
 
     m_iomux_ready_fd_array = nullptr;
     unlock_tcp_con();
+
+    if (parent_to_wake) {
+        // Both receive locks must be released: accept() harvests in the
+        // opposite order (parent then RSS child).
+        // Listener close waits for this worker's child-close job, so the
+        // parent remains alive until this RX callback has returned.
+        std::lock_guard<decltype(parent_to_wake->m_tcp_con_lock)> lock(
+            parent_to_wake->m_tcp_con_lock);
+        parent_to_wake->m_sock_wakeup_pipe.do_wakeup();
+    }
 
     return true;
 }
@@ -3050,7 +3068,7 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         return -1;
     }
 
-    if (safe_mce_sys().is_threads_mode()) {
+    if (should_use_threads_mode()) {
         // For Threads mode need to do partial preparation and the rest will be done by the Thread.
         // A non-blocking socket returns -1/EINPROGRESS; a blocking socket now waits for the
         // worker to complete/fail the handshake and returns 0 on success.
@@ -3576,8 +3594,7 @@ int sockinfo_tcp::listen(int backlog)
     tcp_accepted_pcb(&m_pcb, sockinfo_tcp::accepted_pcb_cb);
 
     bool success = false;
-    // Check if XLIO threads are enforced (> 0) for entity context distribution
-    if (safe_mce_sys().worker_threads > 0) {
+    if (should_use_threads_mode()) {
         create_listen_context();
         start_sockinfo_tcp_listen_objects();
         success = wait_for_listen_rss_children_ready();
@@ -3749,7 +3766,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
         // Blocking: park; harvest lives in accept_wait_threads_mode()'s pred.
         // R2C keeps rx_wait().
         int tmp_ret;
-        if (safe_mce_sys().is_threads_mode()) {
+        if (should_use_threads_mode()) {
             tmp_ret = m_b_blocking ? accept_wait_threads_mode(accept_timeout)
                                    : harvest_sockinfo_tcp_listen_objects();
         } else {
@@ -3781,7 +3798,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     m_ready_conn_cnt--;
     IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog--);
 
-    safe_mce_sys().worker_threads ? assert(m_syn_received.empty()) : remove_received_syn_socket(ns);
+    should_use_threads_mode() ? assert(m_syn_received.empty()) : remove_received_syn_socket(ns);
 
     unlock_tcp_con();
 
@@ -4145,18 +4162,13 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
 
     conn->unlock_tcp_con();
 
-    // RSS child enqueue: child's do_wakeup does not reach the parent acceptor. Lock parent.
-    // Order: child then parent (sequential). Harvest is parent then child. No inversion.
-    if (conn->is_sockinfo_tcp_listen_rss_child()) {
-        sockinfo_tcp *parent = conn->m_listen_ctx->get_parent_listen_socket();
-        if (parent) {
-            parent->lock_tcp_con();
-            parent->m_sock_wakeup_pipe.do_wakeup();
-            parent->unlock_tcp_con();
-        }
-    }
-
     new_sock->lock_tcp_con();
+
+    // Defer the RSS parent wake until rx_input_cb() releases both receive
+    // locks. conn's unlock above may only drop a recursive acquisition.
+    if (conn->is_sockinfo_tcp_listen_rss_child()) {
+        new_sock->m_accept_parent_to_wake = conn->m_listen_ctx->get_parent_listen_socket();
+    }
 
     return ERR_OK;
 }
@@ -4283,6 +4295,14 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     IF_STATS_O(new_sock, print_full_stats(new_sock->m_p_socket_stats, nullptr, g_stats_file));
 
     new_sock->socket_stats_init();
+    /*
+     * socket_stats_init() clears the properties that are otherwise assigned only by
+     * the constructor, which doesn't run for a reused socket. It can also allocate a
+     * stats object here for a socket that found the pool exhausted at construction
+     * time. Restore the properties from the socket object in both cases.
+     */
+    IF_STATS_O(new_sock, new_sock->m_p_socket_stats->socket_type = SOCK_STREAM);
+    IF_STATS_O(new_sock, new_sock->m_p_socket_stats->b_is_offloaded = !new_sock->isPassthrough());
 
     new_sock->m_state = SOCKINFO_OPENED;
     new_sock->m_sock_state = TCP_SOCK_INITED;
@@ -5534,7 +5554,10 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
         break;
     case SOL_SOCKET:
         switch (__optname) {
-        case SO_ERROR:
+        case SO_ERROR: {
+            // Read and clear only after the worker finishes publishing the
+            // connection result, even if readiness was already observed.
+            std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
             if (*__optlen >= sizeof(int)) {
                 *(int *)__optval = m_error_status;
                 si_tcp_logdbg("(SO_ERROR) status: %d", m_error_status);
@@ -5544,6 +5567,7 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                 errno = EINVAL;
             }
             break;
+        }
         case SO_REUSEADDR:
             if (*__optlen >= sizeof(int)) {
                 *(int *)__optval = m_pcb.so_options & SOF_REUSEADDR;
