@@ -36,6 +36,9 @@ clean-local:
 	fi
 	rm -rf "$(DPCP_INSTALL_DIR)"
 
+# CMake clean needs the cache and build files that distclean removes.
+distclean-local: clean-local
+
 if DPCP_CMAKE_IN_SOURCE
 distclean-local:
 	find "$(DPCP_SOURCE_DIR)" -type d -name CMakeFiles -prune -exec rm -rf {} \;

@@ -74,7 +74,11 @@ fi
 
 if [ $opt_binrpm -eq 1 ]; then
     if [ $opt_rpm -eq 1 ]; then
-        test_exec="env RPM_BUILD_NCPUS=${NPROC} rpmbuild -bb --define='configure_options $jenkins_test_custom_configure' $rpmmacros $rpmopts $rpmspec"
+        rpmconfigure=""
+        if [[ "$jenkins_test_custom_configure" =~ [^[:space:]] ]]; then
+            rpmconfigure="--define='configure_options $jenkins_test_custom_configure'"
+        fi
+        test_exec="env RPM_BUILD_NCPUS=${NPROC} rpmbuild -bb $rpmconfigure $rpmmacros $rpmopts $rpmspec"
     else
         test_exec="env make_opt=\"${make_opt}\" configure_options=\"$jenkins_test_custom_configure\" dpkg-buildpackage -us -uc -b"
     fi
