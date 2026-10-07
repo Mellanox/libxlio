@@ -202,7 +202,7 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
     }
 
     /* Identify device type */
-    if ((get_flags() & IFF_MASTER) || check_bond_device_exist(get_ifname_link())) {
+    if (check_bond_device_exist(get_ifname_link())) {
         verify_bonding_mode();
     } else {
         m_bond = NO_BOND;
