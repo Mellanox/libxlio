@@ -464,9 +464,10 @@ bool cq_mgr_rx::request_notification()
     return m_b_notification_armed;
 }
 
-void cq_mgr_rx::ack_cq_events()
+bool cq_mgr_rx::ack_cq_events()
 {
     cq_logfunc("");
+    bool ret = false;
 
     if (m_b_notification_armed) {
         struct ibv_cq *p_cq_hndl = nullptr;
@@ -490,19 +491,21 @@ void cq_mgr_rx::ack_cq_events()
             ibv_ack_cq_events(m_p_ibv_cq, 1);
 
             m_b_notification_armed = false;
+            ret = true;
         }
         ENDIF_VERBS_FAILURE;
     }
+    return ret;
 }
 
-void cq_mgr_rx::wait_for_notification_and_process_element(void *pv_fd_ready_array)
+bool cq_mgr_rx::wait_for_notification_and_process_element(void *pv_fd_ready_array)
 {
     cq_logfunc("");
+    bool ret = false;
 
-    bool was_armed = m_b_notification_armed;
-    ack_cq_events();
-
-    if (was_armed && !m_b_notification_armed) {
+    if (ack_cq_events()) {
         poll_and_process_element_rx(pv_fd_ready_array);
+        ret = true;
     }
+    return ret;
 }

@@ -419,16 +419,18 @@ int ring_simple::poll_and_process_element_tx()
 void ring_simple::ack_cq_events()
 {
     m_lock_ring_rx.lock();
-    m_p_cq_mgr_rx->ack_cq_events();
-    ++m_p_ring_stat->n_rx_interrupt_received;
+    if (m_p_cq_mgr_rx->ack_cq_events()) {
+        ++m_p_ring_stat->n_rx_interrupt_received;
+    }
     m_lock_ring_rx.unlock();
 }
 
 void ring_simple::wait_for_notification_and_process_element(void *pv_fd_ready_array /*NULL*/)
 {
     m_lock_ring_rx.lock();
-    m_p_cq_mgr_rx->wait_for_notification_and_process_element(pv_fd_ready_array);
-    ++m_p_ring_stat->n_rx_interrupt_received;
+    if (m_p_cq_mgr_rx->wait_for_notification_and_process_element(pv_fd_ready_array)) {
+        ++m_p_ring_stat->n_rx_interrupt_received;
+    }
     m_lock_ring_rx.unlock();
 }
 

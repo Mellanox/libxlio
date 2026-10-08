@@ -98,6 +98,7 @@ unit_tests_SOURCES = \
 	config/schema_analyzer.cpp \
 	job_queue/job_queue_test.cpp \
 	proto/mapping_test.cpp \
+	worker_thread/worker_thread_test.cpp \
 	tcp/tcp_in.cpp \
 	tcp/tcp_output.cpp \
 	tcp/tcp_rto.cpp \

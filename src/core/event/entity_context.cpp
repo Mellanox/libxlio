@@ -37,6 +37,7 @@
 #include <unistd.h>
 
 #include "entity_context.h"
+#include "worker_thread_loop.h"
 #include "vlogger/vlogger.h"
 #include "dev/ring.h"
 #include "sock/fd_collection.h"
@@ -108,13 +109,12 @@ entity_context::~entity_context()
 
 bool entity_context::process()
 {
-    auto ts = steady_clock::now();
-    (!m_last_poll_hit ? m_stats.idle_time : m_stats.hit_poll_time) +=
-        duration_cast<nanoseconds>(get_event_handler()->last_taken_time() - m_prev_proc_time)
-            .count();
-    (!m_last_job_size ? m_stats.idle_time : m_stats.job_proc_time) +=
-        duration_cast<nanoseconds>(ts - get_event_handler()->last_taken_time()).count();
-    m_prev_proc_time = ts;
+    return process(steady_clock::now());
+}
+
+bool entity_context::process(event_handler_manager_local::time_point start)
+{
+    m_process_start_time = start;
 
     m_last_poll_hit = poll();
 
@@ -160,7 +160,15 @@ bool entity_context::process()
 
     flush();
 
-    return m_last_poll_hit || m_last_job_size;
+    return m_last_poll_hit;
+}
+
+void entity_context::account_process_time(event_handler_manager_local::time_point end)
+{
+    worker_thread_detail::account_process_time(m_stats, m_prev_proc_time, m_process_start_time,
+                                               get_event_handler()->last_taken_time(), end,
+                                               m_last_poll_hit, m_last_job_size != 0U);
+    m_prev_proc_time = end;
 }
 
 void entity_context::add_job(const job_desc &job)
@@ -336,6 +344,9 @@ void entity_context::close_socket_job(const job_desc &job)
 void entity_context::arm_cq_notifications()
 {
     for (ring *rng : get_rings()) {
+        // We request notifications only for the RX queue. There is no need for notifications
+        // regarding TX because TCP sends data immediately in response to ACK packets
+        // being received, not in response to TX packets which finished being sent.
         bool success = rng->request_notification(CQT_RX);
         if (unlikely(!success)) {
             ctx_logerr("Failed to arm CQ notification for ring %p", rng);
@@ -385,7 +396,7 @@ entity_context::wakeup_reason entity_context::wait_for_interrupt(int timeout_ms)
     // is acknowledged on the next wakeup - there is no disarm primitive.
     if (poll()) {
         m_job_queue.wake();
-        return WAKEUP_CQ_EVENT;
+        return WAKEUP_CQ_ACTIVITY;
     }
 
     static constexpr int MAX_EVENTS = 8;
