@@ -25,7 +25,7 @@ static char sndbuf[32];
 static std::vector<xlio_socket_t> accepted_sockets;
 static unsigned int init_msgs = 10; // Consequent 10 segments should take 4 wqebb
 
-struct xlio_socket_send_attr send_attr = {
+static struct xlio_socket_send_attr send_attr = {
     .flags = 0,
     .mkey = 0U,
     .userdata_op = 0x1,

@@ -268,6 +268,14 @@ int hw_queue_tx::configure(const slave_data_t *slave)
 
 void hw_queue_tx::up()
 {
+    bool restarting = m_qp_quiesced || has_pending_tx_wqes();
+    if (has_pending_tx_wqes() && !retire_pending_tx_wqes_for_teardown()) {
+        hwqtx_logpanic("Cannot restart TX queue with pending WQEs");
+    }
+    if (!m_mlx5_qp.qp) {
+        hwqtx_logpanic("Cannot restart TX queue after QP destruction");
+    }
+
     init_queue();
 
     // Add buffers
@@ -275,9 +283,15 @@ void hw_queue_tx::up()
 
     m_p_cq_mgr_tx->add_qp_tx(this);
 
-    release_tx_buffers();
+    if (restarting) {
+        // Old WQE ownership was retired in software, so do not process its delayed CQEs again.
+        m_p_cq_mgr_tx->discard_cq();
+    } else {
+        release_tx_buffers();
+    }
 
     modify_queue_to_ready_state();
+    m_qp_quiesced = false;
 
     init_device_memory();
 }
@@ -289,25 +303,89 @@ void hw_queue_tx::down()
     }
 
     hwqtx_logdbg("QP current state: %d", priv_ibv_query_qp_state(m_mlx5_qp.qp));
-    modify_queue_to_error_state();
+    int queue_status = modify_queue_to_error_state();
+    m_qp_quiesced = queue_status >= 0;
 
-    // free buffers from current active resource iterator
-    trigger_completion_for_all_sent_packets();
+    if (queue_status > 0) {
+        // free buffers from current active resource iterator
+        trigger_completion_for_all_sent_packets();
 
-    // let the QP drain all wqe's to flushed cqe's now that we moved
-    // it to error state and post_sent final trigger for completion
-    usleep(1000);
+        // let the QP drain all wqe's to flushed cqe's now that we moved
+        // it to error state and post_sent final trigger for completion
+        usleep(1000);
 
-    release_tx_buffers();
+        release_tx_buffers();
+    }
+
+    if (!retire_pending_tx_wqes_for_teardown()) {
+        hwqtx_loginfo("Failed to retire all pending TX WQEs");
+    }
     m_p_cq_mgr_tx->del_qp_tx(this);
+}
+
+bool hw_queue_tx::destroy_qp_for_teardown()
+{
+    if (!m_mlx5_qp.qp) {
+        return true;
+    }
+
+    hwqtx_logdbg("Destroying QP %p before retiring pending TX WQEs", m_mlx5_qp.qp);
+    errno = 0;
+    int ret = _errnocheck(ibv_destroy_qp(m_mlx5_qp.qp));
+    if (ret && errno != EIO) {
+        hwqtx_loginfo("QP destroy failure (errno = %d %m)", errno);
+        return false;
+    }
+
+    VALGRIND_MAKE_MEM_UNDEFINED(m_mlx5_qp.qp, sizeof(ibv_qp));
+    m_mlx5_qp.qp = nullptr;
+    m_qp_quiesced = true;
+    return true;
+}
+
+bool hw_queue_tx::retire_pending_tx_wqes_for_teardown()
+{
+    if (!has_pending_tx_wqes()) {
+        return true;
+    }
+    if (!m_qp_quiesced && !destroy_qp_for_teardown()) {
+        return false;
+    }
+    return m_p_cq_mgr_tx->retire_pending_tx_wqes(this);
 }
 
 void hw_queue_tx::release_tx_buffers()
 {
     hwqtx_logdbg("draining cq_mgr_tx %p", m_p_cq_mgr_tx);
-    while (m_p_cq_mgr_tx && m_mlx5_qp.qp && (m_p_cq_mgr_tx->poll_and_process_element_tx() > 0) &&
-           (errno != EIO && !m_p_ib_ctx_handler->is_removed())) {
+    int poll_errno = 0;
+    while (m_p_cq_mgr_tx && m_mlx5_qp.qp && !m_p_ib_ctx_handler->is_removed()) {
+        errno = 0;
+        int ret = m_p_cq_mgr_tx->poll_and_process_element_tx();
+        poll_errno = errno;
+        if (ret <= 0 || poll_errno == EIO) {
+            break;
+        }
         hwqtx_logdbg("draining completed on cq_mgr_tx");
+    }
+
+    if (!has_pending_tx_wqes()) {
+        return;
+    }
+
+    if (!m_p_cq_mgr_tx || !m_mlx5_qp.qp) {
+        hwqtx_loginfo("TX drain stopped without CQ or QP (%u/%u SQ credits available)",
+                      m_sq_free_credits, m_sq_total_credits);
+    } else if (poll_errno == EIO) {
+        hwqtx_loginfo("TX drain stopped after CQ polling failed with EIO "
+                      "(%u/%u SQ credits available)",
+                      m_sq_free_credits, m_sq_total_credits);
+    } else if (m_p_ib_ctx_handler->is_removed()) {
+        hwqtx_loginfo("TX drain stopped after device removal (%u/%u SQ credits available)",
+                      m_sq_free_credits, m_sq_total_credits);
+    } else {
+        hwqtx_loginfo("TX drain stopped before all CQ completions were processed "
+                      "(%u/%u SQ credits available)",
+                      m_sq_free_credits, m_sq_total_credits);
     }
 }
 
@@ -358,15 +436,18 @@ void hw_queue_tx::modify_queue_to_ready_state()
     BULLSEYE_EXCLUDE_BLOCK_END
 }
 
-void hw_queue_tx::modify_queue_to_error_state()
+int hw_queue_tx::modify_queue_to_error_state()
 {
     hwqtx_logdbg("");
 
+    errno = 0;
     BULLSEYE_EXCLUDE_BLOCK_START
     if (priv_ibv_modify_qp_to_err(m_mlx5_qp.qp)) {
         hwqtx_logdbg("ibv_modify_qp failure (errno = %d %m)", errno);
+        return -1;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
+    return (errno == EIO || m_p_ib_ctx_handler->is_removed()) ? 0 : 1;
 }
 
 int hw_queue_tx::prepare_queue(xlio_ibv_qp_init_attr &qp_init_attr)
@@ -417,7 +498,8 @@ void hw_queue_tx::init_queue()
     m_tx_num_wr = (m_sq_wqes_end - (uint8_t *)m_sq_wqe_hot) / WQEBB;
 
     // We use the min between CQ size and the QP size (that might be increases by ibv creation).
-    m_sq_free_credits = std::min(m_tx_num_wr, old_wr_val);
+    m_sq_total_credits = std::min(m_tx_num_wr, old_wr_val);
+    m_sq_free_credits = m_sq_total_credits;
     hwqtx_logdbg("SQ total credits: %u", m_sq_free_credits);
 
     /* Maximum BF inlining consists of:
@@ -439,9 +521,10 @@ void hw_queue_tx::init_queue()
             hwqtx_logerr("Failed allocating m_sq_wqe_idx_to_prop (errno=%d %m)", errno);
             return;
         }
-        m_last_sq_wqe_prop_to_complete = m_sq_wqe_idx_to_prop;
-        m_sq_wqe_prop_last = nullptr;
     }
+    m_last_sq_wqe_prop_to_complete = m_sq_wqe_idx_to_prop;
+    m_sq_wqe_prop_last = nullptr;
+    m_sq_wqe_count = 0U;
 
     hwqtx_logfunc("m_tx_num_wr=%d max_inline_data: %d m_sq_wqe_idx_to_prop=%p", m_tx_num_wr,
                   get_max_inline_data(), m_sq_wqe_idx_to_prop);
@@ -797,6 +880,7 @@ inline void hw_queue_tx::submit_wqe(mem_buf_desc_t *buf, unsigned credits, uint8
     };
 
     m_sq_wqe_prop_last = &m_sq_wqe_idx_to_prop[m_sq_wqe_hot_index];
+    ++m_sq_wqe_count;
 
     if (ti) {
         ti->get();
@@ -1319,10 +1403,8 @@ void hw_queue_tx::trigger_completion_for_all_sent_packets()
         // Post a dummy WQE and request a signal to complete all the unsignaled WQEs in SQ
         hwqtx_logdbg("Need to send closing tx wr...");
         mem_buf_desc_t *p_mem_buf_desc = m_p_ring->mem_buf_tx_get(0, true, PBUF_RAM);
-        // Align Tx buffer accounting since we will be bypassing the normal send calls
-        m_p_ring->m_missing_buf_ref_count--;
         if (!p_mem_buf_desc) {
-            hwqtx_logerr("no buffer in pool");
+            hwqtx_loginfo("no buffer in pool");
             return;
         }
 
@@ -1357,10 +1439,13 @@ void hw_queue_tx::trigger_completion_for_all_sent_packets()
             // TODO Wait for available space in SQ to post the WQE. This method mustn't fail,
             // because we may want to wait until all the WQEs are completed and we need to post
             // something and request signal.
-            hwqtx_logdbg("No space in SQ to trigger completions with a post operation");
+            hwqtx_loginfo("No space in SQ to trigger completions with a post operation");
+            m_p_ring->mem_buf_tx_release(p_mem_buf_desc, true);
             return;
         }
 
+        // Align Tx buffer accounting since we will be bypassing the normal send calls.
+        m_p_ring->m_missing_buf_ref_count--;
         send_to_wire(&send_wr,
                      (xlio_wr_tx_packet_attr)(XLIO_TX_PACKET_L3_CSUM | XLIO_TX_PACKET_L4_CSUM),
                      true, nullptr, credits);
