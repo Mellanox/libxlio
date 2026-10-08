@@ -34,11 +34,15 @@ while test "$1" != ""; do
             arg_deb="$2"
             arg_rpm="${arg_deb/=/ }"
             opt_exports="$opt_exports :$arg_deb";
-            opt_defines="$opt_defines --define='$arg_rpm'";
             if [[ $arg_deb =~ ^configure_options[[:blank:]]*= ]]; then
                 shopt -s extglob
                 opt_conf_val="${arg_deb##configure_options*([[:blank:]])=}"
+                # RPM rejects empty macro bodies; %{nil} preserves empty options.
+                if [[ ! "$opt_conf_val" =~ [^[:space:]] ]]; then
+                    arg_rpm="configure_options %{nil}"
+                fi
             fi
+            opt_defines="$opt_defines --define='$arg_rpm'";
             shift
             ;;
         *)

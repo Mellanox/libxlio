@@ -3242,6 +3242,8 @@ int sockinfo_tcp::connect_wait_threads_mode()
         },
         timeout_ms);
 
+    // The passthrough result is checked by map_connect_wait_result.
+    /* coverity[check_return] */
     const connect_wait_outcome outcome =
         map_connect_wait_result(r, m_conn_state == TCP_CONN_CONNECTED,
                                 m_conn_state == TCP_CONN_TIMEOUT, g_b_exit, isPassthrough());
