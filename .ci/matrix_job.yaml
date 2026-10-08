@@ -244,10 +244,8 @@ steps:
     enable: ${do_autogen}
     run: |
       # make git trust the workspace (needed to init the libdpcp submodule)
-      bash -ec '
-        source ./contrib/jenkins_tests/git_safe_directory.sh
-        ./autogen.sh -s
-      '
+      source ./contrib/jenkins_tests/git_safe_directory.sh
+      ./autogen.sh -s
     parallel: false
 
   - name: Build
