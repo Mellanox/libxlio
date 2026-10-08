@@ -616,6 +616,10 @@ void print_env_vars_xlio_global_settings()
     VLOG_STR_PARAM_STRING("Striding RQ", option_3::to_str(safe_mce_sys().enable_strq_env),
                           option_3::to_str(MCE_DEFAULT_STRQ), SYS_VAR_STRQ,
                           option_3::to_str(safe_mce_sys().enable_strq_env));
+    VLOG_PARAM_STRING(
+        "Relaxed Ordering request", safe_mce_sys().enable_relaxed_ordering,
+        MCE_DEFAULT_RELAXED_ORDERING, SYS_VAR_RELAXED_ORDERING,
+        safe_mce_sys().enable_relaxed_ordering ? "Requested" : "Not requested");
     VLOG_PARAM_NUMBER("STRQ Strides per RWQE", safe_mce_sys().strq_stride_num_per_rwqe,
                       MCE_DEFAULT_STRQ_NUM_STRIDES, SYS_VAR_STRQ_NUM_STRIDES);
     VLOG_PARAM_NUMBER("STRQ Stride Size (Bytes)", safe_mce_sys().strq_stride_size_bytes,

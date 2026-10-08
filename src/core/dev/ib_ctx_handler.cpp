@@ -400,6 +400,16 @@ uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
     struct ibv_mr *mr = nullptr;
     uint32_t lkey = LKEY_ERROR;
 
+    if (safe_mce_sys().enable_relaxed_ordering) {
+#ifndef DEFINED_IBV_ACCESS_RELAXED_ORDERING
+        VLOG_PRINTF_ONCE_THEN_DEBUG(
+            VLOG_WARNING, "Relaxed Ordering was requested but "
+                          "IBV_ACCESS_RELAXED_ORDERING is unavailable; "
+                          "the request was not applied\n");
+#else
+        access |= IBV_ACCESS_RELAXED_ORDERING;
+#endif
+    }
     mr = ibv_reg_mr(m_p_ibv_pd, addr, length, access);
     VALGRIND_MAKE_MEM_DEFINED(mr, sizeof(ibv_mr));
     if (!mr) {
@@ -408,8 +418,8 @@ uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
         m_mr_map_lkey[mr->lkey] = mr;
         lkey = mr->lkey;
 
-        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p", get_ibname(), m_p_ibv_device, addr,
-                    length, m_p_ibv_pd);
+        ibch_logdbg("dev:%s (%p) addr=%p length=%lu pd=%p access=0x%" PRIx64, get_ibname(),
+                    m_p_ibv_device, addr, length, m_p_ibv_pd, access);
     }
 
     return lkey;
