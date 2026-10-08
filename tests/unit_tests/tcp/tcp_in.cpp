@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <arpa/inet.h>
 #include <cstring>
+#include <vector>
 
 #include "core/lwip/tcp.h"
 #include "core/lwip/tcp_impl.h"
@@ -24,6 +25,58 @@ struct test_segment_storage {
 };
 
 static int g_ip_output_calls;
+
+struct ack_packet {
+    u32_t ackno;
+    u16_t flags;
+    u32_t len;
+};
+
+struct ack_tx_buffer {
+    pbuf p {};
+    unsigned char bytes[TCP_HLEN + 40] {};
+};
+
+static ack_tx_buffer g_ack_tx_buffers[8];
+static unsigned g_ack_tx_next;
+static std::vector<ack_packet> g_ack_packets;
+static std::vector<u16_t> g_ack_flags_at_alloc;
+
+static struct pbuf *alloc_ack_tx_pbuf(void *p_conn, pbuf_type type, pbuf_desc *desc,
+                                      struct pbuf *p_buff)
+{
+    (void)type;
+    (void)desc;
+    (void)p_buff;
+    if (g_ack_tx_next >= sizeof(g_ack_tx_buffers) / sizeof(g_ack_tx_buffers[0])) {
+        return nullptr;
+    }
+    g_ack_flags_at_alloc.push_back(static_cast<tcp_pcb *>(p_conn)->flags);
+    ack_tx_buffer &buffer = g_ack_tx_buffers[g_ack_tx_next++];
+    buffer.p = {};
+    std::memset(buffer.bytes, 0, sizeof(buffer.bytes));
+    buffer.p.payload = buffer.bytes + TCP_HLEN;
+    return &buffer.p;
+}
+
+static err_t capture_ack_output(struct pbuf *p, struct tcp_seg *seg, void *pcb, u16_t flags)
+{
+    (void)seg;
+    (void)pcb;
+    (void)flags;
+    const tcp_hdr *th = static_cast<const tcp_hdr *>(p->payload);
+    g_ack_packets.push_back({ntohl(th->ackno), static_cast<u16_t>(TCPH_FLAGS(th)), p->tot_len});
+    return ERR_OK;
+}
+
+static void enable_ack_output(tcp_pcb &pcb)
+{
+    g_ack_tx_next = 0;
+    g_ack_packets.clear();
+    g_ack_flags_at_alloc.clear();
+    register_tcp_tx_pbuf_alloc(alloc_ack_tx_pbuf);
+    pcb.ip_output = capture_ack_output;
+}
 
 static err_t count_and_succeed(struct pbuf *p, struct tcp_seg *seg, void *pcb, u16_t flags)
 {
@@ -151,8 +204,7 @@ static void attach_unacked_segment(tcp_pcb &pcb, test_segment_storage &storage, 
 }
 
 static void attach_two_unacked_segments(tcp_pcb &pcb, test_segment_storage &first,
-                                        test_segment_storage &second, uint32_t seqno,
-                                        uint32_t len)
+                                        test_segment_storage &second, uint32_t seqno, uint32_t len)
 {
     init_segment(first, seqno, len);
     init_segment(second, seqno + len, len);
@@ -199,7 +251,161 @@ static void inject_ack(tcp_pcb &pcb, test_rx_packet &pkt, uint32_t ackno, uint32
     L3_level_tcp_input(&pkt.p, &pcb);
 }
 
+static err_t receive_data(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
+{
+    (void)pcb;
+    (void)err;
+    *static_cast<u32_t *>(arg) += p->tot_len;
+    return ERR_OK;
+}
+
+/* A second pbuf models software coalescing; a single large pbuf models LRO. */
+static void inject_data(tcp_pcb &pcb, u32_t first_len, u32_t second_len = 0)
+{
+    std::vector<unsigned char> bytes(20 + TCP_HLEN + first_len, 0);
+    std::vector<unsigned char> trailing_bytes(second_len, 0);
+    bytes[0] = 0x45; /* IPv4, 20-byte header. */
+    const uint16_t ip_len = htons(static_cast<uint16_t>(bytes.size() + second_len));
+    std::memcpy(&bytes[2], &ip_len, sizeof(ip_len));
+
+    tcp_hdr *th = reinterpret_cast<tcp_hdr *>(&bytes[20]);
+    th->src = htons(50001);
+    th->dest = htons(50002);
+    th->seqno = htonl(pcb.rcv_nxt);
+    th->ackno = htonl(pcb.snd_nxt);
+    TCPH_HDRLEN_FLAGS_SET(th, TCP_HLEN / 4, TCP_ACK);
+    th->wnd = htons(65535);
+
+    pbuf packet {};
+    packet.payload = bytes.data();
+    packet.len = bytes.size();
+    packet.tot_len = bytes.size() + second_len;
+    packet.type = PBUF_RAM;
+    packet.ref = 2; /* The test owns the packet storage. */
+    pbuf trailing {};
+    if (second_len) {
+        trailing.payload = trailing_bytes.data();
+        trailing.len = second_len;
+        trailing.tot_len = second_len;
+        trailing.type = PBUF_RAM;
+        trailing.ref = 2;
+        packet.next = &trailing;
+    }
+    L3_level_tcp_input(&packet, &pcb);
+}
+
+static void init_ack_test_pcb(tcp_pcb &pcb, u32_t &received)
+{
+    register_noop_free_hooks();
+    init_established_pcb(pcb);
+    received = 0;
+    pcb.recv = receive_data;
+    pcb.callback_arg = &received;
+    pcb.quickack = 0;
+    pcb.advtsd_mss = pcb.mss;
+    enable_ack_output(pcb);
+}
+
 } // namespace
+
+TEST(tcp_in, one_data_segment_sends_ack_on_fast_timer)
+{
+    tcp_pcb pcb;
+    u32_t received;
+    init_ack_test_pcb(pcb, received);
+    const u32_t initial_rcv_nxt = pcb.rcv_nxt;
+
+    inject_data(pcb, pcb.advtsd_mss);
+
+    EXPECT_EQ(pcb.advtsd_mss, received);
+    EXPECT_TRUE(g_ack_packets.empty());
+    EXPECT_TRUE(pcb.flags & TF_ACK_DELAY);
+    tcp_fasttmr(&pcb);
+    ASSERT_EQ(1U, g_ack_packets.size());
+    EXPECT_EQ(initial_rcv_nxt + received, g_ack_packets[0].ackno);
+    EXPECT_EQ(TCP_ACK, g_ack_packets[0].flags);
+    EXPECT_EQ(static_cast<u32_t>(TCP_HLEN), g_ack_packets[0].len);
+    tcp_fasttmr(&pcb);
+    EXPECT_EQ(1U, g_ack_packets.size());
+}
+
+TEST(tcp_in, second_data_segment_sends_immediate_ack)
+{
+    tcp_pcb pcb;
+    u32_t received;
+    init_ack_test_pcb(pcb, received);
+    const u32_t initial_rcv_nxt = pcb.rcv_nxt;
+
+    inject_data(pcb, pcb.advtsd_mss);
+    EXPECT_TRUE(g_ack_packets.empty());
+    inject_data(pcb, pcb.advtsd_mss);
+
+    EXPECT_EQ(2U * pcb.advtsd_mss, received);
+    ASSERT_EQ(1U, g_ack_packets.size());
+    EXPECT_EQ(initial_rcv_nxt + received, g_ack_packets[0].ackno);
+    EXPECT_EQ(TCP_ACK, g_ack_packets[0].flags);
+    tcp_fasttmr(&pcb);
+    EXPECT_EQ(1U, g_ack_packets.size());
+}
+
+/* #5267303: an LRO receive containing two MSS-sized segments needs an immediate ACK. */
+TEST(tcp_in, lro_data_sends_immediate_ack)
+{
+    tcp_pcb pcb;
+    u32_t received;
+    init_ack_test_pcb(pcb, received);
+    const u32_t initial_rcv_nxt = pcb.rcv_nxt;
+
+    inject_data(pcb, 2U * pcb.advtsd_mss);
+
+    EXPECT_EQ(2U * pcb.advtsd_mss, received);
+    ASSERT_EQ(1U, g_ack_packets.size());
+    ASSERT_EQ(1U, g_ack_flags_at_alloc.size());
+    EXPECT_TRUE(g_ack_flags_at_alloc[0] & TF_ACK_NOW);
+    EXPECT_FALSE(g_ack_flags_at_alloc[0] & TF_ACK_DELAY);
+    EXPECT_EQ(initial_rcv_nxt + received, g_ack_packets[0].ackno);
+    EXPECT_EQ(TCP_ACK, g_ack_packets[0].flags);
+    EXPECT_EQ(static_cast<u32_t>(TCP_HLEN), g_ack_packets[0].len);
+    tcp_fasttmr(&pcb);
+    EXPECT_EQ(1U, g_ack_packets.size());
+}
+
+TEST(tcp_in, asymmetric_mss_uses_advertised_receive_mss)
+{
+    tcp_pcb pcb;
+    u32_t received;
+    init_ack_test_pcb(pcb, received);
+    const u32_t initial_rcv_nxt = pcb.rcv_nxt;
+    pcb.mss = 536;
+
+    inject_data(pcb, pcb.advtsd_mss);
+    EXPECT_TRUE(g_ack_packets.empty());
+    tcp_fasttmr(&pcb);
+    ASSERT_EQ(1U, g_ack_packets.size());
+    EXPECT_EQ(initial_rcv_nxt + pcb.advtsd_mss, g_ack_packets[0].ackno);
+
+    inject_data(pcb, 2U * pcb.advtsd_mss);
+    ASSERT_EQ(2U, g_ack_packets.size());
+    EXPECT_EQ(initial_rcv_nxt + received, g_ack_packets[1].ackno);
+    EXPECT_EQ(TCP_ACK, g_ack_packets[1].flags);
+}
+
+TEST(tcp_in, chained_data_sends_immediate_ack)
+{
+    tcp_pcb pcb;
+    u32_t received;
+    init_ack_test_pcb(pcb, received);
+    const u32_t initial_rcv_nxt = pcb.rcv_nxt;
+
+    inject_data(pcb, pcb.advtsd_mss / 2, pcb.advtsd_mss / 2);
+
+    EXPECT_EQ(pcb.advtsd_mss, received);
+    ASSERT_EQ(1U, g_ack_packets.size());
+    EXPECT_EQ(initial_rcv_nxt + received, g_ack_packets[0].ackno);
+    EXPECT_EQ(TCP_ACK, g_ack_packets[0].flags);
+    tcp_fasttmr(&pcb);
+    EXPECT_EQ(1U, g_ack_packets.size());
+}
 
 /* A clean handshake seed does not initialize data-path variance. */
 TEST(tcp_in, clean_handshake_seed_does_not_pollute_estimator_variance)
@@ -223,8 +429,7 @@ TEST(tcp_in, clean_handshake_seed_does_not_pollute_estimator_variance)
 
     g_xlio_tls_now_us = 1000100;
     test_rx_packet pkt;
-    inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535,
-               TCP_SYN | TCP_ACK);
+    inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535, TCP_SYN | TCP_ACK);
     g_xlio_tls_now_us = 0;
 
     EXPECT_EQ(ESTABLISHED, pcb.private_state);
@@ -260,8 +465,7 @@ TEST(tcp_in, clean_handshake_discards_causally_stale_rtt_sample)
     g_xlio_tls_now_us = process_now_us - 1000000;
 
     test_rx_packet pkt;
-    inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535,
-               TCP_SYN | TCP_ACK);
+    inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535, TCP_SYN | TCP_ACK);
     g_xlio_tls_now_us = 0;
 
     EXPECT_EQ(ESTABLISHED, pcb.private_state);
@@ -303,8 +507,7 @@ TEST(tcp_in, syn_ack_reuses_batch_time_with_stale_rtt_sample)
     const int64_t batch_now_us = process_now_us - 1000000;
     g_xlio_tls_now_us = batch_now_us;
     test_rx_packet pkt;
-    inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535,
-               TCP_SYN | TCP_ACK);
+    inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535, TCP_SYN | TCP_ACK);
     g_xlio_tls_now_us = 0;
 
     ASSERT_EQ(ESTABLISHED, pcb.private_state);
@@ -349,8 +552,7 @@ TEST(tcp_in, syn_ack_reuses_causal_batch_time_for_residual_flight)
 #endif
     g_xlio_tls_now_us = t_ack;
     test_rx_packet pkt;
-    inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535,
-               TCP_SYN | TCP_ACK);
+    inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535, TCP_SYN | TCP_ACK);
     g_xlio_tls_now_us = 0;
 
     ASSERT_EQ(ESTABLISHED, pcb.private_state);
@@ -396,8 +598,7 @@ TEST(tcp_in, syn_ack_rejects_missing_batch_timestamp)
 #ifdef NDEBUG
     const int64_t before_rearm_us = clock_gettime_monotonic_us();
     test_rx_packet pkt;
-    inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535,
-               TCP_SYN | TCP_ACK);
+    inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535, TCP_SYN | TCP_ACK);
     const int64_t after_rearm_us = clock_gettime_monotonic_us();
 
     ASSERT_EQ(ESTABLISHED, pcb.private_state);
@@ -412,8 +613,7 @@ TEST(tcp_in, syn_ack_rejects_missing_batch_timestamp)
 #else
     test_rx_packet pkt;
     EXPECT_DEATH(
-        { inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535,
-                     TCP_SYN | TCP_ACK); },
+        { inject_ack(pcb, pkt, /*ackno*/ 1001, /*seqno*/ 5000, /*wnd*/ 65535, TCP_SYN | TCP_ACK); },
         "SYN-SENT rearm reached tcp_process without refreshed RX timestamp");
 #endif
 }
