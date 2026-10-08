@@ -1813,6 +1813,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendto)(int __fd, __const void *__buf, size_t 
     return SYSCALL(sendto, __fd, __buf, __nbytes, __flags, __to, __tolen);
 }
 
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile)(int out_fd, int in_fd, off_t *offset, size_t count)
 {
     PROFILE_FUNC
@@ -1828,6 +1829,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile)(int out_fd, int in_fd, off_t *offset
     return sendfile_helper(p_socket_object, in_fd, offset, count);
 }
 
+// coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile64)(int out_fd, int in_fd, __off64_t *offset,
                                               size_t count)
 {
