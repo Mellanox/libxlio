@@ -3934,7 +3934,12 @@ doesn't affect its behavior.
 **Limitations:**
 
 - TCP only.
-- Non-blocking sockets only.
+- Blocking and non-blocking sockets are supported. Blocking
+  `recv()`, `send()`, `connect()`, and `accept()` park the
+  calling application thread until the owning worker wakes it.
+  `MSG_PEEK`, and blocking inside
+  `poll()`/`ppoll()`/`select()`/`pselect()` are not yet
+  supported in this mode.
 - Sockets are distributed across threads in round-robin only.
 
 **Tradeoffs:**
