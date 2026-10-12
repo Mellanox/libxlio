@@ -1,5 +1,5 @@
 diff --git a/src/core/dev/hw_queue_tx.h b/src/core/dev/hw_queue_tx.h
-index 04be4b6b..1df05c3a 100644
+index 3689527a..907df98d 100644
 --- a/src/core/dev/hw_queue_tx.h
 +++ b/src/core/dev/hw_queue_tx.h
 @@ -1,9 +1,9 @@
@@ -10,7 +10,7 @@ index 04be4b6b..1df05c3a 100644
   * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
   */
 -
-+// trolollololollllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllsdfjoidsfjiodsfjdoifj
++// Chaos test: this comment is deliberately longer than the 100 column limit so that clang-format must reflow it.
  #ifndef HW_QUEUE_TX_H
  #define HW_QUEUE_TX_H
  
