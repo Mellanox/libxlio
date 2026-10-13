@@ -475,7 +475,20 @@ bool cq_mgr_rx::ack_cq_events()
 
         IF_VERBS_FAILURE(ibv_get_cq_event(m_comp_event_channel, &p_cq_hndl, &p))
         {
-            cq_logwarn("waiting on cq_mgr_rx event returned with error (errno=%d %m)", errno);
+            if (errno == EAGAIN) {
+                // EAGAIN is an expected race, not an error. Every epoll instance with a socket
+                // on this ring watches the same completion channel fd, so one CQ event wakes
+                // all the threads waiting on it. The first thread to take the ring lock
+                // consumes the event, and then it or another thread re-arms the CQ before going
+                // back to sleep. A thread woken by the consumed event that takes the ring lock
+                // only after the re-arm sees the CQ armed but finds the non-blocking channel
+                // empty. No event is lost: the CQ stays armed and the next completion raises
+                // a new event.
+                cq_logdbg("cq_mgr_rx event already consumed by another waiter (errno=%d %m)",
+                          errno);
+            } else {
+                cq_logwarn("waiting on cq_mgr_rx event returned with error (errno=%d %m)", errno);
+            }
         }
         else
         {
