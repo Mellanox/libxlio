@@ -156,6 +156,7 @@ extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_NEIGH_UC_ARP_DELAY_
 extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_NEIGH_NUM_ERR_RETRIES;
 
 extern const config_var_info_t<bool> CONFIG_VAR_DEFERRED_CLOSE;
+extern const config_var_info_t<bool> CONFIG_VAR_EXIT_BARRIER;
 extern const config_var_info_t<bool> CONFIG_VAR_TCP_ABORT_ON_CLOSE;
 extern const config_var_info_t<bool> CONFIG_VAR_RX_POLL_ON_TX_TCP;
 extern const config_var_info_t<bool> CONFIG_VAR_RX_CQ_WAIT_CTRL;

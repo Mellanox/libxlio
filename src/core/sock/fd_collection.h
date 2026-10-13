@@ -150,6 +150,12 @@ public:
     void clear();
     void prepare_to_close();
 
+    /**
+     * Teardown only: wake threads sleeping in epoll_wait() or in a blocking socket call,
+     * without taking their locks. Does nothing if the collection lock is busy.
+     */
+    void wakeup_all_waiters();
+
     void offloading_rule_change_thread(bool offloaded, pthread_t tid);
 
     /**
