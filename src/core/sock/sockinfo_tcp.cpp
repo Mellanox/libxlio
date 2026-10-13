@@ -3957,7 +3957,8 @@ bool sockinfo_tcp::create_listen_rss_children()
         // (create → bind → prepareListen → listen)
         rss_child->m_family = m_family;
         rss_child->m_protocol = m_protocol;
-        rss_child->m_backlog = m_backlog / (int)num_threads;
+        // A zero backlog drops every SYN, so a backlog below the worker count still gets 1.
+        rss_child->m_backlog = std::max(1, m_backlog / (int)num_threads);
         rss_child->m_bound = m_bound;
         rss_child->m_reuseaddr = m_reuseaddr; // SO_REUSEADDR - affects binding
         rss_child->m_reuseport = m_reuseport; // SO_REUSEPORT - affects port sharing
