@@ -6,6 +6,7 @@
 
 #include "sockinfo.h"
 
+#include <atomic>
 #include <sys/epoll.h>
 #include <netdb.h>
 #include <linux/sockios.h>
@@ -267,6 +268,12 @@ int sockinfo::get_epoll_context_fd()
 
 void sockinfo::insert_epoll_event(uint64_t events)
 {
+    if (m_entity_context) {
+        // Worker threads notify without the epfd lock. Pairs with the fence in
+        // epfd_info::add_fd()/mod_fd(): either this thread sees the new registration, or the
+        // registering thread sees the state published before this call and reports it.
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+    }
     if (has_epoll_context()) {
         m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
     }

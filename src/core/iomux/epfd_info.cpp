@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+#include <atomic>
 #include <sock/fd_collection.h>
 #include <iomux/epfd_info.h>
 #include "event/entity_context.h"
@@ -257,6 +258,9 @@ int epfd_info::add_fd(int fd, epoll_event *event)
         m_fd_offloaded_list.push_back(temp_sock_fd_api);
         fd_rec.offloaded_index = m_n_offloaded_fds;
         temp_sock_fd_api->m_fd_rec = fd_rec;
+        // Pairs with the fence in sockinfo::insert_epoll_event(): a worker thread that missed
+        // this registration has published its state, so the checks below see it.
+        std::atomic_thread_fence(std::memory_order_seq_cst);
 
         // if the socket is ready, add it to ready events
         uint32_t events = 0;
@@ -525,6 +529,8 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
     // modify fd data in local table
     fd_rec->epdata = event->data;
     fd_rec->events = event->events;
+    // Pairs with the fence in sockinfo::insert_epoll_event(), see add_fd().
+    std::atomic_thread_fence(std::memory_order_seq_cst);
 
     bool is_offloaded = temp_sock_fd_api && temp_sock_fd_api->get_type() == FD_TYPE_SOCKET;
 
