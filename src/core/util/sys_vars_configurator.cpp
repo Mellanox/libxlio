@@ -230,6 +230,7 @@ const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_NEIGH_NUM_ERR_RETRIES {
     "network.neighbor.errors_before_reset"};
 
 const config_var_info_t<bool> CONFIG_VAR_DEFERRED_CLOSE {"core.syscall.deferred_close"};
+const config_var_info_t<bool> CONFIG_VAR_EXIT_BARRIER {"core.syscall.exit_barrier"};
 const config_var_info_t<bool> CONFIG_VAR_TCP_ABORT_ON_CLOSE {"network.protocols.tcp.linger_0"};
 const config_var_info_t<bool> CONFIG_VAR_RX_POLL_ON_TX_TCP {
     "performance.polling.rx_poll_on_tx_tcp"};
@@ -645,6 +646,8 @@ void sys_var_configurator::initialize_base_variables()
                                                       CONFIG_VAR_NETLINK_TIMER_MSEC);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.deferred_close,
                                                       CONFIG_VAR_DEFERRED_CLOSE);
+    m_runtime_registry.register_and_set_default_value(&m_sys_vars.exit_barrier,
+                                                      CONFIG_VAR_EXIT_BARRIER);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.tcp_abort_on_close,
                                                       CONFIG_VAR_TCP_ABORT_ON_CLOSE);
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.rx_poll_on_tx_tcp,
