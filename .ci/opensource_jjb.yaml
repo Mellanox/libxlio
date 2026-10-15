@@ -222,7 +222,7 @@
             description: "Branch or commit to run chaos testing on"
         - string:
             name: "mail_to"
-            default: "c6dabe6c.NVIDIA.onmicrosoft.com@amer.teams.ms"
+            default: "xlio-team@nvidia.com"
             description: "Mail for chaos test results"
         - string:
             name: "conf_file"
