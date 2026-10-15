@@ -1574,6 +1574,11 @@ int sockinfo_tcp_ops_tls::tls_rx_encrypt(struct pbuf *plist)
 
 err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
 {
+    if (unlikely(m_rx_comp_deferred.load(std::memory_order_acquire))) {
+        m_rx_comp_deferred.store(false, std::memory_order_relaxed);
+        rx_comp_handle();
+    }
+
     if (m_rx_bufs.empty()) {
         m_rx_offset = 0;
     }
@@ -1796,7 +1801,7 @@ check_single_record:
     if (m_tls_rx_need_resync) {
         m_recno_tcp_seq.emplace_back(m_next_recno_rx, m_rx_next_rec_tcp_seq);
         if (m_pending_resync_seqno) {
-            rx_comp_callback(this);
+            rx_comp_handle();
         }
     }
 
@@ -1890,47 +1895,56 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
 {
     sockinfo_tcp_ops_tls *utls = reinterpret_cast<sockinfo_tcp_ops_tls *>(arg);
 
-    utls->m_p_sock->lock_tcp_con();
+    /* TX completions call this under the TX ring lock, while the RX path holds the socket
+     * lock and takes the TX ring lock to send. Spinning on the socket lock here deadlocks
+     * both threads, so a locked socket handles the completion in its next recv(). */
+    if (utls->m_p_sock->trylock_tcp_con()) {
+        utls->m_rx_comp_deferred.store(true, std::memory_order_release);
+        return;
+    }
+    utls->rx_comp_handle();
+    utls->m_p_sock->unlock_tcp_con();
+}
 
-    if (utls->m_rx_psv_buf) { // Resync flow, GET_PSV is completed.
+void sockinfo_tcp_ops_tls::rx_comp_handle()
+{
+    /* Called with the TCP connection lock held. */
+    if (m_rx_psv_buf) { // Resync flow, GET_PSV is completed.
         struct xlio_tls_progress_params *params =
-            reinterpret_cast<struct xlio_tls_progress_params *>(
-                utls->m_rx_psv_buf->lwip_pbuf.payload);
+            reinterpret_cast<struct xlio_tls_progress_params *>(m_rx_psv_buf->lwip_pbuf.payload);
         uint32_t resync_seqno = be32toh(params->hw_resync_tcp_sn);
         int tracker = params->state >> 6U;
         int auth = (params->state >> 4U) & 0x3U;
-        utls->m_pending_resync_seqno = false;
+        m_pending_resync_seqno = false;
 
         if (tracker == TLS_TRACKER_TRACKING) {
             // The HW is tracking the stream (TLS record Magic number found)
             if (auth == TLS_AUTH_NO_OFFLOAD) { // The HW not offloading yet.
                 uint64_t recno = 0;
-                if (utls->find_recno(resync_seqno, recno)) {
-                    if (utls->m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_RESYNC)) {
+                if (find_recno(resync_seqno, recno)) {
+                    if (m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_RESYNC)) {
                         uint64_t recno_be64 = htobe64(recno);
-                        memcpy(utls->m_tls_info_rx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
-                        utls->m_p_tx_ring->tls_resync_rx(utls->m_p_tir, &utls->m_tls_info_rx,
-                                                         resync_seqno);
-                        utls->rx_resync_success();
+                        memcpy(m_tls_info_rx.rec_seq, &recno_be64, TLS_AES_GCM_REC_SEQ_LEN);
+                        m_p_tx_ring->tls_resync_rx(m_p_tir, &m_tls_info_rx, resync_seqno);
+                        rx_resync_success();
                     } else { // No TX credits - We will retry RX resync with the next RX packet.
-                        utls->m_pending_resync_seqno = true;
+                        m_pending_resync_seqno = true;
                         vlog_printf(VLOG_DEBUG, "Skip TLS RX resync due to full SQ\n");
                     }
-                } else if (utls->m_recno_tcp_seq.empty()) {
+                } else if (m_recno_tcp_seq.empty()) {
                     // We still have not parsed to the point of HW reported TCP-seq.
-                    utls->m_pending_resync_seqno = true;
+                    m_pending_resync_seqno = true;
                 } else {
                     // Wrong TCP Seq was found by the HW, since we parsed beyond the reported TCP
                     // seq. See comment at top of this file.
-                    IF_STATS_OB(utls->m_p_sock,
-                                ++(TLS_STATS(utls->m_p_sock).n_tls_rx_resync_retry));
+                    IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_resync_retry));
                     vlog_printf(VLOG_DEBUG, "TLS RX Record number not found: seqno: %u\n",
                                 resync_seqno);
                 }
             } else {
                 // HW is already offloading or authenticating.
                 // Possible in case of multi Resync - See comment at top of this file.
-                utls->rx_resync_success();
+                rx_resync_success();
             }
         } else {
             /* TLS_TRACKER_SEARCHING - HW still didn't find the Magic number.
@@ -1938,23 +1952,21 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
              * the connection randomly. We have nothing to do in this case but to retry the psv
              * until HW locks on a TLS record. See comment at top of this file.
              */
-            IF_STATS_OB(utls->m_p_sock, ++(TLS_STATS(utls->m_p_sock).n_tls_rx_resync_long));
+            IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_resync_long));
             vlog_printf(VLOG_DEBUG, "TLS RX Not Tracking T: %d, A: %d\n", tracker, auth);
         }
 
-        if (!utls->m_pending_resync_seqno) {
-            utls->m_p_tx_ring->mem_buf_desc_return_single_to_owner_tx(utls->m_rx_psv_buf);
-            utls->m_rx_psv_buf = nullptr;
+        if (!m_pending_resync_seqno) {
+            m_p_tx_ring->mem_buf_desc_return_single_to_owner_tx(m_rx_psv_buf);
+            m_rx_psv_buf = nullptr;
         }
-    } else if (!utls->m_rx_rule) {
+    } else if (!m_rx_rule) {
         /* Initial setup flow. */
-        const flow_tuple_with_local_if &tuple = utls->m_p_sock->get_flow_tuple();
-        utls->m_rx_rule = utls->m_p_rx_ring->tls_rx_create_rule(tuple, utls->m_p_tir);
-        if (!utls->m_rx_rule) {
+        const flow_tuple_with_local_if &tuple = m_p_sock->get_flow_tuple();
+        m_rx_rule = m_p_rx_ring->tls_rx_create_rule(tuple, m_p_tir);
+        if (!m_rx_rule) {
             vlog_printf(VLOG_ERROR, "TLS rule failed for %s\n", tuple.to_str().c_str());
         }
     }
-
-    utls->m_p_sock->unlock_tcp_con();
 }
 #endif /* DEFINED_UTLS */
