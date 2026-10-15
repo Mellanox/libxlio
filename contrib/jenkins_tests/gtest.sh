@@ -129,7 +129,10 @@ rc=$(($rc+$?))
 
 
 # Worker Threads Mode test filter
-worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event*:tcp_stream_integrity*:-tcp_bind.mapped_ipv4_bind"
+worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event*:tcp_stream_integrity*:tcp_tls.*:-tcp_bind.mapped_ipv4_bind"
+# XLIO resolves OpenSSL EVP symbols with dlsym(RTLD_DEFAULT) instead of linking libcrypto.
+# Preload it so TLS_RX tests execute rather than skip with ENOPROTOOPT.
+worker_threads_preload="libcrypto.so.3:$gtest_lib"
 
 worker_threads_failures=()
 worker_threads_samples=0
@@ -155,16 +158,16 @@ do
 	IFS=: read -r select_poll poll_mode <<< "$poll_spec"
 
 	run_worker_threads_test "$poll_mode/ipv4/1-worker" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}.xml"
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll XLIO_UTLS_RX=1 GTEST_TAP=2 LD_PRELOAD=$worker_threads_preload $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}.xml"
 
 	run_worker_threads_test "$poll_mode/ipv6/1-worker" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-ipv6.xml"
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll XLIO_UTLS_RX=1 GTEST_TAP=2 LD_PRELOAD=$worker_threads_preload $gtest_app $gtest_opt_ipv6 --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-ipv6.xml"
 
 	run_worker_threads_test "$poll_mode/ipv4/2-workers" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-pow2.xml"
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 XLIO_SELECT_POLL=$select_poll XLIO_UTLS_RX=1 GTEST_TAP=2 LD_PRELOAD=$worker_threads_preload $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-pow2.xml"
 
 	run_worker_threads_test "$poll_mode/ipv4/3-workers" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-not-pow2.xml"
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 XLIO_SELECT_POLL=$select_poll XLIO_UTLS_RX=1 GTEST_TAP=2 LD_PRELOAD=$worker_threads_preload $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-not-pow2.xml"
 done
 
 echo "Worker Threads Mode tests: $worker_threads_samples samples, ${#worker_threads_failures[@]} failures"
