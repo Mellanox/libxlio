@@ -538,6 +538,12 @@ sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
         }
         m_p_tx_ring->tls_release_tir(m_p_tir);
         m_p_tir = nullptr;
+        if (m_rx_psv_buf) {
+            // tls_release_tir() detaches the callback under the TX ring lock. Release our
+            // result reference; an outstanding GET_PSV retains its own until CQ completion.
+            m_p_tx_ring->mem_buf_desc_return_single_to_owner_tx(m_rx_psv_buf);
+            m_rx_psv_buf = nullptr;
+        }
         if (m_p_cipher_ctx) {
             g_tls_api->EVP_CIPHER_CTX_free(reinterpret_cast<EVP_CIPHER_CTX *>(m_p_cipher_ctx));
             m_p_cipher_ctx = nullptr;
@@ -1604,10 +1610,9 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         if (m_rx_psv_buf) {
             m_rx_psv_buf->lwip_pbuf.payload =
                 (void *)(((uintptr_t)m_rx_psv_buf->p_buffer + 63U) >> 6U << 6U);
-            uint8_t *payload = (uint8_t *)m_rx_psv_buf->lwip_pbuf.payload;
             // We always should have sz_buffer bigger than 64 since it must be at least MTU.
             memset(m_rx_psv_buf->lwip_pbuf.payload, 0, 64);
-            m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, payload, LKEY_TX_DEFAULT);
+            m_p_tx_ring->tls_get_progress_params_rx(m_p_tir, m_rx_psv_buf, LKEY_TX_DEFAULT);
             IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_resync_attempt));
         } else {
             m_p_tx_ring->credits_return(SQ_CREDITS_TLS_RX_GET_PSV);
