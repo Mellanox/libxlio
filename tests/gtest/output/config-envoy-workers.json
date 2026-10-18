@@ -1,0 +1,7 @@
+{
+  "applications": {
+    "envoy": {
+      "workers_num": 4
+    }
+  }
+}

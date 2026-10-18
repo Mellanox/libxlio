@@ -391,6 +391,30 @@ TEST(config, config_registry_default_ctr_inline_corrupted_json_ok_throws)
     ASSERT_THROW(config_registry(), xlio_exception);
 }
 
+// Build-independent (the schema is embedded regardless of --enable-envoy): the Envoy worker count
+// must be configurable through the new configuration system (XLIO_USE_NEW_CONFIG=1), not only
+// through the legacy XLIO_ENVOY_WORKERS_NUM environment variable. See RM #4541726.
+TEST(config, config_registry_envoy_workers_num_from_inline)
+{
+    conf_file_writer json_config(R"({})");
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+    env_setter inline_setter("XLIO_INLINE_CONFIG", "applications.envoy.workers_num=4");
+
+    config_registry registry;
+
+    ASSERT_EQ(4, registry.get_value<int64_t>("applications.envoy.workers_num"));
+}
+
+TEST(config, config_registry_envoy_workers_num_defaults_to_zero)
+{
+    conf_file_writer json_config(R"({})");
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    config_registry registry;
+
+    ASSERT_EQ(0, registry.get_value<int64_t>("applications.envoy.workers_num"));
+}
+
 TEST(config, config_registry_memory_size_transformer_gb_suffix)
 {
     const char *memory_schema = R"({

@@ -118,6 +118,7 @@ config_mapping = {
     "performance.threading.worker_threads": "XLIO_WORKER_THREADS",
     
     # applications section
+    "applications.envoy.workers_num": "XLIO_ENVOY_WORKERS_NUM",
     "applications.nginx.distribute_cq": "XLIO_DISTRIBUTE_CQ",
     "applications.nginx.udp_pool_size": "XLIO_NGINX_UDP_POOL_SIZE",
     "applications.nginx.udp_socket_pool_reuse": "XLIO_NGINX_UDP_POOL_REUSE_BUFFS",
