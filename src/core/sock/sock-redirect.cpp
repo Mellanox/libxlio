@@ -926,7 +926,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
          * Set worker id in map_thread_id basing on tid(pid). Nginx has single thread per process so
          * tid and pid should be equal.
          */
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
         g_p_app->map_listen_fd[__fd] = gettid();
     }
 #endif /* DEFINED_ENVOY */
@@ -2239,7 +2239,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(dup)(int __fd)
     handle_close(fid, true);
 #if defined(DEFINED_ENVOY)
     if (g_p_app && g_p_app->type == APP_ENVOY) {
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
         g_p_app->map_dup_fd[fid] = __fd;
         g_p_app->map_dup_fd[__fd] = __fd;
     }
@@ -2304,7 +2304,7 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
     static int worker_index = -1;
     if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
         /* This section is actual for parent process only */
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
         if (!g_p_app->unused_worker_id.empty()) {
             auto itr = g_p_app->unused_worker_id.begin();
             worker_index = *itr;
@@ -2539,7 +2539,7 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(waitpid)(pid_t pid, int *wstatus, int options)
      * process tally.
      */
     if (g_p_app && g_p_app->type == APP_NGINX && child_pid > 0 && !WIFCONTINUED(*wstatus)) {
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
         g_p_app->unused_worker_id.insert(g_p_app->get_worker_id());
         g_p_app->map_thread_id.erase(getpid());
     }
