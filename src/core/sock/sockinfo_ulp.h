@@ -95,6 +95,7 @@ private:
     void rx_resync_success();
     err_t tls_rx_consume_ready_packets();
     err_t recv(struct pbuf *p) override;
+    void release_rx_pbufs(struct pbuf *p);
     void copy_by_offset(uint8_t *dst, uint32_t offset, uint32_t len);
     uint16_t offset_to_host16(uint32_t offset);
     int tls_rx_decrypt(struct pbuf *plist);

@@ -542,13 +542,8 @@ sockinfo_tcp_ops_tls::~sockinfo_tcp_ops_tls()
             g_tls_api->EVP_CIPHER_CTX_free(reinterpret_cast<EVP_CIPHER_CTX *>(m_p_cipher_ctx));
             m_p_cipher_ctx = nullptr;
         }
-        while (m_refused_data) {
-            struct pbuf *p = m_refused_data;
-            m_refused_data = p->next;
-            p->next = nullptr;
-            /* Free ZC buffers as RX buffers, further this is handled. */
-            m_p_sock->tcp_rx_mem_buf_free(reinterpret_cast<mem_buf_desc_t *>(p));
-        }
+        release_rx_pbufs(m_refused_data);
+        m_refused_data = nullptr;
         if (!m_rx_bufs.empty()) {
             /*
              * The 1st buffer is special. We can have ZC buffers in the
@@ -1367,6 +1362,18 @@ void sockinfo_tcp_ops_tls::terminate_session_fatal(uint8_t alert_type)
     m_rx_sm = TLS_RX_SM_FAIL;
 }
 
+/* Free a list of record payload wrappers built by recv(). Called under the TCP connection lock. */
+void sockinfo_tcp_ops_tls::release_rx_pbufs(struct pbuf *p)
+{
+    while (p) {
+        struct pbuf *pnext = p->next;
+        p->next = nullptr;
+        /* Free ZC buffers as RX buffers, further this is handled. */
+        m_p_sock->tcp_rx_mem_buf_free(reinterpret_cast<mem_buf_desc_t *>(p));
+        p = pnext;
+    }
+}
+
 void sockinfo_tcp_ops_tls::copy_by_offset(uint8_t *dst, uint32_t offset, uint32_t len)
 {
     mem_buf_desc_t *pdesc = m_rx_bufs.front();
@@ -1760,7 +1767,8 @@ check_single_record:
     if (unlikely(ret != 0)) {
         terminate_session_fatal(ret == TLS_DECRYPT_BAD_MAC ? TLS_BAD_RECORD_MAC
                                                            : TLS_INTERNAL_ERROR);
-        m_refused_data = pres;
+        /* The payload is unauthenticated: it must never reach the application. */
+        release_rx_pbufs(pres);
         IF_STATS_OB(m_p_sock, ++(TLS_STATS(m_p_sock).n_tls_rx_records_sw_dec_fail));
         return ERR_OK;
     }
