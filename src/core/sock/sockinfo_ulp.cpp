@@ -1595,7 +1595,9 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         p = ptmp;
     }
 
-    if (unlikely((!m_pending_resync_seqno) && (m_tls_rx_need_resync) && !m_rx_psv_buf) &&
+    // Setup and GET_PSV share a completion callback. Wait until setup creates the RX rule
+    // before posting a query, so deferred setup cannot be mistaken for a GET_PSV completion.
+    if (unlikely(m_rx_rule && !m_pending_resync_seqno && m_tls_rx_need_resync && !m_rx_psv_buf) &&
         m_p_tx_ring->credits_get(SQ_CREDITS_TLS_RX_GET_PSV)) {
         /* If we fail to request credits we will retry resync flow with the next incoming packet. */
         m_rx_psv_buf = m_p_sock->tcp_tx_mem_buf_alloc(PBUF_RAM);
