@@ -1578,12 +1578,12 @@ err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
         m_rx_offset = 0;
     }
 
-    m_rx_rec_rcvd += p->tot_len;
     while (p) {
         mem_buf_desc_t *pdesc = reinterpret_cast<mem_buf_desc_t *>(p);
         struct pbuf *ptmp = p->next;
 
         pdesc->rx.n_frags = 1;
+        m_rx_rec_rcvd += p->len;
         p->tot_len = p->len;
         p->next = nullptr;
         m_rx_bufs.push_back(pdesc);
