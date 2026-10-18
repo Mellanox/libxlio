@@ -1340,7 +1340,9 @@ int sockinfo_tcp_ops_tls::send_alert(uint8_t alert_type)
     *CMSG_DATA(cmsg) = record_type;
     msg.msg_controllen = cmsg->cmsg_len;
 
-    uint8_t alert[2] = {alert_type, get_alert_level(alert_type)};
+    /* struct Alert { AlertLevel level; AlertDescription description; } (RFC 8446 6, RFC 5246 7.2)
+     */
+    uint8_t alert[2] = {get_alert_level(alert_type), alert_type};
     msg_iov.iov_base = alert;
     msg_iov.iov_len = sizeof(alert);
     msg.msg_iov = &msg_iov;
