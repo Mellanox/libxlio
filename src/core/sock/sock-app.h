@@ -26,7 +26,23 @@ extern map_udp_reuse_port_t g_map_udp_resue_port;
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 struct app_conf {
     app_type_t type;
+    /* Lock-order contract:
+     * - m_init_lock serializes worker/listener initialization (the proc_envoy()
+     *   EPOLL_CTL_ADD path). It is acquired only from the epoll_ctl() intercept,
+     *   where the calling thread holds no other XLIO locks, so it may be held
+     *   while acquiring m_lock or device-layer locks (net_device_val, ring and
+     *   CQ creation).
+     * - m_lock is a leaf lock protecting the maps and counters below. In the
+     *   Envoy path it is never held across init_worker()/listen()/bind()/ring/
+     *   CQ creation or any other call that can reach device-layer locks such as
+     *   net_device_val::m_lock. Ring creation calls get_worker_id() while
+     *   holding net_device_val::m_lock, so holding m_lock across the device
+     *   layer inverts the lock order (ABBA deadlock). proc_nginx() does keep
+     *   m_lock across init_worker(); that is safe only because NGINX workers are
+     *   single-threaded, so no concurrent device-layer acquirer forms the cycle.
+     */
     lock_spin_recursive m_lock;
+    lock_mutex m_init_lock;
     int workers_num;
     int workers_pow2;
     bool add_second_4t_rule;
@@ -41,6 +57,7 @@ struct app_conf {
     void *context;
 
     app_conf()
+        : m_init_lock("app_conf_init")
     {
         type = APP_NONE;
         m_lock = lock_spin_recursive("app_conf");

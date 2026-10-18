@@ -78,10 +78,19 @@ int app_conf::proc_envoy(int __op, int __fd)
     int rc = 0;
 
     /* Prcess only sockets from map_listen_fd */
-    auto iter = g_p_app->map_listen_fd.find(__fd);
-    if (iter != g_p_app->map_listen_fd.end()) {
+    bool found = false;
+    pid_t owner_tid = -1;
+    {
+        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        auto iter = g_p_app->map_listen_fd.find(__fd);
+        if (iter != g_p_app->map_listen_fd.end()) {
+            found = true;
+            owner_tid = iter->second;
+        }
+    }
+    if (found) {
         sockinfo *p_socket_object = fd_collection_get_sockfd(__fd);
-        if (iter->second == gettid()) {
+        if (owner_tid == gettid()) {
             /* process listen sockets from main thread and remove
              * them from map_listen_fd
              */
@@ -92,7 +101,7 @@ int app_conf::proc_envoy(int __op, int __fd)
                 }
             }
             std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-            g_p_app->map_listen_fd.erase(iter);
+            g_p_app->map_listen_fd.erase(__fd);
         } else if (__op == EPOLL_CTL_ADD) {
             static int original_listen_count = INT_MAX;
             static int total_worker_id = 0;
@@ -114,40 +123,54 @@ int app_conf::proc_envoy(int __op, int __fd)
                 const struct timespec short_sleep = {0, 1000};
                 nanosleep(&short_sleep, NULL);
             }
-            std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
 
-            /* Logic that assigns worker id for processed listener
-             * total_worker_id is unique for all threads
+            /* Serialize the whole worker initialization path. m_init_lock
+             * cannot participate in the m_lock/device-layer lock inversion:
+             * it is acquired only here, where the calling thread holds no
+             * other XLIO locks (see the lock-order contract in sock-app.h).
              */
-            worker_id = g_p_app->get_worker_id();
-            if (worker_id < 0) {
-                worker_id = total_worker_id;
-                total_worker_id++;
-            }
+            std::lock_guard<decltype(g_p_app->m_init_lock)> init_guard(g_p_app->m_init_lock);
+            {
+                std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
 
-            /* This check is `enable_reuse_port = false` specific
-             *
-             * This part should guarantee initialization of all listeners for worker 0.
-             * original_listen_count is initialized to number of them first.
-             */
-            sockinfo *si = dynamic_cast<sockinfo *>(p_socket_object);
-            if (si && !si->get_reuseport() && worker_id == 0) {
-                if (original_listen_count == INT_MAX) {
-                    original_listen_count = 0;
-                    for (const auto &itr : g_p_app->map_dup_fd) {
-                        if (itr.first == itr.second) {
-                            original_listen_count++;
+                /* Logic that assigns worker id for processed listener
+                 * total_worker_id is unique for all threads
+                 */
+                worker_id = g_p_app->get_worker_id();
+                if (worker_id < 0) {
+                    worker_id = total_worker_id;
+                    total_worker_id++;
+                }
+
+                /* This check is `enable_reuse_port = false` specific
+                 *
+                 * This part should guarantee initialization of all listeners for worker 0.
+                 * original_listen_count is initialized to number of them first.
+                 */
+                sockinfo *si = dynamic_cast<sockinfo *>(p_socket_object);
+                if (si && !si->get_reuseport() && worker_id == 0) {
+                    if (original_listen_count == INT_MAX) {
+                        original_listen_count = 0;
+                        for (const auto &itr : g_p_app->map_dup_fd) {
+                            if (itr.first == itr.second) {
+                                original_listen_count++;
+                            }
                         }
                     }
+                    original_listen_count--;
                 }
-                original_listen_count--;
+
+                g_p_app->map_listen_fd[__fd] = gettid();
+                g_p_app->map_thread_id[gettid()] = worker_id;
             }
 
-            g_p_app->map_listen_fd[__fd] = gettid();
-            g_p_app->map_thread_id[gettid()] = worker_id;
+            /* init_worker() creates rings/CQs and can take device-layer
+             * locks, so it must run without m_lock.
+             */
             rc = init_worker(worker_id, __fd);
             if (rc != 0) {
                 app_logerr("Failed to initialize worker %d, (errno=%d %m)", worker_id, errno);
+                std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
                 g_p_app->map_listen_fd.erase(__fd);
                 g_p_app->map_thread_id.erase(gettid());
                 return rc;
@@ -188,9 +211,16 @@ static int init_worker(int worker_id, int listen_fd)
         p_fd_collection = g_p_fd_collection;
         if (!p_fd_collection->get_sockfd(listen_fd)) {
             parent_fd = -1;
-            const auto itr = g_p_app->map_dup_fd.find(listen_fd);
-            if (itr != g_p_app->map_dup_fd.end()) {
-                parent_fd = itr->second;
+            /* map_dup_fd is written by the dup() intercept under m_lock.
+             * init_worker() no longer runs with m_lock held (it is a leaf
+             * lock, see sock-app.h), so take it for the lookup.
+             */
+            {
+                std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+                const auto itr = g_p_app->map_dup_fd.find(listen_fd);
+                if (itr != g_p_app->map_dup_fd.end()) {
+                    parent_fd = itr->second;
+                }
             }
             if (parent_fd < 0) {
                 return -1;
