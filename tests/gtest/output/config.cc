@@ -537,6 +537,35 @@ TEST_F(output, config_periodic_drain_max_cqes_zero)
                 "CQ Drain Thread"});
 }
 
+#if defined(DEFINED_ENVOY)
+/**
+ * @test output.config_envoy_workers_num
+ * @brief
+ *    Tests that applications.envoy.workers_num selects the Envoy application type
+ *    through the new configuration system and does not auto-apply the Nginx profile.
+ *
+ * @details
+ *    Exercises the configurator wiring, not just the schema entry:
+ *    print_envoy_workers_num emits the worker count, at INFO level, only when the
+ *    application type is APP_ENVOY and the value is non-default. So the banner line
+ *    appears iff detect_application_profile() read applications.envoy.workers_num and
+ *    set APP_ENVOY. Envoy, unlike Nginx, must not auto-apply a spec profile.
+ */
+TEST_F(output, config_envoy_workers_num)
+{
+    check_file(
+        "config-envoy-workers.json",
+        {
+            // clang-format off
+            "Number of Envoy workers",
+            "[applications.envoy.workers_num, Reason: User-configured]"
+            // clang-format on
+        },
+        {// Envoy must not inherit the Nginx spec profile
+         "Nginx profile"});
+}
+#endif /* DEFINED_ENVOY */
+
 /**
  * @test output.config_ring_elements_count_warning
  * @brief

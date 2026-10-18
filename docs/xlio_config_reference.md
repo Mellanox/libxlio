@@ -1,6 +1,6 @@
 # XLIO Configuration Reference
 
-This file documents all 122 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
+This file documents all 123 XLIO runtime configuration parameters with their types, defaults, environment variables, and constraints.
 
 > **Auto-generated** from the JSON schema by `generate_docs.py`. Do not edit manually.
 
@@ -11,6 +11,7 @@ This file documents all 122 XLIO runtime configuration parameters with their typ
   - [`acceleration_control.default_acceleration`](#acceleration_controldefault_acceleration) — Enable acceleration by default for all sockets
   - [`acceleration_control.rules`](#acceleration_controlrules) — Acceleration control rules
 - **[APPLICATIONS](#applications)**
+  - [`applications.envoy.workers_num`](#applicationsenvoyworkers_num) — Number of Envoy workers
   - [`applications.nginx.distribute_cq`](#applicationsnginxdistribute_cq) — Distribute completion queue interrupts across workers
   - [`applications.nginx.udp_pool_size`](#applicationsnginxudp_pool_size) — UDP socket pool size
   - [`applications.nginx.udp_socket_pool_reuse`](#applicationsnginxudp_socket_pool_reuse) — RX buffer reclaim threshold for pooled sockets
@@ -178,6 +179,31 @@ specific applications or processes.
 ---
 
 ## APPLICATIONS
+
+### `applications.envoy.workers_num`
+
+> **Type:** integer (min: 0)
+>
+> **Maps to:** `XLIO_ENVOY_WORKERS_NUM`
+
+Number of Envoy worker processes. **Must be > 0 to enable XLIO offloading for Envoy.**
+
+**Behavior:** When set to a value greater than 0, XLIO creates hardware flow steering
+rules per worker so that incoming connections are steered to the correct Envoy worker
+process (Envoy spreads its listeners across workers with SO_REUSEPORT).
+
+**Sizing:** Set to match your Envoy `--concurrency` value exactly.
+
+*Power-of-2 values (2, 4, 8, 16, ...):* Optimal. Equal traffic distribution per worker.
+
+*Non-power-of-2 values:* XLIO rounds up to the next power of 2 internally. The extra flow
+steering slots are distributed as secondary rules to the lowest-numbered workers, so those
+workers handle more traffic.
+
+**Memory:** Unlike the Nginx integration, enabling Envoy workers does not auto-apply a
+profile; size [`core.resources.memory_limit`](#coreresourcesmemory_limit) explicitly for your deployment.
+
+**Default:** `0`
 
 ### `applications.nginx.distribute_cq`
 

@@ -132,6 +132,9 @@ extern const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_SIZE;
 extern const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE;
 #endif
 extern const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_WORKERS_NUM;
+#if defined(DEFINED_ENVOY)
+extern const config_var_info_t<int, int64_t> CONFIG_VAR_ENVOY_WORKERS_NUM;
+#endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
 extern const config_var_info_t<bool> CONFIG_VAR_DISTRIBUTE_CQ;
 #endif

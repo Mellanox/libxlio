@@ -128,6 +128,10 @@ void config_printer::print_to_log()
                 ,
                 {CONFIG_VAR_NGINX_WORKERS_NUM.name, &config_printer::print_nginx_workers_num}
 #endif
+#if defined(DEFINED_ENVOY)
+                ,
+                {CONFIG_VAR_ENVOY_WORKERS_NUM.name, &config_printer::print_envoy_workers_num}
+#endif
             };
 
         const auto special_treatment = special_treatments.find(key);

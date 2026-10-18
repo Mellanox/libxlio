@@ -1313,6 +1313,20 @@
                         }
                     },
                     "additionalProperties": false
+                },
+                "envoy": {
+                    "type": "object",
+                    "description": "Envoy-specific optimizations.",
+                    "properties": {
+                        "workers_num": {
+                            "type": "integer",
+                            "default": 0,
+                            "minimum": 0,
+                            "title": "Number of Envoy workers",
+                            "description": "Maps to XLIO_ENVOY_WORKERS_NUM environment variable.\nNumber of Envoy worker processes. **Must be > 0 to enable XLIO offloading for Envoy.**\n\n**Behavior:** When set to a value greater than 0, XLIO creates hardware flow steering\nrules per worker so that incoming connections are steered to the correct Envoy worker\nprocess (Envoy spreads its listeners across workers with SO_REUSEPORT).\n\n**Sizing:** Set to match your Envoy `--concurrency` value exactly.\n\n*Power-of-2 values (2, 4, 8, 16, ...):* Optimal. Equal traffic distribution per worker.\n\n*Non-power-of-2 values:* XLIO rounds up to the next power of 2 internally. The extra flow\nsteering slots are distributed as secondary rules to the lowest-numbered workers, so those\nworkers handle more traffic.\n\n**Memory:** Unlike the Nginx integration, enabling Envoy workers does not auto-apply a\nprofile; size `core.resources.memory_limit` explicitly for your deployment."
+                        }
+                    },
+                    "additionalProperties": false
                 }
             },
             "additionalProperties": false
