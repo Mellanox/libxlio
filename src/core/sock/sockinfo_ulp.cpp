@@ -1581,7 +1581,7 @@ int sockinfo_tcp_ops_tls::tls_rx_encrypt(struct pbuf *plist)
 err_t sockinfo_tcp_ops_tls::recv(struct pbuf *p)
 {
     if (unlikely(m_rx_comp_deferred.load(std::memory_order_acquire))) {
-        m_rx_comp_deferred.store(false, std::memory_order_relaxed);
+        m_rx_comp_deferred.exchange(false, std::memory_order_acquire);
         rx_comp_handle();
     }
 
@@ -1898,9 +1898,15 @@ void sockinfo_tcp_ops_tls::rx_resync_success()
 }
 
 /* static */
-void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
+void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg, mem_buf_desc_t *buf)
 {
     sockinfo_tcp_ops_tls *utls = reinterpret_cast<sockinfo_tcp_ops_tls *>(arg);
+
+    /* Setup and resync WQEs have no result buffer. Their callbacks must not make an
+     * outstanding GET_PSV readable, even if recv() has already allocated its buffer. */
+    if (buf) {
+        utls->m_rx_psv_completed.store(true, std::memory_order_release);
+    }
 
     /* TX completions call this under the TX ring lock, while the RX path holds the socket
      * lock and takes the TX ring lock to send. Spinning on the socket lock here deadlocks
@@ -1916,7 +1922,7 @@ void sockinfo_tcp_ops_tls::rx_comp_callback(void *arg)
 void sockinfo_tcp_ops_tls::rx_comp_handle()
 {
     /* Called with the TCP connection lock held. */
-    if (m_rx_psv_buf) { // Resync flow, GET_PSV is completed.
+    if (m_rx_psv_buf && m_rx_psv_completed.load(std::memory_order_acquire)) {
         struct xlio_tls_progress_params *params =
             reinterpret_cast<struct xlio_tls_progress_params *>(m_rx_psv_buf->lwip_pbuf.payload);
         uint32_t resync_seqno = be32toh(params->hw_resync_tcp_sn);
@@ -1964,6 +1970,7 @@ void sockinfo_tcp_ops_tls::rx_comp_handle()
         }
 
         if (!m_pending_resync_seqno) {
+            m_rx_psv_completed.store(false, std::memory_order_relaxed);
             m_p_tx_ring->mem_buf_desc_return_single_to_owner_tx(m_rx_psv_buf);
             m_rx_psv_buf = nullptr;
         }

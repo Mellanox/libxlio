@@ -254,7 +254,7 @@ void cq_mgr_tx::handle_sq_wqe_prop(unsigned index)
         if (p->ti) {
             xlio_ti *ti = p->ti;
             if (ti->m_callback) {
-                ti->m_callback(ti->m_callback_arg);
+                ti->m_callback(ti->m_callback_arg, p->buf);
             }
 
             ti->put();
