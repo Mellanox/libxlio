@@ -1,8 +1,22 @@
 /*
+ * Original work:
+ *
  * Copyright (c) 2016 Alexadru Ardelean.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the MIT license. See COPYING for details.
+ *
+ * Modified Work:
+ *
+ * Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES, ALL RIGHTS RESERVED.
+ *
+ * This software product is a proprietary product of NVIDIA CORPORATION &
+ * AFFILIATES (the "Company") and all right, title, and interest in and to the
+ * software product, including all associated intellectual property rights, are
+ * and shall remain exclusively with the Company.
+ *
+ * This software product is governed by the End User License Agreement
+ * provided with the software product.
  *
  */
 
@@ -32,37 +46,36 @@ extern "C" {
  * Internally, this is equivalent to doing a series of 'json_object_object_get()'
  * and 'json_object_array_get_idx()' along the given 'path'.
  *
- * Note that the 'path' string supports 'printf()' type arguments, so, whatever
- * is added after the 'res' param will be treated as an argument for 'path'
- * Example: json_pointer_get(obj, "/foo/%d/%s", &res, 0, bar)
- * This means, that you need to escape '%' with '%%' (just like in printf())
- *
  * @param obj the json_object instance/tree from where to retrieve sub-objects
  * @param path a (RFC6901) string notation for the sub-object to retrieve
- * @param res a pointer where to store a reference to the json_object
+ * @param res a pointer that stores a reference to the json_object
  *              associated with the given path
  *
  * @return negative if an error (or not found), or 0 if succeeded
  */
-int json_pointer_get(struct json_object *obj, const char *path, struct json_object **res);
+JSON_EXPORT int doca_third_party_json_pointer_get(struct json_object *obj, const char *path,
+                                 struct json_object **res);
 
 /**
  * This is a variant of 'json_pointer_get()' that supports printf() style arguments.
  *
- * Example: json_pointer_getf(obj, res, "/foo/%d/%s", 0, bak)
+ * Variable arguments go after the 'path_fmt' parameter.
+ *
+ * Example: json_pointer_getf(obj, res, "/foo/%d/%s", 0, "bar")
  * This also means that you need to escape '%' with '%%' (just like in printf())
  *
  * Please take into consideration all recommended 'printf()' format security
  * aspects when using this function.
  *
  * @param obj the json_object instance/tree to which to add a sub-object
- * @param res a pointer where to store a reference to the json_object
+ * @param res a pointer that stores a reference to the json_object
  *              associated with the given path
  * @param path_fmt a printf() style format for the path
  *
  * @return negative if an error (or not found), or 0 if succeeded
  */
-int json_pointer_getf(struct json_object *obj, struct json_object **res, const char *path_fmt, ...);
+JSON_EXPORT int doca_third_party_json_pointer_getf(struct json_object *obj, struct json_object **res,
+                                  const char *path_fmt, ...);
 
 /**
  * Sets JSON object 'value' in the 'obj' tree at the location specified
@@ -82,23 +95,21 @@ int json_pointer_getf(struct json_object *obj, struct json_object **res, const c
  * That also implies that 'json_pointer_set()' does not do any refcount incrementing.
  * (Just that single decrement that was mentioned above).
  *
- * Note that the 'path' string supports 'printf()' type arguments, so, whatever
- * is added after the 'value' param will be treated as an argument for 'path'
- * Example: json_pointer_set(obj, "/foo/%d/%s", value, 0, bak)
- * This means, that you need to escape '%' with '%%' (just like in printf())
- *
  * @param obj the json_object instance/tree to which to add a sub-object
  * @param path a (RFC6901) string notation for the sub-object to set in the tree
  * @param value object to set at path
  *
  * @return negative if an error (or not found), or 0 if succeeded
  */
-int json_pointer_set(struct json_object **obj, const char *path, struct json_object *value);
+JSON_EXPORT int doca_third_party_json_pointer_set(struct json_object **obj, const char *path,
+                                 struct json_object *value);
 
 /**
  * This is a variant of 'json_pointer_set()' that supports printf() style arguments.
  *
- * Example: json_pointer_setf(obj, value, "/foo/%d/%s", 0, bak)
+ * Variable arguments go after the 'path_fmt' parameter.
+ *
+ * Example: json_pointer_setf(obj, value, "/foo/%d/%s", 0, "bar")
  * This also means that you need to escape '%' with '%%' (just like in printf())
  *
  * Please take into consideration all recommended 'printf()' format security
@@ -110,8 +121,8 @@ int json_pointer_set(struct json_object **obj, const char *path, struct json_obj
  *
  * @return negative if an error (or not found), or 0 if succeeded
  */
-int json_pointer_setf(struct json_object **obj, struct json_object *value, const char *path_fmt, ...);
-
+JSON_EXPORT int doca_third_party_json_pointer_setf(struct json_object **obj, struct json_object *value,
+                                  const char *path_fmt, ...);
 
 #ifdef __cplusplus
 }

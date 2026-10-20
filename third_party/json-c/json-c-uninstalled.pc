@@ -1,0 +1,10 @@
+prefix=
+exec_prefix=
+libdir=/.autodirect/mtrswgwork/tcabouly/tmp/libxlio/third_party/json-c
+includedir=/.autodirect/mtrswgwork/tcabouly/tmp/libxlio/third_party/json-c
+
+Name: json-c
+Description: JSON library in C
+Version: 0.17.0
+Libs: -L${libdir} -ljson-c
+Cflags: -I${includedir}
