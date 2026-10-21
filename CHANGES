@@ -1,3 +1,19 @@
+Version 3.80.2-1:
+Date + Time 2026-10-08
+=============================================================
+Fixed:
+	- RM #4550926 Warn when TX or RX ring sizes are increased to the required minimum
+	- RM #5215894 Improve sendfile() performance with multiple worker threads
+	- RM #5245126 Restore socket type and offload statistics when reusing TCP sockets
+	- RM #5328892 Avoid misidentifying VRF interfaces as bonding devices
+	- RM #5324363 Synchronize SO_ERROR with nonblocking connection completion
+	- RM #5324154 Fix RSS accept deadlock in worker-thread mode
+	- RM #5304941 Reject delegate mode with worker threads and fix Ultra API shutdown use-after-free
+	- RM #4923648 Prevent crashes when Ultra API sockets coexist with worker threads
+	- RM #5170344 Correct NIC core clock scaling for hardware timestamp conversion
+	- RM #5262260 Preserve quoted DPCP compiler flags containing whitespace
+	- RM #5298901 Report TCP timer lock starvation at info level
+
 Version 3.80.1-1:
 Date + Time 2026-09-17
 =============================================================

@@ -24,6 +24,9 @@ public:
     void SetUp() override
     {
         m_workspace = std::getenv("WORKSPACE");
+        if (m_workspace && !m_workspace[0]) {
+            m_workspace = nullptr;
+        }
         if (m_workspace) {
             std::cout << "WORKSPACE: '" << m_workspace << "'" << std::endl;
         } else {
@@ -45,12 +48,22 @@ public:
 protected:
     /**
      * Resolve a path relative to the workspace root (tests/gtest/...).
-     * Falls back to a path relative to CWD when WORKSPACE is not set.
+     * Without WORKSPACE, support running from either the workspace root or
+     * tests/gtest, which was the legacy working directory for output tests.
      */
     std::string workspace_path(const std::string &relative) const
     {
         if (m_workspace) {
             return std::string(m_workspace) + "/" + relative;
+        }
+
+        if (access(relative.c_str(), F_OK) == 0) {
+            return relative;
+        }
+
+        const std::string gtest_prefix = "tests/gtest/";
+        if (relative.compare(0, gtest_prefix.size(), gtest_prefix) == 0) {
+            return relative.substr(gtest_prefix.size());
         }
         return relative;
     }

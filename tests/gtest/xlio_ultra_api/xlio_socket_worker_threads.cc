@@ -16,14 +16,7 @@
  * is configured.  The tests inspect the captured debug output for signs
  * of incorrect worker-thread dispatch.
  */
-class ultra_api_worker_threads : public subprocess_test {
-public:
-    void SetUp() override
-    {
-        subprocess_test::SetUp();
-        m_output_file = "/tmp/xlio_gtest_wt_" + std::to_string(getpid()) + ".txt";
-    }
-};
+class ultra_api_worker_threads : public subprocess_test {};
 
 /**
  * @test ultra_api_worker_threads.no_distribute_on_connect
@@ -53,7 +46,7 @@ TEST_F(ultra_api_worker_threads, no_distribute_on_connect)
 {
     std::string config =
         workspace_path("tests/gtest/xlio_ultra_api/config-ultra-api-worker-threads.json");
-    std::string helper = helper_path("ultra_api_connect_worker_threads_helper");
+    std::string helper = helper_path("ultra_api_connect_helper");
 
     std::string cmd = "XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + config + " " + helper;
 

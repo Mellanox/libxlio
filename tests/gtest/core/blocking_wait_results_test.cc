@@ -81,8 +81,7 @@ TEST(tx_wait_result, ready_no_space_leaves_errno)
 
 TEST(tx_wait_result, timeout_returns_eagain)
 {
-    tx_wait_outcome o =
-        map_tx_wait_result(result::TIMEOUT, /*has_space=*/false, /*exiting=*/false);
+    tx_wait_outcome o = map_tx_wait_result(result::TIMEOUT, /*has_space=*/false, /*exiting=*/false);
     EXPECT_FALSE(o.has_space);
     EXPECT_EQ(EAGAIN, o.err);
 }

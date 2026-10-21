@@ -84,7 +84,12 @@ bool rfs_rule::create(dpcp::match_params &match_value, dpcp::match_params &match
     }
 
     uint32_t tirn = 0U;
-    in_tir.get_id(tirn);
+    status_out = in_tir.get_id(tirn);
+    if (status_out != dpcp::DPCP_OK) {
+        rfs_logerr("Failed dpcp_tir::get_id(), Status: %d, dpcp_flow: %p",
+                   static_cast<int>(status_out), new_rule);
+        return false;
+    }
     rfs_logdbg("Added dpcp_flow_rule::add_dest_tir() TIR %" PRIu32 ", dpcp_flow: %p", tirn,
                new_rule);
 

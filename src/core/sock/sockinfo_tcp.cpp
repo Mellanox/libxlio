@@ -936,7 +936,10 @@ void sockinfo_tcp::clean_socket_obj()
     unlock_tcp_con();
 
     event_handler_manager *p_event_mgr = get_event_mgr();
-    bool delegated_timers_exit = g_b_exit &&
+    // Poll-group sockets keep their timers in the group collection even in delegate mode.
+    // Unregister those timers before deleting the socket so the group cannot retain a stale
+    // pointer.
+    bool delegated_timers_exit = g_b_exit && !m_p_group &&
         (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
 
     if (p_event_mgr->is_running() && !delegated_timers_exit) {
@@ -1205,8 +1208,8 @@ unsigned sockinfo_tcp::tx_wait_threads_mode(loops_timer &send_timeout)
 
     // Terminals (!is_rts, exit) must be in pred: producers wake without sndbuf space.
     const blocking_wait::result r = blocking_wait::wait_until(
-        lock_adapter, waiter,
-        [this]() { return sndbuf_available() > 0 || g_b_exit || !is_rts(); }, timeout_ms);
+        lock_adapter, waiter, [this]() { return sndbuf_available() > 0 || g_b_exit || !is_rts(); },
+        timeout_ms);
 
     const unsigned sz = sndbuf_available();
     const tx_wait_outcome outcome = map_tx_wait_result(r, sz > 0, g_b_exit);
@@ -1580,10 +1583,9 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32
     NOT_IN_USE(tx_ctx);
 #endif /* DEFINED_UTLS */
 
-    rc = tcp_tx_express(&iov, 1, buf->lkey,
-                        XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE |
-                            XLIO_EXPRESS_TX_COMMITTED,
-                        buf);
+    rc = tcp_tx_express(
+        &iov, 1, buf->lkey,
+        XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE | XLIO_EXPRESS_TX_COMMITTED, buf);
     if (rc < 0) {
         /* TODO
          * tcp_tx_express() doesn't fail socket properly on ENOMEM. m_sock_state remains connected
@@ -2760,8 +2762,7 @@ int sockinfo_tcp::rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_tim
     // This conditions ensures that m_rx_pkt_ready_list.front() is not null later.
     if (m_rx_ready_byte_count < min_ready_bytes) {
         bool blocking = BLOCK_THIS_RUN(m_b_blocking, in_flags);
-        if ((!blocking && (errno = EAGAIN)) ||
-            (rx_sleep_wait(rcv_timeout, min_ready_bytes) < 1)) {
+        if ((!blocking && (errno = EAGAIN)) || (rx_sleep_wait(rcv_timeout, min_ready_bytes) < 1)) {
             int ret = handle_rx_error(blocking);
             if (__msg && ret == 0) {
                 /* We don't return a control message in this case. */
@@ -2877,7 +2878,8 @@ int sockinfo_tcp::rx_sleep_wait_poll(loops_timer &rcv_timeout, size_t min_ready_
 
     rmb(); // For the CPU to fetch m_rx_ready_byte_count which can be updated from another core.
 
-    if (m_rx_ready_byte_count < min_ready_bytes && prev_sndbuf == sndbuf_available()) { // Final check
+    if (m_rx_ready_byte_count < min_ready_bytes &&
+        prev_sndbuf == sndbuf_available()) { // Final check
         errno = EAGAIN;
         return -1;
     }
@@ -2957,16 +2959,31 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     }
 #endif
 
-    if (sock == this) {
-        L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
-    } else {
+    if (sock != this) {
         sock->m_tcp_con_lock.lock();
-        L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
+    }
+    L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
+
+    // Take the wake target from the PCB socket: a reused TIME_WAIT connection
+    // can receive the handshake directly through its existing steering rule.
+    sockinfo_tcp *parent_to_wake = sock->m_accept_parent_to_wake;
+    sock->m_accept_parent_to_wake = nullptr;
+    if (sock != this) {
         sock->m_tcp_con_lock.unlock();
     }
 
     m_iomux_ready_fd_array = nullptr;
     unlock_tcp_con();
+
+    if (parent_to_wake) {
+        // Both receive locks must be released: accept() harvests in the
+        // opposite order (parent then RSS child).
+        // Listener close waits for this worker's child-close job, so the
+        // parent remains alive until this RX callback has returned.
+        std::lock_guard<decltype(parent_to_wake->m_tcp_con_lock)> lock(
+            parent_to_wake->m_tcp_con_lock);
+        parent_to_wake->m_sock_wakeup_pipe.do_wakeup();
+    }
 
     return true;
 }
@@ -3225,6 +3242,8 @@ int sockinfo_tcp::connect_wait_threads_mode()
         },
         timeout_ms);
 
+    // The passthrough result is checked by map_connect_wait_result.
+    /* coverity[check_return] */
     const connect_wait_outcome outcome =
         map_connect_wait_result(r, m_conn_state == TCP_CONN_CONNECTED,
                                 m_conn_state == TCP_CONN_TIMEOUT, g_b_exit, isPassthrough());
@@ -4143,18 +4162,13 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
 
     conn->unlock_tcp_con();
 
-    // RSS child enqueue: child's do_wakeup does not reach the parent acceptor. Lock parent.
-    // Order: child then parent (sequential). Harvest is parent then child. No inversion.
-    if (conn->is_sockinfo_tcp_listen_rss_child()) {
-        sockinfo_tcp *parent = conn->m_listen_ctx->get_parent_listen_socket();
-        if (parent) {
-            parent->lock_tcp_con();
-            parent->m_sock_wakeup_pipe.do_wakeup();
-            parent->unlock_tcp_con();
-        }
-    }
-
     new_sock->lock_tcp_con();
+
+    // Defer the RSS parent wake until rx_input_cb() releases both receive
+    // locks. conn's unlock above may only drop a recursive acquisition.
+    if (conn->is_sockinfo_tcp_listen_rss_child()) {
+        new_sock->m_accept_parent_to_wake = conn->m_listen_ctx->get_parent_listen_socket();
+    }
 
     return ERR_OK;
 }
@@ -4281,6 +4295,14 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     IF_STATS_O(new_sock, print_full_stats(new_sock->m_p_socket_stats, nullptr, g_stats_file));
 
     new_sock->socket_stats_init();
+    /*
+     * socket_stats_init() clears the properties that are otherwise assigned only by
+     * the constructor, which doesn't run for a reused socket. It can also allocate a
+     * stats object here for a socket that found the pool exhausted at construction
+     * time. Restore the properties from the socket object in both cases.
+     */
+    IF_STATS_O(new_sock, new_sock->m_p_socket_stats->socket_type = SOCK_STREAM);
+    IF_STATS_O(new_sock, new_sock->m_p_socket_stats->b_is_offloaded = !new_sock->isPassthrough());
 
     new_sock->m_state = SOCKINFO_OPENED;
     new_sock->m_sock_state = TCP_SOCK_INITED;
@@ -4814,8 +4836,8 @@ int sockinfo_tcp::shutdown(int __how)
         // FIN behind queued SOCK_TX. App-thread tcp_shutdown() overtakes the tail.
         m_sock_wakeup_pipe.do_wakeup();
         unlock_tcp_con();
-        m_entity_context->add_job(entity_context::job_desc {
-            entity_context::JOB_TYPE_SOCK_SHUTDOWN, __how, this, nullptr, 0U, 0U});
+        m_entity_context->add_job(entity_context::job_desc {entity_context::JOB_TYPE_SOCK_SHUTDOWN,
+                                                            __how, this, nullptr, 0U, 0U});
         return 0;
     } else {
         err = tcp_shutdown(&m_pcb, shut_rx, shut_tx);
@@ -5532,7 +5554,10 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
         break;
     case SOL_SOCKET:
         switch (__optname) {
-        case SO_ERROR:
+        case SO_ERROR: {
+            // Read and clear only after the worker finishes publishing the
+            // connection result, even if readiness was already observed.
+            std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
             if (*__optlen >= sizeof(int)) {
                 *(int *)__optval = m_error_status;
                 si_tcp_logdbg("(SO_ERROR) status: %d", m_error_status);
@@ -5542,6 +5567,7 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                 errno = EINVAL;
             }
             break;
+        }
         case SO_REUSEADDR:
             if (*__optlen >= sizeof(int)) {
                 *(int *)__optval = m_pcb.so_options & SOF_REUSEADDR;

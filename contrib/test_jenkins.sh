@@ -104,6 +104,9 @@ i=0
 if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
     export jenkins_target="default"
     export prefix=${jenkins_test_custom_prefix}/${jenkins_target}
+    # No extra configure options: libdpcp is built from the bundled submodule
+    target_list[$i]="default:"
+    i=$((i+1))
 fi
 
 echo
@@ -114,7 +117,9 @@ if [ ! -e configure ] && [ -e autogen.sh ]; then
     ./autogen.sh -s
 fi
 
+target_processed=0
 for target_v in "${target_list[@]}"; do
+    target_processed=1
     ret=0
     IFS=':' read target_name target_option <<< "$target_v"
 
@@ -271,6 +276,11 @@ for target_v in "${target_list[@]}"; do
     fi
 
 done
+
+if [ "$target_processed" -eq 0 ]; then
+    echo "ERROR: No CI targets processed for TARGET=${TARGET}" >&2
+    exit 1
+fi
 
 rm -rf $WORKSPACE/config.cache
 

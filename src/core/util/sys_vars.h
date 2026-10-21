@@ -336,6 +336,7 @@ public:
 private:
     void get_app_name();
     void get_env_params();
+    void validate_config() const;
 
     void apply_config_from_registry();
     void print_xlio_load_failure_msg();

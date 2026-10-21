@@ -3818,6 +3818,11 @@ XLIO's internal thread or on each application thread.
 **Forced** when delegate: ring allocation per_thread
 (both directions), progress engine interval disabled.
 
+**Not supported** with worker threads
+([`performance.threading.worker_threads`](#performancethreadingworker_threads) > 0): XLIO exits
+at startup with an error. Worker threads already run the
+TCP timers of their sockets.
+
 **Sizing:** Default suits most applications. Use
 "delegate" only for busy-polling or epoll event loops
 with strict one-thread-per-socket ownership (trading,

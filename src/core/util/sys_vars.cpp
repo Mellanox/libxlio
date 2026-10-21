@@ -22,6 +22,7 @@
 #include <sys/utsname.h>
 #include <time.h>
 
+#include "core/config/config_var_definitions.h"
 #include "core/dev/buffer_pool.h"
 #include "core/dev/ib_ctx_handler_collection.h"
 #include "core/dev/net_device_table_mgr.h"
@@ -1900,6 +1901,21 @@ void mce_sys_var::get_app_name()
     fclose(fp);
 }
 
+void mce_sys_var::validate_config() const
+{
+    // In threads mode, socket TCP timers are already handled by their worker threads and not
+    // by the internal thread, so there is nothing to delegate.
+    if (is_threads_mode() &&
+        tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        vlog_printf(VLOG_ERROR,
+                    "Error: %s=delegate (%s) is not supported with %s > 0 (%s). "
+                    "Worker threads already run the TCP timers of their sockets.\n",
+                    CONFIG_VAR_TCP_CTL_THREAD.name, SYS_VAR_TCP_CTL_THREAD,
+                    CONFIG_VAR_WORKER_THREADS.name, SYS_VAR_WORKER_THREADS);
+        exit(-1);
+    }
+}
+
 void mce_sys_var::get_params()
 {
     get_app_name();
@@ -1920,6 +1936,8 @@ void mce_sys_var::get_params()
             exit(-1);
         }
     }
+
+    validate_config();
 
     // Capture library init time for tuning report duration calculation.
     // Placed after config init because get_env_params() bulk-zeroes members.

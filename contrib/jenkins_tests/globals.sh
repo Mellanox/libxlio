@@ -3,6 +3,8 @@
 main()
 {
 WORKSPACE=${WORKSPACE:=$(pwd)}
+source "$(dirname "${BASH_SOURCE[0]}")/git_safe_directory.sh"
+
 BUILD_NUMBER=${BUILD_NUMBER:=0}
 HOSTNAME=${HOSTNAME:=$(uname -n 2>/dev/null)}
 

@@ -129,7 +129,7 @@ rc=$(($rc+$?))
 
 
 # Worker Threads Mode test filter
-worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event*:-tcp_bind.mapped_ipv4_bind"
+worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event*:tcp_stream_integrity*:-tcp_bind.mapped_ipv4_bind"
 
 worker_threads_failures=()
 worker_threads_samples=0
