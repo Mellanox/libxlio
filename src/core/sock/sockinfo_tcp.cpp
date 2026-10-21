@@ -1047,6 +1047,35 @@ bool sockinfo_tcp::prepare_listen_to_close()
         close(new_sock->get_fd());
     }
 
+    // Lifetime: detach this listener's RX sink/flow at close, not at its (possibly
+    // deferred) destructor. A listener holds one reference per connection it has accepted
+    // (m_child_refs, the listener-lifetime fix), so a listener closed while any accepted
+    // connection is still open - the ordinary "close a busy listener" case for ANY app, not
+    // only reuse_port - has its destruction deferred until that last child closes. Until
+    // then its RFS sink stays registered on the ring. Under reuse_port that stale sink sits
+    // ahead of the replacement listener's sink in the ring's sink list and silently swallows
+    // new SYNs meant for the live listener (the co-sink overlap - lab-confirmed as 100%
+    // new-connection loss on the pinned worker until the child closes). For a single-listener
+    // app the same stale rule black-holes new SYNs to the closed address until the destructor.
+    // Detaching here routes new connections to the live listener at once (or, with no
+    // replacement, lets the kernel RST promptly instead of a silent drop) and bounds the HW
+    // steering rule + ring reference to close() rather than last-child-close.
+    // Safe to detach now: the loops above have already aborted and closed every
+    // m_syn_received / m_accepted_conns child, so no child handshake is in flight when the
+    // sink goes; and the two late listener callbacks (handle_incoming_handshake_failure via a
+    // child's m_parent, syn_received_timewait_cb via m_pcb.listen_sock - the latter already
+    // gated on SOCKINFO_CLOSING, set above) reach this socket by object pointer, not through
+    // this sink, so the deferred object free still serves them. The destructor's later
+    // shutdown_rx() re-walks an already-drained m_rx_flow_map / m_rx_nd_map and is a no-op.
+    bool has_live_children;
+    {
+        std::lock_guard<lock_spin> guard(m_child_refs_lock);
+        has_live_children = (m_child_refs > 0);
+    }
+    if (has_live_children) {
+        shutdown_rx();
+    }
+
     return true;
 }
 
