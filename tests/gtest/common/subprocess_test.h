@@ -79,6 +79,20 @@ protected:
     }
 
     /**
+     * True when @p ip can be an XLIO-offloadable endpoint address: not empty,
+     * not the IPv4/IPv6 any-address and not loopback (XLIO serves those on the
+     * kernel path by design, so a test that must prove offload skips them).
+     * String comparison is sufficient because callers pass canonical
+     * inet_ntop() output (sys_addr2str). IPv4-mapped IPv6 literals
+     * ("::ffff:...") are deliberately not rejected here.
+     */
+    static bool addr_offloadable(const std::string &ip)
+    {
+        return !(ip.empty() || ip == "0.0.0.0" || ip == "::" || ip == "::1" ||
+                 ip.rfind("127.", 0) == 0);
+    }
+
+    /**
      * Run @p cmd, redirecting stdout+stderr to @p output_file.
      * Throws std::runtime_error on non-zero exit to fail the test with
      * diagnostic output.
