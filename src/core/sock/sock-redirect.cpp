@@ -38,6 +38,7 @@
 #include <sock/sockinfo_udp.h>
 
 #include "fd_collection.h"
+#include "tuning_report_printer.h"
 #include "util/instrumentation.h"
 
 using namespace std;
@@ -2110,8 +2111,23 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
         if (g_p_app && g_p_app->type == APP_ENVOY) {
             rc = g_p_app->proc_envoy(__op, __fd);
             if (rc != 0) {
-                errno = EINVAL;
-                return -1;
+                /* proc_envoy() returns non-zero only for a listen fd it tracks
+                 * that it could not prepare for offload. XLIO is an acceleration
+                 * library and must never silently drop such a listener: fall
+                 * through to register it on the kernel epoll so accept() keeps
+                 * working on the non-offloaded path. Degrade loudly so the lost
+                 * acceleration is visible rather than a silent EINVAL black-hole. */
+                if (__op == EPOLL_CTL_ADD) {
+                    g_tuning_report_counters.n_envoy_listen_passthrough.fetch_add(
+                        1, std::memory_order_relaxed);
+                    vlog_printf(VLOG_WARNING,
+                                "could not offload Envoy listen fd=%d; registered on "
+                                "kernel epoll, acceleration lost\n",
+                                __fd);
+                } else {
+                    errno = EINVAL;
+                    return -1;
+                }
             }
         }
 #endif /* DEFINED_ENVOY */

@@ -14,6 +14,9 @@ struct tuning_report_counters_t {
     std::atomic<uint64_t> socket_offloaded_destructor_counter {0};
     std::atomic<uint64_t> socket_non_offloaded_destructor_counter {0};
     std::atomic<uint32_t> tcp_timer_consecutive_skips_max {0};
+    // Count of Envoy listen fds that could not be offloaded and were registered
+    // on the kernel epoll instead (acceleration lost for that listener).
+    std::atomic<uint64_t> n_envoy_listen_passthrough {0};
 };
 
 extern tuning_report_counters_t g_tuning_report_counters;
