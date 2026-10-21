@@ -1008,6 +1008,13 @@ void sockinfo_tcp::child_ref_release()
     }
 }
 
+/* True while any accepted/cloned child of this listener is still alive */
+bool sockinfo_tcp::has_live_children()
+{
+    std::lock_guard<lock_spin> guard(m_child_refs_lock);
+    return m_child_refs > 0;
+}
+
 bool sockinfo_tcp::prepare_listen_to_close()
 {
     // assume locked by sockinfo_tcp lock
@@ -1042,6 +1049,17 @@ bool sockinfo_tcp::prepare_listen_to_close()
         new_sock->abort_connection();
         new_sock->unlock_tcp_con();
         close(new_sock->get_fd());
+    }
+
+    // Detach the RX sink now, not at the (possibly deferred) destructor: with
+    // live children holding references, a stale sink left on the ring until the
+    // destructor swallows new SYNs ahead of a reuse_port replacement listener
+    // (the co-sink overlap) or black-holes the closed address. Safe here: every
+    // m_syn_received / m_accepted_conns child was closed above, and the two
+    // late listener callbacks reach this socket by object pointer, not through
+    // this sink. The destructor's shutdown_rx() re-walk is then a no-op.
+    if (has_live_children()) {
+        shutdown_rx();
     }
 
     return true;

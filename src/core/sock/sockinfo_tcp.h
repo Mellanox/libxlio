@@ -184,6 +184,7 @@ private:
     void child_ref_release();
     bool request_child_delete();
     bool release_child_ref();
+    bool has_live_children();
     void perform_deferred_delete();
 
 public:
