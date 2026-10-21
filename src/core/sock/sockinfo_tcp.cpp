@@ -818,6 +818,18 @@ void sockinfo_tcp::err_lwip_cb_xlio_socket(void *pcb_container, err_t err)
 sockinfo_tcp::~sockinfo_tcp()
 {
     si_tcp_logfunc("");
+
+    // Release the listener reference this child took in clone_conn_cb, via the
+    // stable m_pcb.listen_sock anchor, before any member teardown. A listener's
+    // own m_pcb.listen_sock is nullptr (set only on cloned children), so a
+    // listener never releases a ref on itself. If this was the listener's last
+    // outstanding child and its delete was already requested, the parent frees
+    // itself here (child_ref_release() drops the dedicated refcount lock before
+    // the delete).
+    if (m_pcb.listen_sock) {
+        reinterpret_cast<sockinfo_tcp *>(m_pcb.listen_sock)->child_ref_release();
+    }
+
     g_global_stat_static.socket_tcp_destructor_counter.fetch_add(1, std::memory_order_relaxed);
     if (isPassthrough()) {
         g_tuning_report_counters.socket_non_offloaded_destructor_counter.fetch_add(
@@ -929,12 +941,33 @@ void sockinfo_tcp::clean_socket_obj()
     lock_tcp_con();
 
     if (is_cleaned()) {
+        unlock_tcp_con();
         return;
     }
     m_is_cleaned = true;
 
     unlock_tcp_con();
 
+    // A cloned child may still be running a data-path callback
+    // (handle_incoming_handshake_failure or syn_received_timewait_cb) that locks
+    // this listen (parent) socket. Each live child holds a reference (see
+    // m_child_refs). Request the delete; if any child still holds a ref, defer it
+    // and let the last child_ref_release() perform it - otherwise that parent lock
+    // would land on freed memory. The dedicated lock makes exactly one of
+    // {this call, the last release} the deleter.
+    bool do_delete;
+    {
+        std::lock_guard<lock_spin> guard(m_child_refs_lock);
+        m_child_delete_requested = true;
+        do_delete = (m_child_refs == 0);
+    }
+    if (do_delete) {
+        perform_deferred_delete();
+    }
+}
+
+void sockinfo_tcp::perform_deferred_delete()
+{
     event_handler_manager *p_event_mgr = get_event_mgr();
     // Poll-group sockets keep their timers in the group collection even in delegate mode.
     // Unregister those timers before deleting the socket so the group cannot retain a stale
@@ -946,6 +979,35 @@ void sockinfo_tcp::clean_socket_obj()
         p_event_mgr->unregister_socket_timer_and_delete(this);
     } else {
         delete this;
+    }
+}
+
+void sockinfo_tcp::child_ref_acquire()
+{
+    std::lock_guard<lock_spin> guard(m_child_refs_lock);
+    ++m_child_refs;
+    // A listener never has 2^32 concurrent children; a wrap here would mean a
+    // missed release, so catch it in debug rather than corrupt the count.
+    assert(m_child_refs != 0 && "sockinfo_tcp child refcount overflow");
+}
+
+void sockinfo_tcp::child_ref_release()
+{
+    // The child's ref (added in clone_conn_cb) kept this parent alive, so 'this'
+    // is valid on entry. m_child_refs_lock is a dedicated leaf: the caller (the
+    // child destructor) may hold the child lock, and this lock is never held
+    // across another, so it cannot invert the parent->child order used elsewhere.
+    bool do_delete;
+    {
+        std::lock_guard<lock_spin> guard(m_child_refs_lock);
+        assert(m_child_refs != 0 && "sockinfo_tcp child refcount underflow");
+        --m_child_refs;
+        do_delete = (m_child_refs == 0) && m_child_delete_requested;
+    }
+    // WARNING: perform_deferred_delete() may 'delete this'. The lock above is a
+    // member of 'this' and is already released; no member may be touched below.
+    if (do_delete) {
+        perform_deferred_delete();
     }
 }
 
@@ -4248,7 +4310,17 @@ err_t sockinfo_tcp::clone_conn_cb(void *arg, struct tcp_pcb **newpcb)
         new_sock->m_pcb.my_container = (void *)new_sock;
         /* XXX We have to search for correct listen socket every time,
          * because the listen socket may be closed and reopened. */
+        /* m_pcb.listen_sock is the write-once lifetime anchor for this child's one
+         * reference on the listener; a fresh child must not already carry one. */
+        assert(new_sock->m_pcb.listen_sock == nullptr &&
+               "listen_sock must be write-once per child incarnation");
         new_sock->m_pcb.listen_sock = (void *)conn;
+        // Pin the listener for this child's whole lifetime. m_pcb.listen_sock is
+        // the stable anchor (stamped once here, never cleared); the matching
+        // release is in ~sockinfo_tcp(). This keeps the listener alive for both
+        // the handshake-failure (m_parent) and TIME_WAIT-reuse (listen_sock)
+        // data-path callbacks.
+        conn->child_ref_acquire();
     } else {
         ret_val = ERR_MEM;
     }
@@ -4272,6 +4344,20 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     sockinfo_tcp *listen_sock = (sockinfo_tcp *)((arg));
 
     if (unlikely(!listen_sock || !newpcb)) {
+        return ERR_VAL;
+    }
+
+    // The child that armed this TIME_WAIT reuse holds a reference on the listener
+    // (see m_child_refs), so reading listen_sock here is safe even up to 2MSL
+    // after the listener's close(). If the listener has since begun tearing down,
+    // do not admit a new connection into a dead listener: drop the reuse (lwip
+    // returns this rc up tcp_pcb_reuse and discards the SYN, RFC 6191).
+    // The m_state read is an unlocked best-effort admission check; the reference,
+    // not this read, is the lifetime guarantee. A listener that flips to CLOSING
+    // in the tiny window before the lock below just drops the reuse one round
+    // later and the child is still reaped via its own close path - no UAF.
+    if (unlikely(listen_sock->m_state == SOCKINFO_CLOSING ||
+                 listen_sock->m_state == SOCKINFO_CLOSED)) {
         return ERR_VAL;
     }
 

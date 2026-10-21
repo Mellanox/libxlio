@@ -175,6 +175,21 @@ public:
 
     void clean_socket_obj() override;
 
+private:
+    // Listener reference count: a cloned child acquires one ref at clone_conn_cb
+    // and releases it in ~sockinfo_tcp(), via its write-once m_pcb.listen_sock
+    // anchor, so the listener cannot be freed while a data-path callback
+    // (handshake-failure or TIME_WAIT reuse) still locks it. The count is guarded
+    // by a dedicated leaf spinlock (m_child_refs_lock), never held across another
+    // lock, so it cannot cause a child->parent lock-order inversion.
+    // perform_deferred_delete() is the delete tail of clean_socket_obj(), run by
+    // whichever of {clean_socket_obj, the last release} observes
+    // (m_child_refs == 0 && a delete was requested).
+    void child_ref_acquire();
+    void child_ref_release();
+    void perform_deferred_delete();
+
+public:
     void setPassthrough(bool _isPassthrough)
     {
         m_sock_offload = _isPassthrough ? TCP_SOCK_PASSTHROUGH : TCP_SOCK_LWIP;
@@ -717,6 +732,21 @@ private:
     // second call to failed connect blocking socket.
     bool report_connected;
     bool m_is_cleaned = false; // If this socket registered deletion on internal thread.
+    // Listener reference count: every cloned child holds one reference on its
+    // listen (parent) socket, from clone_conn_cb() to ~sockinfo_tcp() (anchored on
+    // its write-once m_pcb.listen_sock), so the listener cannot be freed while a
+    // data-path callback (handshake-failure via m_parent, or TIME_WAIT reuse via
+    // listen_sock) still locks it. Guarded by a dedicated leaf spinlock taken only
+    // for the few instructions in child_ref_acquire/release() and
+    // clean_socket_obj(), never while holding another lock, so it cannot join the
+    // parent<->child lock-order inversion. clean_socket_obj() sets
+    // m_child_delete_requested; whichever of {clean_socket_obj, the last release}
+    // observes (m_child_refs == 0 && delete requested) runs
+    // perform_deferred_delete() after dropping the lock. The count stays 0 for
+    // non-cloned sockets (clients and listeners have m_pcb.listen_sock == nullptr).
+    lock_spin m_child_refs_lock {"tcp_child_refs"};
+    uint32_t m_child_refs = 0;
+    bool m_child_delete_requested = false;
     bool m_worker_close_routed = false; // under lock: one close job per incarnation
     int m_error_status;
 
