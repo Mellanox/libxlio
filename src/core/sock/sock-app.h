@@ -153,6 +153,10 @@ struct app_conf {
 };
 
 extern struct app_conf *g_p_app;
+
+/* Count one listener that lost acceleration and warn (shared by the degrade
+ * paths in sock-app.cpp and the epoll_ctl() interposer fallback) */
+void app_account_listen_passthrough(int listen_fd, const char *reason);
 #endif
 
 #endif /* _SOCK_APP_H_ */

@@ -2103,8 +2103,16 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
         if (g_p_app && g_p_app->type == APP_ENVOY) {
             rc = g_p_app->proc_envoy(__op, __fd);
             if (rc != 0) {
-                errno = EINVAL;
-                return -1;
+                /* proc_envoy() could not prepare this tracked listen fd for
+                 * offload. Never fail the ADD (a silent EINVAL black-holes the
+                 * listener): fall through so the fd registers on the kernel
+                 * epoll and serves unaccelerated, loudly. */
+                if (__op == EPOLL_CTL_ADD) {
+                    app_account_listen_passthrough(__fd, "worker init failed");
+                } else {
+                    errno = EINVAL;
+                    return -1;
+                }
             }
         }
 #endif /* DEFINED_ENVOY */

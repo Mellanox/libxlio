@@ -286,6 +286,12 @@ bool tuning_report_has_errors()
         }
     }
 
+    // A listener that could not be offloaded fell back to the kernel path
+    // (lost acceleration) - surface it so the default AUTO report prints.
+    if (g_tuning_report_counters.n_listen_passthrough.load(std::memory_order_relaxed) > 0) {
+        return true;
+    }
+
     return false;
 }
 
@@ -977,6 +983,18 @@ static void write_socket_summary(FILE *f, const aggregated_socket_stats &agg)
     if (agg.non_offloaded > 0 && agg.total_sockets > 0) {
         fprintf(f, "  # WARNING: %" PRIu64 "/%" PRIu64 " sockets are non-offloaded\n",
                 agg.non_offloaded, agg.total_sockets);
+    }
+
+    // Listen fds that fell back to the kernel path because they could not be
+    // offloaded (acceleration lost for those listeners). Printed only when
+    // non-zero; each error occurrence also warns at the time of the fallback.
+    uint64_t listen_passthrough =
+        g_tuning_report_counters.n_listen_passthrough.load(std::memory_order_relaxed);
+    if (listen_passthrough > 0) {
+        fprintf(f,
+                "listen_passthrough: %" PRIu64
+                " # listen fds served on the kernel path (acceleration lost)\n",
+                listen_passthrough);
     }
 
     // Traffic split by offload status — only available with per-socket stats
