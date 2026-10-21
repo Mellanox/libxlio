@@ -175,6 +175,18 @@ public:
 
     void clean_socket_obj() override;
 
+private:
+    // Listener child-reference machinery; see the m_child_refs contract below.
+    // perform_deferred_delete() is the delete tail of clean_socket_obj(), run by
+    // whichever of {clean_socket_obj, the last release} observes
+    // (m_child_refs == 0 && a delete was requested).
+    void child_ref_acquire();
+    void child_ref_release();
+    bool request_child_delete();
+    bool release_child_ref();
+    void perform_deferred_delete();
+
+public:
     void setPassthrough(bool _isPassthrough)
     {
         m_sock_offload = _isPassthrough ? TCP_SOCK_PASSTHROUGH : TCP_SOCK_LWIP;
@@ -717,6 +729,16 @@ private:
     // second call to failed connect blocking socket.
     bool report_connected;
     bool m_is_cleaned = false; // If this socket registered deletion on internal thread.
+    // Listener reference count: every cloned child holds one reference on its
+    // listen (parent) socket, from clone_conn_cb() to ~sockinfo_tcp() (anchored
+    // on its write-once m_pcb.listen_sock), so the listener cannot be freed
+    // while a data-path callback (handshake-failure via m_parent, or TIME_WAIT
+    // reuse via listen_sock) still locks it. m_child_refs_lock is a dedicated
+    // leaf spinlock, never held across another lock. The count stays 0 for
+    // non-cloned sockets (their m_pcb.listen_sock is nullptr).
+    lock_spin m_child_refs_lock {"tcp_child_refs"};
+    uint32_t m_child_refs = 0;
+    bool m_child_delete_requested = false;
     bool m_worker_close_routed = false; // under lock: one close job per incarnation
     int m_error_status;
 
