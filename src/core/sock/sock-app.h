@@ -9,6 +9,7 @@
 
 #include <core/util/sys_vars.h>
 #include <core/util/utils.h>
+#include <core/util/sock_addr.h>
 #include <utils/lock_wrapper.h>
 
 #include <vlogger/vlogger.h>
@@ -27,6 +28,19 @@ extern map_udp_reuse_port_t g_map_udp_resue_port;
 class sockinfo;
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+/* Snapshot of the parent listen socket's properties, captured by the dup()
+ * intercept on Envoy's main thread while the parent is still alive. init_worker()
+ * clones the child listener from this snapshot on the worker thread, so the clone
+ * never dereferences the (possibly already freed) draining parent sockinfo. */
+struct dup_listen_snapshot {
+    sock_addr sa;
+    socklen_t sa_len = 0;
+    sa_family_t family = AF_UNSPEC;
+    bool is_ipv6only = false;
+    bool is_blocking = true;
+    int back_log = 0;
+};
+
 struct app_conf {
     app_type_t type;
     /* Lock-order contract: m_map_lock is a leaf protecting the maps and
@@ -47,8 +61,12 @@ struct app_conf {
     std::unordered_map<int, pid_t> map_listen_fd;
     /* Associate thread(process) with unique identifier */
     std::unordered_map<pid_t, int> map_thread_id;
-    /* Store duplicated fdwith related original fd */
+    /* Store duplicated fd with related original fd (a parent maps to itself) */
     std::unordered_map<int, int> map_dup_fd;
+    /* Clone-source snapshot for a duplicated child fd, keyed by the child fd.
+     * Present only when captured at dup() time (TCP reuse_port parent):
+     * presence in this map IS the snapshot's validity. */
+    std::unordered_map<int, dup_listen_snapshot> map_dup_listen;
     /* Collection of unused unique identifiers limited by workers_num */
     std::set<int> unused_worker_id;
     void *context;
@@ -71,6 +89,7 @@ struct app_conf {
         map_listen_fd.clear();
         map_thread_id.clear();
         map_dup_fd.clear();
+        map_dup_listen.clear();
         unused_worker_id.clear();
         context = nullptr;
 
@@ -110,6 +129,19 @@ struct app_conf {
      * enable_reuse_port=false ordering gate and publish the fd->tid and
      * tid->worker-id mappings, all under m_map_lock */
     int assign_worker_and_publish(int fd, sockinfo *si);
+    /* True when a clone-source snapshot was captured for this dup'd fd */
+    bool has_dup_snapshot(int fd);
+    /* Copy the dup-tracking state for fd out under m_map_lock (the writer is
+     * the dup() intercept; readers run without m_map_lock, a leaf lock).
+     * Returns the parent fd, or -1 when fd is not tracked; has_snap says
+     * whether snap was filled from a captured snapshot. */
+    int lookup_dup(int fd, dup_listen_snapshot &snap, bool &has_snap);
+    /* Record fd as a dup of parent_fd - and parent_fd as its own original -
+     * with the clone-source snapshot when one was captured (snap may be
+     * null); one critical section so a reader never sees a torn state */
+    void register_dup(int fd, int parent_fd, const dup_listen_snapshot *snap);
+    /* Authoritative dup-state teardown for an fd (the handle_close() path) */
+    void forget_fd(int fd);
 
 #if defined(DEFINED_NGINX)
     int proc_nginx();
