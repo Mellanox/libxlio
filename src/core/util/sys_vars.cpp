@@ -22,6 +22,7 @@
 #include <sys/utsname.h>
 #include <time.h>
 
+#include "core/config/config_var_definitions.h"
 #include "core/dev/buffer_pool.h"
 #include "core/dev/ib_ctx_handler_collection.h"
 #include "core/dev/net_device_table_mgr.h"
@@ -48,6 +49,7 @@
 #include "core/util/instrumentation.h"
 
 #include "core/config/config_registry.h"
+#include "core/config/string_utils.h"
 #include "core/config/runtime_registry.h"
 #include "core/config/descriptor_providers/json_descriptor_provider.h"
 #include "core/config/loaders/inline_loader.h"
@@ -847,6 +849,7 @@ void mce_sys_var::get_env_params()
     offloaded_sockets = MCE_DEFAULT_OFFLOADED_SOCKETS;
     timer_resolution_msec = MCE_DEFAULT_TIMER_RESOLUTION_MSEC;
     tcp_timer_resolution_msec = MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC;
+    tcp_rto_floor_msec = MCE_DEFAULT_TCP_RTO_FLOOR_MSEC;
     tcp_ctl_thread = MCE_DEFAULT_TCP_CTL_THREAD;
     tcp_ts_opt = MCE_DEFAULT_TCP_TIMESTAMP_OPTION;
     tcp_nodelay = MCE_DEFAULT_TCP_NODELAY;
@@ -1177,7 +1180,11 @@ void mce_sys_var::get_env_params()
         tx_num_wr_to_signal =
             std::min<uint32_t>(NUM_TX_WRE_TO_SIGNAL_MAX, std::max(1, atoi(env_ptr)));
     }
-    if (tx_num_wr <= (tx_num_wr_to_signal * 2)) {
+    if (tx_num_wr < (tx_num_wr_to_signal * 2)) {
+        vlog_printf(VLOG_WARNING,
+                    SYS_VAR_TX_NUM_WRE "=%d must be at least " SYS_VAR_TX_NUM_WRE_TO_SIGNAL
+                                       " * 2 (%d). Increasing to %d\n",
+                    tx_num_wr, tx_num_wr_to_signal * 2, tx_num_wr_to_signal * 2);
         tx_num_wr = tx_num_wr_to_signal * 2;
     }
 
@@ -1277,7 +1284,11 @@ void mce_sys_var::get_env_params()
                     MAX_MLX5_CQ_SIZE_ITEMS, rx_num_wr);
     }
 
-    if (rx_num_wr <= (rx_num_wr_to_post_recv * 2)) {
+    if (rx_num_wr < (rx_num_wr_to_post_recv * 2)) {
+        vlog_printf(VLOG_WARNING,
+                    SYS_VAR_RX_NUM_WRE "=%d must be at least " SYS_VAR_RX_NUM_WRE_TO_POST_RECV
+                                       " * 2 (%d). Increasing to %d\n",
+                    rx_num_wr, rx_num_wr_to_post_recv * 2, rx_num_wr_to_post_recv * 2);
         rx_num_wr = rx_num_wr_to_post_recv * 2;
     }
 
@@ -1522,11 +1533,55 @@ void mce_sys_var::get_env_params()
     }
 
     if ((env_ptr = getenv(SYS_VAR_TIMER_RESOLUTION_MSEC))) {
-        timer_resolution_msec = atoi(env_ptr);
+        long long value = strtoll(env_ptr, nullptr, 10);
+        if (value < MCE_MIN_TIMER_RESOLUTION_MSEC) {
+            vlog_printf(VLOG_WARNING,
+                        "Timer resolution [%s=%s] must be greater than zero. Using default [%d].\n",
+                        SYS_VAR_TIMER_RESOLUTION_MSEC, env_ptr, MCE_DEFAULT_TIMER_RESOLUTION_MSEC);
+            timer_resolution_msec = MCE_DEFAULT_TIMER_RESOLUTION_MSEC;
+        } else if (value > MCE_MAX_TIMER_RESOLUTION_MSEC) {
+            vlog_printf(VLOG_WARNING,
+                        "Timer resolution [%s=%s] exceeds maximum %d. "
+                        "Setting timer resolution to %d msec.\n",
+                        SYS_VAR_TIMER_RESOLUTION_MSEC, env_ptr, MCE_MAX_TIMER_RESOLUTION_MSEC,
+                        MCE_MAX_TIMER_RESOLUTION_MSEC);
+            timer_resolution_msec = MCE_MAX_TIMER_RESOLUTION_MSEC;
+        } else {
+            timer_resolution_msec = static_cast<uint32_t>(value);
+        }
     }
 
     if ((env_ptr = getenv(SYS_VAR_TCP_TIMER_RESOLUTION_MSEC))) {
-        tcp_timer_resolution_msec = atoi(env_ptr);
+        long long value = strtoll(env_ptr, nullptr, 10);
+        if (value < 0) {
+            vlog_printf(VLOG_WARNING,
+                        "TCP timer resolution [%s=%s] cannot be negative. Using default [%d].\n",
+                        SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, env_ptr,
+                        MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC);
+            tcp_timer_resolution_msec = MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC;
+        } else if (value > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC) {
+            vlog_printf(VLOG_WARNING,
+                        "TCP timer resolution [%s=%s] exceeds maximum %d. "
+                        "Setting TCP timer resolution to %d msec.\n",
+                        SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, env_ptr,
+                        MCE_MAX_TCP_TIMER_RESOLUTION_MSEC, MCE_MAX_TCP_TIMER_RESOLUTION_MSEC);
+            tcp_timer_resolution_msec = MCE_MAX_TCP_TIMER_RESOLUTION_MSEC;
+        } else {
+            tcp_timer_resolution_msec = static_cast<uint32_t>(value);
+        }
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_TCP_RTO_FLOOR_MSEC))) {
+        uint32_t parsed_floor_msec;
+        if (string_utils::parse_uint32_decimal(env_ptr, parsed_floor_msec)) {
+            tcp_rto_floor_msec = parsed_floor_msec;
+        } else {
+            vlog_printf(VLOG_WARNING,
+                        "TCP RTO floor [%s=%s] is not an unsigned decimal 32-bit value. "
+                        "Using default [%u] msec.\n",
+                        SYS_VAR_TCP_RTO_FLOOR_MSEC, env_ptr, MCE_DEFAULT_TCP_RTO_FLOOR_MSEC);
+            tcp_rto_floor_msec = MCE_DEFAULT_TCP_RTO_FLOOR_MSEC;
+        }
     }
 
     if ((env_ptr = getenv(SYS_VAR_TCP_CTL_THREAD))) {
@@ -1596,6 +1651,24 @@ void mce_sys_var::get_env_params()
                     SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec,
                     SYS_VAR_TIMER_RESOLUTION_MSEC, timer_resolution_msec, timer_resolution_msec);
         tcp_timer_resolution_msec = timer_resolution_msec;
+    }
+    if (tcp_timer_resolution_msec > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC) {
+        vlog_printf(VLOG_WARNING,
+                    "TCP timer resolution [%s=%u] exceeds maximum %d. "
+                    "Setting TCP timer resolution to %d msec.\n",
+                    SYS_VAR_TCP_TIMER_RESOLUTION_MSEC, tcp_timer_resolution_msec,
+                    MCE_MAX_TCP_TIMER_RESOLUTION_MSEC, MCE_MAX_TCP_TIMER_RESOLUTION_MSEC);
+        tcp_timer_resolution_msec = MCE_MAX_TCP_TIMER_RESOLUTION_MSEC;
+    }
+
+    if (tcp_rto_floor_msec < MCE_MIN_TCP_RTO_FLOOR_MSEC ||
+        tcp_rto_floor_msec > MCE_MAX_TCP_RTO_FLOOR_MSEC) {
+        vlog_printf(VLOG_WARNING,
+                    "TCP RTO floor [%s=%u] is out of range [%u, %u]. "
+                    "Using default [%u] msec.\n",
+                    SYS_VAR_TCP_RTO_FLOOR_MSEC, tcp_rto_floor_msec, MCE_MIN_TCP_RTO_FLOOR_MSEC,
+                    MCE_MAX_TCP_RTO_FLOOR_MSEC, MCE_DEFAULT_TCP_RTO_FLOOR_MSEC);
+        tcp_rto_floor_msec = MCE_DEFAULT_TCP_RTO_FLOOR_MSEC;
     }
 
     if ((env_ptr = getenv(SYS_VAR_INTERNAL_THREAD_CPUSET))) {
@@ -1833,6 +1906,21 @@ void mce_sys_var::get_app_name()
     fclose(fp);
 }
 
+void mce_sys_var::validate_config() const
+{
+    // In threads mode, socket TCP timers are already handled by their worker threads and not
+    // by the internal thread, so there is nothing to delegate.
+    if (is_threads_mode() &&
+        tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS) {
+        vlog_printf(VLOG_ERROR,
+                    "Error: %s=delegate (%s) is not supported with %s > 0 (%s). "
+                    "Worker threads already run the TCP timers of their sockets.\n",
+                    CONFIG_VAR_TCP_CTL_THREAD.name, SYS_VAR_TCP_CTL_THREAD,
+                    CONFIG_VAR_WORKER_THREADS.name, SYS_VAR_WORKER_THREADS);
+        exit(-1);
+    }
+}
+
 void mce_sys_var::get_params()
 {
     get_app_name();
@@ -1854,6 +1942,8 @@ void mce_sys_var::get_params()
         }
     }
 
+    validate_config();
+
     // Capture library init time for tuning report duration calculation.
     // Placed after config init because get_env_params() bulk-zeroes members.
     // CLOCK_MONOTONIC is immune to NTP adjustments.
@@ -1863,7 +1953,6 @@ void mce_sys_var::get_params()
 void mce_sys_var::fixup_params()
 {
     if (is_threads_mode()) {
-        select_poll_num = -1;
         progress_engine_interval_msec = 0;
     }
 }

@@ -20,6 +20,7 @@
 #include "utils/rdtsc.h"
 #include "vlogger/vlogger.h"
 #include "core/proto/mem_buf_desc.h"
+#include "core/proto/xlio_cache.h"
 #include "core/util/xlio_exception.h"
 
 #ifndef ARRAY_SIZE
@@ -28,8 +29,7 @@
 
 #define FILE_NAME_MAX_SIZE (NAME_MAX + 1)
 
-#define PADDING(x)     uint8_t __explicit_padding[x]
-#define CACHELINE_SIZE 64
+#define PADDING(x) uint8_t __explicit_padding[x]
 #define BOUNDARY_SIZE_ASSERT(type, boundary)                                                       \
     static_assert(                                                                                 \
         (offsetof(type, __explicit_padding) + sizeof(type::__explicit_padding)) % (boundary) == 0, \

@@ -34,11 +34,15 @@ while test "$1" != ""; do
             arg_deb="$2"
             arg_rpm="${arg_deb/=/ }"
             opt_exports="$opt_exports :$arg_deb";
-            opt_defines="$opt_defines --define='$arg_rpm'";
             if [[ $arg_deb =~ ^configure_options[[:blank:]]*= ]]; then
                 shopt -s extglob
                 opt_conf_val="${arg_deb##configure_options*([[:blank:]])=}"
+                # RPM rejects empty macro bodies; %{nil} preserves empty options.
+                if [[ ! "$opt_conf_val" =~ [^[:space:]] ]]; then
+                    arg_rpm="configure_options %{nil}"
+                fi
             fi
+            opt_defines="$opt_defines --define='$arg_rpm'";
             shift
             ;;
         *)
@@ -98,7 +102,7 @@ echo ${pkg_label} "Putting output at ${pkg_outdir} ..."
 
 if [ -n "$opt_co" -a "$rc" -eq 0 ]; then
     echo ${pkg_label} "Getting ${opt_co} from ${pkg_url} ..."
-    git clone -b "$opt_co" --depth=1 ${pkg_url} ${pkg_indir}
+    git clone -b "$opt_co" --depth=1 --recurse-submodules ${pkg_url} ${pkg_indir}
     rc=$?
 fi
 
@@ -130,6 +134,11 @@ fi
 
 if [ ! -f ${pkg_tarball} ]; then
     echo ${pkg_label} echo "Failure: tarball does not exist at $PWD current rc=$rc (see: ${pkg_log})"
+    exit 1
+fi
+
+if ! tar -tzf ${pkg_tarball} | grep -q '/submodules/libdpcp/CMakeLists.txt$'; then
+    echo ${pkg_label} "Failure: tarball does not contain the bundled libdpcp sources (see: ${pkg_log})"
     exit 1
 fi
 

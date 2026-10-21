@@ -1,4 +1,4 @@
-noinst_PROGRAMS = gtest
+noinst_PROGRAMS = gtest ultra_api_connect_helper
 
 # google test shows some warnings that are suppressed
 AM_CXXFLAGS = \
@@ -58,7 +58,8 @@ EXTRA_DIST = \
 	googletest/include \
 	googletest/src \
 	googletest/README.md \
-	googletest/LICENSE
+	googletest/LICENSE \
+	xlio_ultra_api/config-ultra-api-delegate.json
 
 libgtest_la_SOURCES = \
 	googletest/src/gtest-all.cc \
@@ -73,6 +74,7 @@ gtest_CPPFLAGS = \
 	-I$(top_srcdir)/src/core \
 	-I$(top_srcdir)/tests/gtest \
 	-I$(top_srcdir)/tests/gtest/googletest/include \
+	-DGTEST_BUILDDIR=\"$(abs_builddir)\" \
 	$(AM_CPPFLAGS)
 
 gtest_LDFLAGS = -no-install
@@ -112,6 +114,7 @@ gtest_SOURCES = \
 	tcp/tcp_sendfile.cc \
 	tcp/tcp_socket.cc \
 	tcp/tcp_sockopt.cc \
+	tcp/tcp_stream_integrity.cc \
 	tcp/tcp_tls.cc \
 	\
 	udp/udp_socket.cc \
@@ -125,6 +128,8 @@ gtest_SOURCES = \
 	core/sigaction.cc \
 	core/xlio_base.cc \
 	core/xlio_sockopt.cc \
+	core/blocking_wait_test.cc \
+	core/blocking_wait_results_test.cc \
 	\
 	xlio_ultra_api/xlio_socket.cc \
 	xlio_ultra_api/xlio_socket_listen_connect.cc \
@@ -132,7 +137,9 @@ gtest_SOURCES = \
 	xlio_ultra_api/xlio_socket_migrate_2.cc \
 	xlio_ultra_api/xlio_socket_send_receive.cc \
 	xlio_ultra_api/xlio_socket_send_receive_2.cc \
-	xlio_ultra_api/xlio_socket_send_receive_full_sq.cc
+	xlio_ultra_api/xlio_socket_send_receive_full_sq.cc \
+	xlio_ultra_api/xlio_socket_worker_threads.cc \
+	xlio_ultra_api/xlio_socket_delegate_exit.cc
 
 noinst_HEADERS = \
 	common/tap.h \
@@ -140,6 +147,7 @@ noinst_HEADERS = \
 	common/sys.h \
 	common/log.h \
 	common/cmn.h \
+	common/subprocess_test.h \
 	\
 	common/base.h \
 	\
@@ -156,3 +164,8 @@ noinst_HEADERS = \
 gtest_DEPENDENCIES = \
 	libgtest.la
 
+# Helper binary for Ultra API connect tests that require a fresh XLIO process
+ultra_api_connect_helper_SOURCES = xlio_ultra_api/ultra_api_connect_helper.c
+ultra_api_connect_helper_CPPFLAGS = -I$(top_srcdir)/src/core
+ultra_api_connect_helper_CFLAGS = -Wall
+ultra_api_connect_helper_LDFLAGS = -no-install

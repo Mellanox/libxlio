@@ -207,6 +207,11 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
         fprintf(filename, "Retransmissions: %u\n", p_si_stats->counters.n_tx_retransmits);
     }
 
+    if (p_si_stats->n_tcp_timer_consecutive_skips_max) {
+        fprintf(filename, "TCP timer trylock skips (high-water): %u consecutive\n",
+                p_si_stats->n_tcp_timer_consecutive_skips_max);
+    }
+
     if (p_si_stats->counters.n_tx_sendfile_fallbacks) {
         fprintf(filename, "Sendfile: fallbacks %u / overflows %u\n",
                 p_si_stats->counters.n_tx_sendfile_fallbacks,

@@ -152,15 +152,27 @@ bool epoll_wait_call::_wait(int timeout)
 {
     int i, ready_fds, fd;
     bool cq_ready = false;
+    bool armed = false;
     epoll_fd_rec *fd_rec;
 
     __log_func("calling os epoll: %d", m_epfd);
 
     if (timeout) {
         lock();
+        if (safe_mce_sys().is_threads_mode() && m_epfd_info->m_ready_fds.empty()) {
+            // Merging and arming share one critical section per entity context,
+            // so a worker either lands in m_ready_fds here or claims the wakeup
+            // after going_to_sleep() is visible under this lock. Already having
+            // ready fds means this waiter won't sleep, so skip both passes.
+            m_epfd_info->move_entity_context_ready_events(true);
+            armed = true;
+        }
         if (m_epfd_info->m_ready_fds.empty()) {
             m_epfd_info->going_to_sleep();
         } else {
+            if (armed) {
+                m_epfd_info->disarm_entity_context_wakeup();
+            }
             timeout = 0;
         }
         unlock();
@@ -175,6 +187,7 @@ bool epoll_wait_call::_wait(int timeout)
     if (timeout) {
         lock();
         m_epfd_info->return_from_sleep();
+        m_epfd_info->disarm_entity_context_wakeup();
         unlock();
     }
 
@@ -195,8 +208,9 @@ bool epoll_wait_call::_wait(int timeout)
             continue;
         }
 
-        // If it's CQ
-        if (m_epfd_info->is_cq_fd(m_p_ready_events[i].data.u64)) {
+        if (epfd_info::is_cq_event(m_p_ready_events[i].data.u64)) {
+            fd = epfd_info::cq_event_fd(m_p_ready_events[i].data.u64);
+            m_epfd_info->enqueue_ready_cq_fd(fd);
             cq_ready = true;
             continue;
         }

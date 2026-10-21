@@ -877,15 +877,21 @@ std::unique_ptr<dpcp::tls_dek> hw_queue_tx::get_tls_dek(const void *key, uint32_
         return std::unique_ptr<dpcp::tls_dek>(nullptr);
     }
 
+    if (unlikely(!m_p_ring->tls_sync_dek_supported())) {
+        return get_new_tls_dek(key, key_size_bytes);
+    }
+
+    m_tls_cache_lock.lock();
+
     // If the amount of available DEKs in m_dek_put_cache is smaller than
     // low-watermark we continue to create new DEKs. This is to avoid situations
     // where one DEKs is returned and then fetched in a throttlling manner
     // causing too frequent crypto-sync.
     // It is also possible that crypto-sync may have higher impact with higher number
     // of active connections.
-    if (unlikely(!m_p_ring->tls_sync_dek_supported()) ||
-        (unlikely(m_tls_dek_get_cache.empty()) &&
-         (m_tls_dek_put_cache.size() <= safe_mce_sys().utls_low_wmark_dek_cache_size))) {
+    if (unlikely(m_tls_dek_get_cache.empty()) &&
+        (m_tls_dek_put_cache.size() <= safe_mce_sys().utls_low_wmark_dek_cache_size)) {
+        m_tls_cache_lock.unlock();
         return get_new_tls_dek(key, key_size_bytes);
     }
 
@@ -893,8 +899,10 @@ std::unique_ptr<dpcp::tls_dek> hw_queue_tx::get_tls_dek(const void *key, uint32_
         hwqtx_logdbg("Empty DEK get cache. Swapping caches and do Sync-Crypto. Put-Cache size: %zu",
                      m_tls_dek_put_cache.size());
 
+        /* Rare operation. Keep the cache lock so the check-sync-swap sequence stays atomic. */
         status = adapter->sync_crypto_tls();
         if (unlikely(status != dpcp::DPCP_OK)) {
+            m_tls_cache_lock.unlock();
             hwqtx_logwarn("Failed to flush DEK HW cache, status: %d", status);
             return get_new_tls_dek(key, key_size_bytes);
         }
@@ -904,7 +912,9 @@ std::unique_ptr<dpcp::tls_dek> hw_queue_tx::get_tls_dek(const void *key, uint32_
 
     std::unique_ptr<dpcp::tls_dek> out_dek(std::move(m_tls_dek_get_cache.front()));
     m_tls_dek_get_cache.pop_front();
+    m_tls_cache_lock.unlock();
 
+    /* Modify an exclusively owned object - outside the lock. */
     struct dpcp::dek_attr dek_attr;
     memset(&dek_attr, 0, sizeof(dek_attr));
     dek_attr.key_blob = const_cast<void *>(key);
@@ -926,42 +936,55 @@ void hw_queue_tx::put_tls_dek(std::unique_ptr<dpcp::tls_dek> &&tls_dek_obj)
         return;
     }
     // We don't allow unlimited DEK cache to avoid system DEK starvation.
-    if (likely(m_p_ring->tls_sync_dek_supported()) &&
-        m_tls_dek_put_cache.size() < safe_mce_sys().utls_high_wmark_dek_cache_size) {
-        m_tls_dek_put_cache.emplace_back(std::forward<std::unique_ptr<dpcp::tls_dek>>(tls_dek_obj));
+    if (likely(m_p_ring->tls_sync_dek_supported())) {
+        std::lock_guard<decltype(m_tls_cache_lock)> lock(m_tls_cache_lock);
+        if (m_tls_dek_put_cache.size() < safe_mce_sys().utls_high_wmark_dek_cache_size) {
+            m_tls_dek_put_cache.emplace_back(
+                std::forward<std::unique_ptr<dpcp::tls_dek>>(tls_dek_obj));
+        }
     }
 }
 
-xlio_tis *hw_queue_tx::tls_context_setup_tx(const xlio_tls_info *info)
+xlio_tis *hw_queue_tx::tls_reserve_tis(const xlio_tls_info *info)
 {
     std::unique_ptr<xlio_tis> tis;
-    if (m_tls_tis_cache.empty()) {
+
+    m_tls_cache_lock.lock();
+    if (!m_tls_tis_cache.empty()) {
+        tis.reset(m_tls_tis_cache.back());
+        m_tls_tis_cache.pop_back();
+    }
+    m_tls_cache_lock.unlock();
+
+    if (!tis) {
+        /* Firmware command on the adapter - no lock is required. */
         tis = create_tis(DPCP_TIS_FLAGS | dpcp::TIS_ATTR_TLS);
         if (unlikely(!tis)) {
             return nullptr;
         }
-    } else {
-        tis.reset(m_tls_tis_cache.back());
-        m_tls_tis_cache.pop_back();
     }
 
     auto dek_obj = get_tls_dek(info->key, info->key_len);
     if (unlikely(!dek_obj)) {
+        std::lock_guard<decltype(m_tls_cache_lock)> lock(m_tls_cache_lock);
         m_tls_tis_cache.push_back(tis.release());
         return nullptr;
     }
 
     tis->assign_dek(std::move(dek_obj));
+    return tis.release();
+}
+
+void hw_queue_tx::tls_context_setup_tx(const xlio_tls_info *info, xlio_tis *tis)
+{
     uint32_t tisn = tis->get_tisn();
 
-    tls_post_static_params_wqe(tis.get(), info, tisn, tis->get_dek_id(), 0, false, true);
-    tls_post_progress_params_wqe(tis.get(), tisn, 0, false, true);
+    tls_post_static_params_wqe(tis, info, tisn, tis->get_dek_id(), 0, false, true);
+    tls_post_progress_params_wqe(tis, tisn, 0, false, true);
     /* The 1st post after TLS configuration must be with fence. */
     m_b_fence_needed = true;
 
     assert(!tis->m_released);
-
-    return tis.release();
 }
 
 void hw_queue_tx::tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static)
@@ -975,36 +998,30 @@ void hw_queue_tx::tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis
     m_b_fence_needed = true;
 }
 
-int hw_queue_tx::tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
-                                      uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
-                                      void *callback_arg)
+int hw_queue_tx::tls_reserve_rx_dek(xlio_tir *tir, const xlio_tls_info *info)
 {
-    uint32_t tirn;
-    dpcp::tls_dek *_dek;
-    dpcp::status status;
-    dpcp::adapter *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
-    struct dpcp::dek_attr dek_attr;
-
-    memset(&dek_attr, 0, sizeof(dek_attr));
-    dek_attr.key_blob = (void *)info->key;
-    dek_attr.key_blob_size = info->key_len;
-    dek_attr.key_size = info->key_len;
-    dek_attr.pd_id = adapter->get_pd();
-    status = adapter->create_tls_dek(dek_attr, _dek);
-    if (unlikely(status != dpcp::DPCP_OK)) {
-        hwqtx_logerr("Failed to create DEK, status: %d", status);
+    /* RX DEKs are not recycled - create a fresh one. It is destroyed together with the TIR. */
+    auto dek_obj = get_new_tls_dek(info->key, info->key_len);
+    if (unlikely(!dek_obj)) {
+        hwqtx_logerr("Failed to create DEK");
         return -1;
     }
-    tir->assign_dek(_dek);
-    tir->assign_callback(callback, callback_arg);
-    tirn = tir->get_tirn();
+    tir->assign_dek(dek_obj.release());
+    return 0;
+}
 
-    tls_post_static_params_wqe(NULL, info, tirn, _dek->get_key_id(), 0, false, false);
+void hw_queue_tx::tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
+                                       uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
+                                       void *callback_arg)
+{
+    uint32_t tirn = tir->get_tirn();
+
+    tir->assign_callback(callback, callback_arg);
+
+    tls_post_static_params_wqe(NULL, info, tirn, tir->get_dek_id(), 0, false, false);
     tls_post_progress_params_wqe(tir, tirn, next_record_tcp_sn, false, false);
 
     assert(!tir->m_released);
-
-    return 0;
 }
 
 void hw_queue_tx::tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn)
@@ -1226,6 +1243,8 @@ void hw_queue_tx::put_tls_tis_in_cache(xlio_tis *tis)
     assert(dynamic_cast<dpcp::tls_dek *>(dek.get()));
 
     put_tls_dek(std::unique_ptr<dpcp::tls_dek>(dynamic_cast<dpcp::tls_dek *>(dek.release())));
+
+    std::lock_guard<decltype(m_tls_cache_lock)> lock(m_tls_cache_lock);
     m_tls_tis_cache.push_back(tis);
 }
 

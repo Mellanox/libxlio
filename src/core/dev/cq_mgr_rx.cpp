@@ -464,7 +464,7 @@ bool cq_mgr_rx::request_notification()
     return m_b_notification_armed;
 }
 
-void cq_mgr_rx::wait_for_notification_and_process_element(void *pv_fd_ready_array)
+void cq_mgr_rx::ack_cq_events()
 {
     cq_logfunc("");
 
@@ -472,7 +472,6 @@ void cq_mgr_rx::wait_for_notification_and_process_element(void *pv_fd_ready_arra
         struct ibv_cq *p_cq_hndl = nullptr;
         void *p = nullptr; // deal with compiler warnings
 
-        // Block on the cq_mgr_rx's notification event channel
         IF_VERBS_FAILURE(ibv_get_cq_event(m_comp_event_channel, &p_cq_hndl, &p))
         {
             cq_logwarn("waiting on cq_mgr_rx event returned with error (errno=%d %m)", errno);
@@ -488,15 +487,22 @@ void cq_mgr_rx::wait_for_notification_and_process_element(void *pv_fd_ready_arra
                 // in this case we need to deliver the event to the correct cq_mgr_rx
             }
 
-            // Ack event
             ibv_ack_cq_events(m_p_ibv_cq, 1);
 
-            // Clear flag
             m_b_notification_armed = false;
-
-            // Now try processing the ready element
-            poll_and_process_element_rx(pv_fd_ready_array);
         }
         ENDIF_VERBS_FAILURE;
+    }
+}
+
+void cq_mgr_rx::wait_for_notification_and_process_element(void *pv_fd_ready_array)
+{
+    cq_logfunc("");
+
+    bool was_armed = m_b_notification_armed;
+    ack_cq_events();
+
+    if (was_armed && !m_b_notification_armed) {
+        poll_and_process_element_rx(pv_fd_ready_array);
     }
 }

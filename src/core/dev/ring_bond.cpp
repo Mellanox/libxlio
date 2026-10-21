@@ -397,6 +397,19 @@ int ring_bond::drain_and_proccess()
     }
 }
 
+void ring_bond::ack_cq_events()
+{
+    m_lock_ring_rx.lock();
+
+    for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
+        if (m_recv_rings[i]->is_up()) {
+            m_recv_rings[i]->ack_cq_events();
+        }
+    }
+
+    m_lock_ring_rx.unlock();
+}
+
 void ring_bond::wait_for_notification_and_process_element(void *pv_fd_ready_array /*NULL*/)
 {
     m_lock_ring_rx.lock();
@@ -640,7 +653,7 @@ void ring_bond::update_rx_channel_fds()
     m_p_n_rx_channel_fds = new int[m_recv_rings.size()];
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
         size_t num_rx_channel_fds;
-        int *p_rx_channel_fds = m_bond_rings[i]->get_rx_channel_fds(num_rx_channel_fds);
+        int *p_rx_channel_fds = m_recv_rings[i]->get_rx_channel_fds(num_rx_channel_fds);
         /* Assume that a slave ring contains exactly 1 channel fd. */
         NOT_IN_USE(num_rx_channel_fds);
         m_p_n_rx_channel_fds[i] = p_rx_channel_fds[0];

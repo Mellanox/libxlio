@@ -88,8 +88,13 @@ entity_context_manager::~entity_context_manager()
 void entity_context_manager::distribute_socket(sockinfo *si, entity_context::job_type jobtype)
 {
     uint16_t next_idx = m_next_distribute.fetch_add(1U) % safe_mce_sys().worker_threads;
-    m_entity_contexts[next_idx]->add_job(
-        entity_context::job_desc {jobtype, 0, si, nullptr, 0U, 0U});
+    // Publish owner before post so a racing close() takes JOB_TYPE_SOCK_CLOSE, not sync free.
+    si->publish_entity_context_owner(m_entity_contexts[next_idx]);
+    // Snapshot is_blocking() under connect()'s socket lock. connect_socket_job must not reread
+    // a live fcntl(O_NONBLOCK) flip.
+    m_entity_contexts[next_idx]->add_job(entity_context::job_desc {
+        jobtype, si->is_blocking() ? entity_context::JOB_FLAG_SOCK_BLOCKING : 0, si, nullptr, 0U,
+        0U});
 }
 
 void entity_context_manager::distribute_listen_socket(sockinfo_tcp *si)
@@ -99,6 +104,7 @@ void entity_context_manager::distribute_listen_socket(sockinfo_tcp *si)
          ++i) {
         sockinfo_tcp *listen_rss_child = si->get_listen_context()->get_listen_rss_child(i);
         listen_rss_child->get_listen_context()->set_steering_index(i);
+        listen_rss_child->publish_entity_context_owner(m_entity_contexts[i]);
         m_entity_contexts[i]->add_job(entity_context::job_desc {
             entity_context::JOB_TYPE_SOCK_ADD_AND_LISTEN, 0, listen_rss_child, nullptr, 0U, 0U});
     }

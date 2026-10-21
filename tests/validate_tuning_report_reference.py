@@ -27,12 +27,65 @@ Known limitations:
 import json
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PRINTER_CPP = REPO_ROOT / "src/core/tuning_report_printer.cpp"
 SCHEMA_JSON = REPO_ROOT / "src/core/config/descriptor_providers/xlio_config_schema.json"
 REFERENCE_MD = REPO_ROOT / "docs/xlio_tuning_report_reference.md"
+
+# Characters accepted in multiword warning phrases.
+_PHRASE_RE = re.compile(r"[a-zA-Z][a-zA-Z\s\->()/]+[a-zA-Z)]")
+
+# Strip printf and PRI format specifiers before phrase extraction.
+_FORMAT_SPEC_RE = re.compile(
+    r"%[#\-+ 0\d.*lhjzLt]*[diouxXeEfgGsScpn%]"  # printf conversions
+    r"|PRI[a-z]+\d+"                              # <inttypes.h> macros
+)
+
+_WARNING_TOKEN_RE = re.compile(r"# WARNING:\s*(.*)")
+_STR_LITERAL_RE = re.compile(r'"([^"]*)"')
+
+
+def _strip_format_specs(text: str) -> str:
+    """Replace format specifiers with whitespace to maintain word boundaries."""
+    return _FORMAT_SPEC_RE.sub(" ", text)
+
+
+def _phrases_in(text: str) -> set[str]:
+    """Extract 2+ word lowercase phrases from a single text blob."""
+    phrases: set[str] = set()
+    for m in _PHRASE_RE.finditer(text):
+        words = m.group().split()
+        if len(words) >= 2:
+            phrases.add(" ".join(words).lower())
+    return phrases
+
+
+def _iter_warning_texts(lines: list[str]) -> Iterator[str]:
+    """Yield WARNING format strings with adjacent C literals folded."""
+    i = 0
+    while i < len(lines):
+        match = _WARNING_TOKEN_RE.search(lines[i])
+        if not match:
+            i += 1
+            continue
+        # Exclude the source literal's closing quote.
+        chunks = [match.group(1).rstrip('"')]
+        j = i + 1
+        while j < len(lines) and lines[j].lstrip().startswith('"'):
+            literals = _STR_LITERAL_RE.findall(lines[j])
+            if literals:
+                chunks.append(" ".join(literals))
+            j += 1
+        yield " ".join(chunks)
+        i = j
+
+
+def _cpp_warning_phrases(text: str) -> set[str]:
+    """Pipeline for code-side WARNING text: strip format specifiers, then extract phrases."""
+    return _phrases_in(_strip_format_specs(text))
 
 
 def load_schema_top_level_keys(schema_path: Path) -> set[str]:
@@ -49,27 +102,13 @@ def load_schema_top_level_keys(schema_path: Path) -> set[str]:
 def extract_warning_phrases_from_code(cpp_path: Path) -> set[str]:
     """Extract distinctive English phrases from WARNING messages in C++ source.
 
-    WARNING messages contain printf format specifiers (%.0f%%, PRIu64) that
-    don't appear in the documentation. This extracts the constant English
-    text (runs of 2+ words) which serves as a matchable signature.
-
     Known dedup: sw_rx_packets_dropped and sw_rx_bytes_dropped both produce
     "non-zero drops", yielding 20 unique phrases from 21 WARNING conditions.
     """
-    content = cpp_path.read_text()
-    phrases = set()
-    for line in content.splitlines():
-        if "# WARNING:" not in line:
-            continue
-        match = re.search(r"# WARNING:\s*(.*)", line)
-        if not match:
-            continue
-        raw = match.group(1)
-        for m in re.finditer(r"[a-zA-Z][a-zA-Z\s\->()/]+[a-zA-Z)]", raw):
-            phrase = m.group().strip()
-            words = phrase.split()
-            if len(words) >= 2:
-                phrases.add(" ".join(words).lower())
+    lines = cpp_path.read_text().splitlines()
+    phrases: set[str] = set()
+    for text in _iter_warning_texts(lines):
+        phrases |= _cpp_warning_phrases(text)
     return phrases
 
 
@@ -80,14 +119,9 @@ def extract_warning_phrases_from_doc(md_path: Path) -> set[str]:
     check (doc → code) to detect orphaned troubleshooting rules.
     """
     content = md_path.read_text()
-    phrases = set()
+    phrases: set[str] = set()
     for match in re.finditer(r"# WARNING:\s*([^`\n]+)", content):
-        raw = match.group(1).strip().rstrip("`")
-        for m in re.finditer(r"[a-zA-Z][a-zA-Z\s\->()/]+[a-zA-Z)]", raw):
-            phrase = m.group().strip()
-            words = phrase.split()
-            if len(words) >= 2:
-                phrases.add(" ".join(words).lower())
+        phrases |= _phrases_in(match.group(1).strip().rstrip("`"))
     return phrases
 
 

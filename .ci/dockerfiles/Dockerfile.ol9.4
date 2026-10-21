@@ -15,7 +15,7 @@ RUN sed -i 's|\$WEBREPO_URL|'"${WEBREPO_URL}"'|g' /etc/yum.repos.d/*.repo && \
 RUN yum install yum-utils \
  && yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/9/Everything/aarch64/ \
  && yum install -y --nogpgcheck \
-    autoconf automake make libtool git gcc-c++ libtool json-c-devel \
+    cmake autoconf automake make libtool git gcc-c++ libtool json-c-devel \
     clang rdma-core-devel openssl-devel glib2-devel libnl3-devel \
     python3-pip sudo rpm-build gtest-devel meson ninja-build \
     libzip-devel libpcap-devel jsoncpp-devel curl \

@@ -13,6 +13,7 @@
 #include "hw_queue_rx.h"
 #include "ring_simple.h"
 #include "proto/tls.h"
+#include "core/proto/xlio_time.h"
 #include <netinet/ip6.h>
 
 #define MODULE_NAME "cq_mgr_rx_regrq"
@@ -184,6 +185,7 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
 
     /* CQ polling loop until max wce limit is reached for this interval or CQ is drained */
     uint32_t ret_total = 0;
+    xlio_now_us_batch now_us_batch;
 
     /* drain_and_proccess() is mainly called in following cases as
      * Internal thread:
@@ -198,8 +200,16 @@ int cq_mgr_rx_regrq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id 
         buff_status_e status = BS_OK;
         mem_buf_desc_t *buff = poll(status);
         if (!buff) {
+            /* Timestamp GRO data carried into this empty drain. */
+            if (!now_us_batch.armed() && m_p_ring->m_gro_mgr.has_active_streams()) {
+                now_us_batch.refresh();
+            }
             m_p_ring->m_gro_mgr.flush_all(nullptr);
             return ret_total;
+        }
+
+        if (!now_us_batch.armed()) {
+            now_us_batch.refresh();
         }
 
         if (cqe_process_rx(buff, status)) {
@@ -248,6 +258,12 @@ int cq_mgr_rx_regrq::poll_and_process_element_rx(void *pv_fd_ready_array)
 {
     cq_logfuncall("");
 
+    xlio_now_us_batch now_us_batch;
+    const bool had_pending_rx = !m_rx_queue.empty() || m_p_ring->m_gro_mgr.has_active_streams();
+    if (had_pending_rx) {
+        now_us_batch.refresh();
+    }
+
     if (unlikely(m_n_sysvar_cq_poll_batch_max <= process_recv_queue(pv_fd_ready_array))) {
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
         return false; // CQ was not drained.
@@ -263,6 +279,9 @@ int cq_mgr_rx_regrq::poll_and_process_element_rx(void *pv_fd_ready_array)
     while (rx_polled < m_n_sysvar_cq_poll_batch_max) {
         mem_buf_desc_t *buff = poll(status);
         if (buff) {
+            if (!now_us_batch.armed()) {
+                now_us_batch.refresh();
+            }
             ++rx_polled;
             if (cqe_process_rx(buff, status)) {
                 if ((++m_debt < (int)m_n_sysvar_rx_num_wr_to_post_recv) ||

@@ -30,6 +30,7 @@
   "network": {
     "protocols": {
       "tcp": {
+        "rto_floor_msec": 200,
         "nodelay": {
           "byte_threshold": 42
         }

@@ -15,7 +15,7 @@ Group: System Environment/Libraries
 
 License: GPLv2 or BSD
 Url: https://github.com/Mellanox/%{name}
-Source0: %{url}/archive/%{version}/%{name}-%{version}.tar.gz
+Source0: %{name}-%{version}.tar.gz
 
 # library currently supports only the following architectures
 ExclusiveArch: x86_64 ppc64le ppc64 aarch64
@@ -26,13 +26,13 @@ BuildRequires: autoconf
 BuildRequires: libtool
 BuildRequires: gcc-c++
 BuildRequires: rdma-core-devel
+BuildRequires: openssl-devel
 %if 0%{?rhel} >= 7 || 0%{?fedora} >= 24 || 0%{?suse_version} >= 1500
 BuildRequires: pkgconfig(libnl-3.0)
 BuildRequires: pkgconfig(libnl-route-3.0)
 %endif
 BuildRequires: make
-BuildRequires: dpcp >= 1.1.58
-Requires: dpcp >= 1.1.58
+BuildRequires: cmake >= 3.17
 
 %description
 libxlio is a LD_PRELOAD-able library that boosts performance of TCP and
@@ -145,7 +145,7 @@ fi
 %{_mandir}/man8/xlio_stats.*
 
 %changelog
-* Thu Jul  9 2026 NVIDIA CORPORATION <networking-support@nvidia.com> 3.71.1-1
-- Bump version to 3.71.1
+* Thu Oct  8 2026 NVIDIA CORPORATION <networking-support@nvidia.com> 3.80.2-1
+- Bump version to 3.80.2
 - Please refer to CHANGES for full changelog.
 

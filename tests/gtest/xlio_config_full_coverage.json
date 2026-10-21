@@ -49,6 +49,7 @@
                 "congestion_control": 0,
                 "timestamps": 0,
                 "timer_msec": 100,
+                "rto_floor_msec": 200,
                 "mss": 0
             }
         },
@@ -225,4 +226,3 @@
         "spec": 0
     }
 }
-

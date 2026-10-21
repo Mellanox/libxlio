@@ -1,3 +1,45 @@
+Version 3.80.2-1:
+Date + Time 2026-10-08
+=============================================================
+Fixed:
+	- RM #4550926 Warn when TX or RX ring sizes are increased to the required minimum
+	- RM #5215894 Improve sendfile() performance with multiple worker threads
+	- RM #5245126 Restore socket type and offload statistics when reusing TCP sockets
+	- RM #5328892 Avoid misidentifying VRF interfaces as bonding devices
+	- RM #5324363 Synchronize SO_ERROR with nonblocking connection completion
+	- RM #5324154 Fix RSS accept deadlock in worker-thread mode
+	- RM #5304941 Reject delegate mode with worker threads and fix Ultra API shutdown use-after-free
+	- RM #4923648 Prevent crashes when Ultra API sockets coexist with worker threads
+	- RM #5170344 Correct NIC core clock scaling for hardware timestamp conversion
+	- RM #5262260 Preserve quoted DPCP compiler flags containing whitespace
+	- RM #5298901 Report TCP timer lock starvation at info level
+
+Version 3.80.1-1:
+Date + Time 2026-09-17
+=============================================================
+Added:
+	- RM #4975332 Add hardware TLS support for worker-thread mode
+	- RM #4942208 Add interrupt mode support for worker threads
+	- RM #4930786 Add blocking socket operations in worker-thread mode
+	- RM #4930789 Add microsecond TCP RTT/RTO timing and a configurable RTO floor
+
+Fixed:
+	- RM #5271097 Fix DPCP CMake include handling for DOCA builds
+
+Version 3.80.0-1:
+Date + Time 2026-09-10
+=============================================================
+Added:
+	- RM #4830545 Add built-in static libdpcp linking
+
+Fixed:
+	- RM #4810385 Fix hardware TLS RX resynchronization
+	- RM #5165660 Fix json-c configuration for parallel VPATH builds
+	- RM #5217929 Fix SIGINT handler interposition lifecycle and semantics
+	- RM #5227183 Build static libxlio.a with position-independent code
+	- RM #5229407 Require OpenSSL development packages for TLS offload builds
+	- RM #5260757 Fix built-in DPCP build on RHEL 9.6
+
 Version 3.71.1-1:
 Date + Time 2026-07-09
 =============================================================

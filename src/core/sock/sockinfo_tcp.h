@@ -76,6 +76,11 @@ enum xlio_express_flags : uint32_t {
     XLIO_EXPRESS_MSG_MORE = 0x0010u,
     XLIO_EXPRESS_MSG_SND_BUF = 0x0020u,
     XLIO_EXPRESS_MSG_MASK = 0x0ff0u,
+    // Internal, worker job-commit path only (not part of the express send API).
+    // The bytes were already accepted by a send() that returned their count, so the
+    // app-visible SHUT_WR latch (is_rts()) must not drop them - refuse only when the
+    // pcb can no longer legally carry new data (own FIN sequenced, or reset/closed).
+    XLIO_EXPRESS_TX_COMMITTED = 0x1000u,
 };
 
 struct socket_option_t {
@@ -202,6 +207,7 @@ public:
     int getsockopt_offload(int __level, int __optname, void *__optval, socklen_t *__optlen);
     int connect(const sockaddr *, socklen_t) override;
     void connect_entity_context() override;
+    void cancel_connect_entity_context();
     void listen_entity_context();
     int harvest_sockinfo_tcp_listen_objects();
     inline bool try_harvest_from_rss_child(size_t rss_child_index);
@@ -240,13 +246,17 @@ public:
         return static_cast<unsigned>(std::max(m_snd_buf.load(), 0));
     }
 
+    inline void sndbuf_reserve(uint32_t bytes) { m_snd_buf -= static_cast<int32_t>(bytes); }
+
     inline unsigned get_mss() { return m_pcb.mss; }
 
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
     ssize_t tcp_tx(xlio_tx_call_attr_t &tx_arg);
     ssize_t tcp_tx_thread(xlio_tx_call_attr_t &tx_arg);
-    void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size,
-                          int flags) override;
+    void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size, int flags,
+                          const tx_call_ctx &tx_ctx) override;
+    // Worker job: tcp_shutdown after queued TX jobs. App thread must not FIN itself.
+    void tx_thread_shutdown(int how);
     ssize_t rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov, int *p_flags,
                sockaddr *__from = nullptr, socklen_t *__fromlen = nullptr,
                struct msghdr *__msg = nullptr) override;
@@ -334,9 +344,12 @@ public:
 
     inline fd_type_t get_type() override { return FD_TYPE_SOCKET; }
 
-    void handle_timer_expired();
+    void handle_timer_expired(int64_t timer_now_us);
     bool is_timer_registered() const { return m_timer_registered; }
     void set_timer_registered(bool v) { m_timer_registered = v; }
+
+    void note_tcp_timer_attempt_missed();
+    void note_tcp_timer_attempt_acquired();
 
     inline ib_ctx_handler *get_ctx()
     {
@@ -357,11 +370,18 @@ public:
         return rx_flow_iter->first;
     }
 
-    void rx_poll_on_tx_if_needed()
+    void rx_poll_on_tx()
     {
-        if (m_sysvar_rx_poll_on_tx_tcp && !m_entity_context) {
+        if (!m_entity_context) {
             int poll_count = 0;
             rx_wait_helper(poll_count, false);
+        }
+    }
+
+    void rx_poll_on_tx_if_needed()
+    {
+        if (m_sysvar_rx_poll_on_tx_tcp) {
+            rx_poll_on_tx();
         }
     }
 
@@ -381,10 +401,35 @@ public:
     inline int trylock_tcp_con() { return m_tcp_con_lock.trylock(); }
     inline void lock_tcp_con() { m_tcp_con_lock.lock(); }
     inline void unlock_tcp_con() { m_tcp_con_lock.unlock(); }
+    // Under m_tcp_con_lock. First close job only; later close()/handle_close() return false.
+    inline bool try_route_worker_close()
+    {
+        if (m_worker_close_routed) {
+            return false;
+        }
+        m_worker_close_routed = true;
+        return true;
+    }
     tcp_timers_collection *get_tcp_timer_collection();
     bool is_cleaned() const { return m_is_cleaned; }
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    /*
+     * Deliver received data with the callback matching the socket ownership model.
+     * Keep this dispatch inline because the ownership mode is stable for the socket lifetime.
+     */
+    static inline err_t rx_lwip_cb_dispatch(void *arg, struct tcp_pcb *tpcb, struct pbuf *p,
+                                            err_t err)
+    {
+        sockinfo_tcp *conn = static_cast<sockinfo_tcp *>(arg);
+
+        if (conn->m_entity_context && likely(err == ERR_OK)) {
+            return rx_lwip_cb_entity_context(arg, tpcb, p, err);
+        }
+
+        return rx_lwip_cb(arg, tpcb, p, err);
+    }
     static err_t rx_drop_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+    void reuse_buffer(mem_buf_desc_t *buff);
 
     int tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint32_t mkey, unsigned flags,
                        void *opaque_op);
@@ -417,7 +462,7 @@ private:
 
     inline void lwip_pbuf_init_custom(mem_buf_desc_t *p_desc);
 
-    void tcp_timer();
+    void tcp_timer(int64_t timer_now_us);
     bool poll_and_progress_rx();
     bool check_last_rx_poll_progress(unsigned int prev_sndbuf, bool all_drained);
     bool prepare_listen_to_close();
@@ -452,6 +497,8 @@ private:
     void stats_update_tx_errors(int error_number);
 
     int accept_helper(struct sockaddr *__addr, socklen_t *__addrlen, int __flags = 0);
+    // Entered and returned with the listen lock held.
+    int accept_wait_threads_mode(loops_timer &accept_timeout);
 
     // clone socket in accept call
     sockinfo_tcp *accept_clone();
@@ -465,6 +512,9 @@ private:
     static err_t connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err);
     // tx
     unsigned tx_wait(bool blocking);
+    // Socket lock held. Do not lock again in threads_mode.
+    unsigned tx_wait_threads_mode(loops_timer &send_timeout);
+    unsigned tx_wait_poll(bool blocking);
     int os_epoll_wait_with_tcp_timers(epoll_event *ep_events, int maxevents);
     void handle_incoming_handshake_failure(sockinfo_tcp *child_conn);
 
@@ -477,6 +527,7 @@ private:
                                                   int errno_to_restore);
     ssize_t tcp_tx_handle_sndbuf_unavailable(ssize_t total_tx, int errno_to_restore);
     ssize_t tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg);
+    int tcp_tx_prepare_call_ctx(const xlio_tx_call_attr_t &tx_arg, tx_call_ctx &tx_ctx);
     err_t handle_fin(struct tcp_pcb *pcb, err_t err);
     void handle_rx_lwip_cb_error(pbuf *p);
     void rx_lwip_cb_error(pbuf *p);
@@ -493,9 +544,15 @@ private:
     void handle_socket_linger();
     bool connect_bind_any_and_check_rules();
     void connect_async_set_errs();
-    void connect_threads_mode();
-    int rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout);
-    int rx_sleep_wait(loops_timer &rcv_timeout);
+    int connect_threads_mode();
+    // Socket lock held.
+    int connect_wait_threads_mode();
+    int rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout,
+                         size_t min_ready_bytes = 1U);
+    int rx_sleep_wait(loops_timer &rcv_timeout, size_t min_ready_bytes = 1U);
+    // Entered and returned without the socket lock.
+    int rx_sleep_wait_threads_mode(loops_timer &rcv_timeout, size_t min_ready_bytes);
+    int rx_sleep_wait_poll(loops_timer &rcv_timeout, size_t min_ready_bytes);
 
     ssize_t rx_read_ready_packets(iovec *p_iov, ssize_t sz_iov, int *p_flags, sockaddr *__from,
                                   socklen_t *__fromlen, struct msghdr *__msg);
@@ -523,7 +580,6 @@ private:
     // it can't help callers
     inline void return_pending_rx_buffs();
     inline void return_pending_tx_buffs();
-    inline void reuse_buffer(mem_buf_desc_t *buff);
     mem_buf_desc_t *get_next_desc(mem_buf_desc_t *p_desc) override;
     mem_buf_desc_t *get_next_desc_peek(mem_buf_desc_t *p_desc, int &rx_pkt_ready_list_idx) override;
     timestamps_t *get_socket_timestamps() override;
@@ -617,10 +673,18 @@ private:
     std::atomic<int32_t> m_snd_buf;
     uint32_t m_snd_buf_max;
     sockinfo_tcp *m_parent;
+    // RSS has three levels: application listener -> RSS child listener -> incoming socket.
+    // m_parent identifies the RSS child listener while the incoming handshake is pending;
+    // it is cleared before the established socket is queued for accept. This separate
+    // pointer records the application listener to wake after both receive locks are
+    // released. Set by accept_lwip_cb and consumed under the socket lock by rx_input_cb.
+    sockinfo_tcp *m_accept_parent_to_wake = nullptr;
     // received packet source (true if its from internal thread)
     bool m_b_incoming;
     bool m_b_attached;
     bool m_timer_registered = false;
+    /* Live timer-lock miss streak; stats retain the socket-lifetime high-water. */
+    uint8_t m_tcp_timer_consecutive_skips = 0;
     /* connection state machine */
     int m_conn_timeout;
     /* RCVBUF acconting */
@@ -653,6 +717,7 @@ private:
     // second call to failed connect blocking socket.
     bool report_connected;
     bool m_is_cleaned = false; // If this socket registered deletion on internal thread.
+    bool m_worker_close_routed = false; // under lock: one close job per incarnation
     int m_error_status;
 
     const buffer_batching_mode_t m_sysvar_buffer_batching_mode;

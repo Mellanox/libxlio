@@ -35,43 +35,79 @@
 #ifndef ENTITY_CONTEXT_H
 #define ENTITY_CONTEXT_H
 
+#include <atomic>
+
 #include "event/poll_group.h"
 #include "event/job_queue.h"
 #include "util/xlio_stats.h"
 #include "event/event_handler_manager_local.h"
+#include "sock/tx_call_ctx.h"
 
 class sockinfo;
 class mem_buf_desc_t;
 
 class entity_context : public poll_group {
 public:
+    enum wakeup_reason {
+        WAKEUP_NONE = 0,
+        WAKEUP_CQ_EVENT,
+        WAKEUP_JOB_POSTED,
+        WAKEUP_TIMEOUT,
+    };
+
     enum job_type {
         JOB_TYPE_SOCK_ADD_AND_CONNECT,
         JOB_TYPE_SOCK_TX,
+        JOB_TYPE_SOCK_SHUTDOWN,
         JOB_TYPE_SOCK_RX_DATA_RECVD,
         JOB_TYPE_SOCK_ADD_AND_LISTEN,
+        JOB_TYPE_SOCK_TLS_SETUP,
+        JOB_TYPE_SOCK_CONNECT_CANCEL,
         JOB_TYPE_SOCK_CLOSE
     };
 
     enum job_flag {
         JOB_FLAG_TX_LAST_CHUNK = 0x0001,
+        JOB_FLAG_TLS_TX = 0x0002,
+        JOB_FLAG_TLS_RX = 0x0004,
+        JOB_FLAG_SOCK_BLOCKING =
+            0x0008, // ADD_AND_CONNECT: snapshot at post, not live is_blocking()
     };
 
     struct job_desc {
+        job_desc(job_type id, int job_flags, sockinfo *socket, mem_buf_desc_t *buffer,
+                 uint32_t buffer_offset, uint32_t size, const tx_call_ctx &context = tx_call_ctx {})
+            : job_id(id)
+            , flags(job_flags)
+            , sock(socket)
+            , buf(buffer)
+            , offset(buffer_offset)
+            , tot_size(size)
+            , tx_ctx(context)
+        {
+        }
+
         job_type job_id;
         int flags;
         sockinfo *sock;
         mem_buf_desc_t *buf;
         uint32_t offset;
         uint32_t tot_size;
+        /* Deep copied per job, so no lifetime coupling to the originating TX call. */
+        tx_call_ctx tx_ctx;
     };
 
     entity_context(size_t index);
-    ~entity_context();
+    virtual ~entity_context();
 
     size_t get_index() const { return m_index; }
-    void process();
+    bool process();
     void add_job(const job_desc &job);
+
+    void notify_ring_added(ring *rng) override;
+
+    wakeup_reason wait_for_interrupt(int timeout_ms);
+    void wakeup();
 
     // Called only by the XLIO thread executing this context.
     void add_incoming_socket(sockinfo *sock);
@@ -79,19 +115,30 @@ public:
 private:
     void connect_socket_job(const job_desc &job);
     void tx_data_job(const job_desc &job);
+    void release_rx_buffers(const job_desc &job);
+    void shutdown_socket_job(const job_desc &job);
     void rx_data_recvd_job(const job_desc &job);
     void listen_socket_job(const job_desc &job);
+    void tls_setup_job(const job_desc &job);
+    void cancel_connect_job(const job_desc &job);
     void close_socket_job(const job_desc &job);
 
     static void entity_context_comp_cb(xlio_socket_t sock, uintptr_t userdata_sq,
                                        uintptr_t userdata_op);
 
+    void arm_cq_notifications();
+    void drain_wakeup_fd();
+
     job_queue<job_desc> m_job_queue;
     size_t m_index;
     size_t m_last_job_size = 0U;
     event_handler_manager_local::time_point m_prev_proc_time;
-    bool m_last_poll_hit = false;
+    bool m_last_poll_hit : 1;
+    bool m_intr_setup_ok : 1;
     entity_context_stats_t m_stats;
+
+    int m_wakeup_fd = -1;
+    int m_epoll_fd = -1;
 };
 
 #endif

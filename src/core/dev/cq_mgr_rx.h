@@ -69,6 +69,12 @@ public:
     bool request_notification();
 
     /**
+     * Read and acknowledge a pending CQ event from the notification channel.
+     * Resets the notification armed flag so the CQ can be re-armed.
+     */
+    void ack_cq_events();
+
+    /**
      * Block on the CQ's notification channel for the next event and process
      * it before exiting.
      */

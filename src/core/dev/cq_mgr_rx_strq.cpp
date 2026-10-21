@@ -12,6 +12,7 @@
 #include "cq_mgr_rx_inl.h"
 #include "hw_queue_rx.h"
 #include "ring_simple.h"
+#include "core/proto/xlio_time.h"
 #include <cinttypes>
 #include "proto/tls.h"
 
@@ -356,6 +357,7 @@ int cq_mgr_rx_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
 
     // CQ polling loop until max wce limit is reached for this interval or CQ is drained
     uint32_t ret_total = 0;
+    xlio_now_us_batch now_us_batch;
 
     // drain_and_proccess() is mainly called in following cases as
     // Internal thread:
@@ -370,8 +372,17 @@ int cq_mgr_rx_strq::drain_and_proccess(uintptr_t *p_recycle_buffers_last_wr_id)
         mem_buf_desc_t *buff = nullptr;
         mem_buf_desc_t *buff_wqe = poll(status, buff);
         if (!buff && !buff_wqe) {
+            /* Timestamp GRO data carried into this filler-only drain. */
+            if (!now_us_batch.armed() && m_p_ring->m_gro_mgr.has_active_streams()) {
+                now_us_batch.refresh();
+            }
             m_p_ring->m_gro_mgr.flush_all(nullptr);
             return ret_total;
+        }
+
+        /* A filler CQE carries no packet timestamp. */
+        if (buff && !now_us_batch.armed()) {
+            now_us_batch.refresh();
         }
 
         ret_total +=
@@ -412,6 +423,12 @@ int cq_mgr_rx_strq::poll_and_process_element_rx(void *pv_fd_ready_array)
 {
     cq_logfuncall("");
 
+    xlio_now_us_batch now_us_batch;
+    const bool had_pending_rx = !m_rx_queue.empty() || m_p_ring->m_gro_mgr.has_active_streams();
+    if (had_pending_rx) {
+        now_us_batch.refresh();
+    }
+
     if (unlikely(m_n_sysvar_cq_poll_batch_max <= process_recv_queue(pv_fd_ready_array))) {
         m_p_ring->m_gro_mgr.flush_all(pv_fd_ready_array);
         return false; // CQ was not drained.
@@ -433,6 +450,9 @@ int cq_mgr_rx_strq::poll_and_process_element_rx(void *pv_fd_ready_array)
         }
 
         if (buff) {
+            if (!now_us_batch.armed()) {
+                now_us_batch.refresh();
+            }
             ++rx_polled;
             if (cqe_process_rx(buff, status)) {
                 process_recv_buffer(buff, pv_fd_ready_array);

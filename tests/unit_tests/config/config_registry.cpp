@@ -11,6 +11,7 @@
 #include "descriptors/config_descriptor.h"
 #include "xlio_exception.h"
 #include "config_registry.h"
+#include "string_utils.h"
 #include "utils.h"
 
 // Helper function to create config_descriptor from schema string
@@ -297,6 +298,76 @@ TEST(config, config_registry_default_ctr_inline_has_precedence)
     config_registry registry;
 
     ASSERT_EQ(5, registry.get_value<int64_t>("monitor.log.level"));
+}
+
+TEST(config, config_registry_defaults_tcp_rto_floor_to_600_msec)
+{
+    conf_file_writer json_config(R"({})");
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    config_registry registry;
+
+    EXPECT_EQ(600, registry.get_value<int64_t>("network.protocols.tcp.rto_floor_msec"));
+}
+
+TEST(config, config_registry_loads_tcp_rto_floor_override)
+{
+    conf_file_writer json_config(
+        R"({ "network": { "protocols": { "tcp": { "rto_floor_msec": 200 } } } })");
+    env_setter config_file_setter("XLIO_CONFIG_FILE", json_config.get());
+
+    config_registry registry;
+
+    EXPECT_EQ(200, registry.get_value<int64_t>("network.protocols.tcp.rto_floor_msec"));
+}
+
+TEST(config, config_registry_accepts_tcp_rto_floor_endpoints)
+{
+    conf_file_writer minimum_config(
+        R"({ "network": { "protocols": { "tcp": { "rto_floor_msec": 1 } } } })");
+    env_setter minimum_config_file("XLIO_CONFIG_FILE", minimum_config.get());
+    config_registry minimum_registry;
+    EXPECT_EQ(1, minimum_registry.get_value<int64_t>("network.protocols.tcp.rto_floor_msec"));
+
+    conf_file_writer maximum_config(
+        R"({ "network": { "protocols": { "tcp": { "rto_floor_msec": 120000 } } } })");
+    env_setter maximum_config_file("XLIO_CONFIG_FILE", maximum_config.get());
+    config_registry maximum_registry;
+    EXPECT_EQ(120000,
+              maximum_registry.get_value<int64_t>("network.protocols.tcp.rto_floor_msec"));
+}
+
+TEST(config, config_registry_rejects_tcp_rto_floor_outside_range)
+{
+    conf_file_writer below_minimum_config(
+        R"({ "network": { "protocols": { "tcp": { "rto_floor_msec": 0 } } } })");
+    env_setter below_minimum_config_file("XLIO_CONFIG_FILE", below_minimum_config.get());
+    EXPECT_THROW(config_registry(), xlio_exception);
+
+    conf_file_writer above_maximum_config(
+        R"({ "network": { "protocols": { "tcp": { "rto_floor_msec": 120001 } } } })");
+    env_setter above_maximum_config_file("XLIO_CONFIG_FILE", above_maximum_config.get());
+    EXPECT_THROW(config_registry(), xlio_exception);
+}
+
+TEST(config, parse_uint32_decimal_is_strict_and_overflow_safe)
+{
+    uint32_t value = 77;
+
+    EXPECT_TRUE(string_utils::parse_uint32_decimal("0", value));
+    EXPECT_EQ(0U, value);
+    EXPECT_TRUE(string_utils::parse_uint32_decimal("120000", value));
+    EXPECT_EQ(120000U, value);
+    EXPECT_TRUE(string_utils::parse_uint32_decimal("4294967295", value));
+    EXPECT_EQ(UINT32_MAX, value);
+
+    static const char *invalid[] = {nullptr, "",          "-1",         "+1", " 1",
+                                    "1 ",    "1x",        "4294967296", "999999999999999999999"};
+    for (const char *input : invalid) {
+        value = 77;
+        EXPECT_FALSE(string_utils::parse_uint32_decimal(input, value));
+        EXPECT_EQ(77U, value) << "failed parse modified its output";
+    }
 }
 
 TEST(config, config_registry_pattern_transformer_applied)

@@ -19,6 +19,7 @@
 #include "config/descriptors/config_descriptor.h"
 #include "config/descriptors/parameter_descriptor.h"
 #include "config/runtime_registry.h"
+#include "core/lwip/tcp_rto.h"
 #include "dev/buffer_pool.h"
 #include "dev/net_device_table_mgr.h"
 #include "dev/net_device_val.h"
@@ -97,6 +98,13 @@ struct aggregated_socket_stats {
     uint64_t total_tls_tx_bytes = 0, total_tls_rx_bytes = 0;
 #endif
 
+    // Retained-slot and process-wide timer-lock high-waters remain separate
+    // because retained slots are a bounded snapshot, not an active inventory.
+    uint32_t tcp_timer_skips_retained_max = 0;
+    uint32_t tcp_timer_skips_global_max = 0;
+    uint64_t tcp_timer_skips_retained_count_at_warn = 0;
+    uint64_t tcp_timer_skips_retained_count_total = 0;
+
     bool has_per_socket_traffic = false;
     uint64_t pool_socket_count = 0;
 };
@@ -125,6 +133,9 @@ static aggregated_socket_stats aggregate_socket_stats()
 
     // 1. Collect socket counts from destructor counters.
     collect_total_socket_counts(agg);
+    // The process high-water includes sockets outside the retained snapshot.
+    agg.tcp_timer_skips_global_max =
+        g_tuning_report_counters.tcp_timer_consecutive_skips_max.load(std::memory_order_relaxed);
 
     // 2. If the sock_stats pool is populated, enrich with per-socket traffic
     // stats. Pool entries retain their last socket's data after return
@@ -165,6 +176,16 @@ static aggregated_socket_stats aggregate_socket_stats()
         agg.total_tls_tx_bytes += stat.tls_counters.n_tls_tx_bytes;
         agg.total_tls_rx_bytes += stat.tls_counters.n_tls_rx_bytes;
 #endif
+
+        // A retained slot may describe its active or most recent occupant.
+        uint32_t skips_max = stat.n_tcp_timer_consecutive_skips_max;
+        if (skips_max > agg.tcp_timer_skips_retained_max) {
+            agg.tcp_timer_skips_retained_max = skips_max;
+        }
+        if (skips_max >= XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD) {
+            agg.tcp_timer_skips_retained_count_at_warn++;
+        }
+        agg.tcp_timer_skips_retained_count_total++;
 
         // Offload traffic split — per-socket granularity, only available from pool.
         if (stat.b_is_offloaded) {
@@ -787,6 +808,33 @@ static void write_runtime_stats(FILE *f, const aggregated_socket_stats &agg, dou
             fprintf(f, "tx_retransmits: 0\n");
         }
 
+        if (agg.tcp_timer_skips_retained_count_at_warn > 0) {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max: %" PRIu32
+                    " # WARNING: trylock starvation; %" PRIu64 "/%" PRIu64
+                    " retained stats slots reached >=%d consecutive skips\n",
+                    agg.tcp_timer_skips_retained_max, agg.tcp_timer_skips_retained_count_at_warn,
+                    agg.tcp_timer_skips_retained_count_total, XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD);
+        } else {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max: %" PRIu32 " # 0/%" PRIu64
+                    " retained stats slots reached warning threshold (>=%d)\n",
+                    agg.tcp_timer_skips_retained_max, agg.tcp_timer_skips_retained_count_total,
+                    XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD);
+        }
+        if (agg.tcp_timer_skips_global_max >= XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD) {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max_global: %" PRIu32
+                    " # WARNING: trylock starvation; process high-water may include"
+                    " sockets absent from retained stats slots\n",
+                    agg.tcp_timer_skips_global_max);
+        } else {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max_global: %" PRIu32
+                    " # process high-water across all sockets\n",
+                    agg.tcp_timer_skips_global_max);
+        }
+
         // Striding RQ stats (relevant for STRQ-enabled configs)
         if (agg.total_strq_strides > 0) {
             fprintf(f, "strq_total_strides: %" PRIu64 "\n", agg.total_strq_strides);
@@ -828,6 +876,19 @@ static void write_runtime_stats(FILE *f, const aggregated_socket_stats &agg, dou
                         "ring_total_tx_retransmits: %" PRIu64 " # WARNING: retransmits detected\n",
                         ring_agg.total_tx_retransmits);
             }
+        }
+        if (agg.tcp_timer_skips_global_max >= XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD) {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max_global: %" PRIu32
+                    " # WARNING: trylock starvation; per-socket distribution unavailable"
+                    " (enable monitor.stats.fd_num for distribution)\n",
+                    agg.tcp_timer_skips_global_max);
+        } else {
+            fprintf(f,
+                    "tcp_timer_consecutive_skips_max_global: %" PRIu32
+                    " # process high-water; per-socket distribution unavailable"
+                    " (enable monitor.stats.fd_num for distribution)\n",
+                    agg.tcp_timer_skips_global_max);
         }
         fprintf(f, "# Per-socket traffic stats require monitor.stats.fd_num > 0\n");
     } else {

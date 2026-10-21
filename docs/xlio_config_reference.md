@@ -69,6 +69,7 @@ This file documents all 122 XLIO runtime configuration parameters with their typ
   - [`network.protocols.tcp.nodelay.enable`](#networkprotocolstcpnodelayenable) — Disable Nagle's algorithm
   - [`network.protocols.tcp.push`](#networkprotocolstcppush) — Set TCP Push flag
   - [`network.protocols.tcp.quickack`](#networkprotocolstcpquickack) — Enable quick ACKs
+  - [`network.protocols.tcp.rto_floor_msec`](#networkprotocolstcprto_floor_msec) — TCP retransmission timeout floor (msec)
   - [`network.protocols.tcp.timer_msec`](#networkprotocolstcptimer_msec) — TCP timer interval (msec)
   - [`network.protocols.tcp.timestamps`](#networkprotocolstcptimestamps) — TCP timestamps mode
   - [`network.protocols.tcp.wmem`](#networkprotocolstcpwmem) — Write buffer size (bytes)
@@ -725,7 +726,10 @@ Memory limit for the zero-copy mapping cache used by sendfile().
 **How it works:**
 Files sent via sendfile() are mmap'd, registered with RDMA hardware (ibv_reg_mr), and cached
 by file identity (device + inode). Different file descriptors to the same file share one mapping.
-When the cache exceeds this limit, LRU eviction removes oldest unused mappings.
+Frequently used mappings retain one cache-owned reference so sendfile and TX completion avoid
+exclusive cache locking. Retention is bounded by this byte limit. When space is needed, the cache
+evicts zero-reference mappings first, then uses a second-chance policy to demote and evict older
+hot mappings. Open file descriptors do not prevent an idle mapping from being evicted.
 
 **Tradeoffs:**
 
@@ -1548,28 +1552,59 @@ request-response protocols, or when experiencing latency spikes with small messa
 
 **Default:** `false`
 
+### `network.protocols.tcp.rto_floor_msec`
+
+> **Type:** integer (range: 1 to 120000)
+>
+> **Maps to:** `XLIO_TCP_RTO_FLOOR_MSEC`
+
+Additive floor used by the TCP retransmission-timeout estimator:
+`RTO = min(120 s, SRTT + max(4 x RTTVAR, rto_floor_msec))`.
+
+The floor also clamps the 1s initial RTO, the clean-handshake `3 x RTT` seed, and the
+3s fallback after a SYN retransmission whenever it is larger than those values.
+
+A 600ms floor provides a conservative loss-detection envelope for
+high-connection-count workloads when scheduling or ACK service is delayed.
+Latency-sensitive deployments can lower the floor, for example to 200ms, when their
+measured scheduling envelope makes that safe. A lower floor detects real packet loss
+sooner but increases exposure to spurious RTOs.
+
+The RTO floor is independent of the TCP timer check cadence.
+[`network.protocols.tcp.timer_msec`](#networkprotocolstcptimer_msec) controls when XLIO checks the absolute deadline.
+
+**Default:** `600`
+
 ### `network.protocols.tcp.timer_msec`
 
-> **Type:** integer (min: 0)
+> **Type:** integer (range: 0 to 5000)
 >
 > **Maps to:** `XLIO_TCP_TIMER_RESOLUTION_MSEC`
 
-Resolution in milliseconds for TCP internal timers.
+Resolution in milliseconds for TCP internal timer scheduling.
 
 **Two timer mechanisms:**
 
 - *Fast timer* (fires every timer_msec): Sends delayed ACKs. Maximum ACK delay = timer_msec.
-- *Slow timer* (fires every timer_msec × 2): Retransmission timeout detection, persist probes
-  (zero-window), keepalive probes, connection state cleanup (FIN_WAIT, TIME_WAIT, etc.).
+- *Slow timer* (fires every timer_msec × 2): Schedules when RTO deadline checks run,
+  persist probes (zero-window), keepalive probes, connection state cleanup (FIN_WAIT,
+  TIME_WAIT, etc.).
+
+**Precision domains:** RTT samples and the retransmission timeout (`tcpi_rto`, `tcpi_rtt`,
+`tcpi_rttvar`) use monotonic microsecond timestamps and are independent of `timer_msec`.
+The slow timer only decides *when* the RTO deadline check runs; the deadline itself uses
+microsecond precision. [`network.protocols.tcp.timestamps`](#networkprotocolstcptimestamps) controls the on-wire RFC 1323
+timestamp option and is unaffected.
 
 **Tradeoffs:**
 
-- *Lower (10-50ms):* Faster packet loss detection, lower delayed ACK
-  latency when quickack is disabled. Higher CPU overhead and more
-  frequent internal thread lock contention from timer processing.
-- *Higher (200-500ms):* Lower CPU overhead, less timer thread
-  contention, better for high connection counts. Slower loss
-  detection, higher ACK latency, less responsive state machine.
+- *Lower (10-50ms):* Faster RTO deadline-check cadence and lower delayed ACK latency when
+  quickack is disabled. Higher CPU overhead and more frequent internal-thread lock
+  contention from timer processing.
+- *Higher (200-500ms):* Lower CPU overhead, less timer-thread contention, and better scaling
+  at high connection counts. RTO deadlines are checked less often, while their configured
+  duration remains independent of this cadence. ACK latency and state-machine processing
+  also become less responsive.
 
 **Sizing:** Match to your latency tolerance. Default 100ms balances responsiveness and CPU.
 Reduce if delayed ACKs are in use and latency matters. Increase for CPU-constrained servers
@@ -1578,7 +1613,9 @@ with many connections.
 **Constraints:**
 
 - Minimum: [`performance.threading.internal_handler.timer_msec`](#performancethreadinginternal_handlertimer_msec) (auto-clamped if set lower)
-- Maximum: 500ms per RFC 1122 (delayed ACK must be < 500ms)
+- Configured maximum: 5000ms
+- Protocol note: values above 500ms exceed RFC 1122's delayed ACK bound and can significantly
+  delay TCP state processing.
 
 **Default:** `100`
 
@@ -2585,7 +2622,9 @@ lower for non-offloaded responsiveness, higher for latency.
 
 Controls how long (in microseconds) XLIO busy-polls the
 hardware Completion Queue during select()/poll()/epoll_wait()
-before arming interrupts and sleeping.
+before arming interrupts and sleeping. In worker-threads mode,
+the same budget controls how long an idle worker polls before
+it arms RX Completion Queue notifications and sleeps.
 
 **Mechanism:** Polls the Completion Queue for up to this many
 microseconds (capped by the application timeout). On expiry
@@ -2608,16 +2647,16 @@ CPU spinning before every sleep transition.
 - *Too high / -1:* Thread spins idle, starving co-located
   threads on the same core.
 
-For most workloads the default (100000 = 100 milliseconds)
+For most workloads the default (10000 = 10 milliseconds)
 is sufficient. Use -1 only with dedicated CPU cores.
 
 **Auto-modified by:** ultra_latency (-1), latency (-1), nginx (0),
-nginx_dpu (0), threads mode (-1).
+nginx_dpu (0).
 
 **Related:** [`blocking_rx_poll_usec`](#performancepollingblocking_rx_poll_usec) (same for recv()/read()),
 [`poll_os_ratio`](#performancepollingiomuxpoll_os_ratio) (OS polling within the busy-poll loop).
 
-**Default:** `100000`
+**Default:** `10000`
 
 ### `performance.polling.iomux.skip_os`
 
@@ -3816,6 +3855,11 @@ XLIO's internal thread or on each application thread.
 **Forced** when delegate: ring allocation per_thread
 (both directions), progress engine interval disabled.
 
+**Not supported** with worker threads
+([`performance.threading.worker_threads`](#performancethreadingworker_threads) > 0): XLIO exits
+at startup with an error. Worker threads already run the
+TCP timers of their sockets.
+
 **Sizing:** Default suits most applications. Use
 "delegate" only for busy-polling or epoll event loops
 with strict one-thread-per-socket ownership (trading,
@@ -3827,7 +3871,7 @@ lock overhead. Misuse symptoms: hung connections
 
 ### `performance.threading.internal_handler.timer_msec`
 
-> **Type:** integer (min: 0)
+> **Type:** integer (range: 1 to 5000)
 >
 > **Maps to:** `XLIO_TIMER_RESOLUTION_MSEC`
 
@@ -3919,13 +3963,15 @@ doesn't affect its behavior.
 - *>0 (worker threads):* XLIO spawns N worker threads.
   XLIO binds sockets to the threads and performs networking
   and protocol related operations there. Memory copies are
-  done in the application threads.
+  done in the application threads. Workers busy-poll for the
+  configured [`poll_usec`](#performancepollingiomuxpoll_usec) budget, then arm RX Completion Queue
+  notifications and sleep until work arrives. A value of -1
+  keeps them in busy-poll mode.
 
 **Limitations:**
 
 - TCP only.
 - Non-blocking sockets only.
-- Worker threads work in busy-polling mode only.
 - Sockets are distributed across threads in round-robin only.
 
 **Tradeoffs:**
@@ -3936,22 +3982,23 @@ doesn't affect its behavior.
   frequently or socket distribution strategy is unpredictable,
   can lead to a lock contention.
 - *>0 (worker threads):* Independence from application
-  architecture and behavior. Extra CPU cost and latency.
+  architecture and behavior. Extra scheduling and handoff
+  latency. A finite polling budget reduces idle CPU at the
+  cost of interrupt wakeup latency.
 
-**Sizing:** In busy-polling mode, each worker consumes
-one CPU core at 100%. Set to cores you can dedicate, not
-connection count. For applications with per-thread
+**Sizing:** Set the worker count to cores or concurrency you
+can dedicate, not connection count. With [`poll_usec`](#performancepollingiomuxpoll_usec) -1 each
+worker consumes one CPU core at 100%; a finite value allows
+idle workers to sleep. For applications with per-thread
 sockets and frequent socket calls, the default (0) is
 sufficient and lower-latency. Use workers for legacy
 applications that share sockets across threads or call
 socket APIs infrequently. Too few workers: job queue
 backs up ("Max" column in xlio_stats view 6). Too
-many: CPU cores wasted on idle polling ("Idle" column
-near 100%).
+many: unnecessary handoffs and worker resources.
 
 **Forced changes** when >0: [`performance.buffers.tx.buf_size`](#performancebufferstxbuf_size) 256 KB,
-[`tcp_buffer_batch`](#performanceringstxtcp_buffer_batch) 1, [`poll_usec`](#performancepollingiomuxpoll_usec) -1,
-[`periodic_drain_msec`](#performancecompletion_queueperiodic_drain_msec) 0.
+[`tcp_buffer_batch`](#performanceringstxtcp_buffer_batch) 1, [`periodic_drain_msec`](#performancecompletion_queueperiodic_drain_msec) 0.
 
 **Monitoring:** `xlio_stats -v6` provides worker threads
 counters.

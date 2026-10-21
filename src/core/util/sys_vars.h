@@ -135,6 +135,7 @@ public:
 
     void get_params();
     bool is_threads_mode() const { return worker_threads > 0; }
+    bool is_interrupt_mode() const { return select_poll_num >= 0; }
 
     // Returns the runtime registry (optional reference)
     const std::experimental::optional<runtime_registry> &get_runtime_registry() const
@@ -249,6 +250,7 @@ public:
     uint16_t worker_threads;
     uint32_t timer_resolution_msec;
     uint32_t tcp_timer_resolution_msec;
+    uint32_t tcp_rto_floor_msec;
     option_tcp_ctl_thread::mode_t tcp_ctl_thread;
     tcp_ts_opt_t tcp_ts_opt;
     bool tcp_nodelay;
@@ -335,6 +337,7 @@ public:
 private:
     void get_app_name();
     void get_env_params();
+    void validate_config() const;
 
     void apply_config_from_registry();
     void print_xlio_load_failure_msg();
@@ -471,6 +474,7 @@ extern const mce_sys_var &safe_mce_sys();
 #define SYS_VAR_WORKER_THREADS            "XLIO_WORKER_THREADS"
 #define SYS_VAR_TIMER_RESOLUTION_MSEC     "XLIO_TIMER_RESOLUTION_MSEC"
 #define SYS_VAR_TCP_TIMER_RESOLUTION_MSEC "XLIO_TCP_TIMER_RESOLUTION_MSEC"
+#define SYS_VAR_TCP_RTO_FLOOR_MSEC        "XLIO_TCP_RTO_FLOOR_MSEC"
 #define SYS_VAR_TCP_CTL_THREAD            "XLIO_TCP_CTL_THREAD"
 #define SYS_VAR_TCP_TIMESTAMP_OPTION      "XLIO_TCP_TIMESTAMP_OPTION"
 #define SYS_VAR_TCP_NODELAY               "XLIO_TCP_NODELAY"
@@ -596,7 +600,7 @@ extern const mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_UDP_3T_RULES                  (true)
 #define MCE_DEFAULT_ETH_MC_L2_ONLY_RULES          (false)
 #define MCE_DEFAULT_MC_FORCE_FLOWTAG              (false)
-#define MCE_DEFAULT_SELECT_NUM_POLLS              (100000)
+#define MCE_DEFAULT_SELECT_NUM_POLLS              (10000)
 #define MCE_DEFAULT_SELECT_POLL_OS_RATIO          (10)
 #define MCE_DEFAULT_SELECT_SKIP_OS                (4)
 #define MCE_DEFAULT_SELECT_CPU_USAGE_STATS        (false)
@@ -618,7 +622,13 @@ extern const mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_QP_FORCE_MC_ATTACH             (false)
 #define MCE_DEFAULT_OFFLOADED_SOCKETS              (true)
 #define MCE_DEFAULT_TIMER_RESOLUTION_MSEC          (10)
+#define MCE_MIN_TIMER_RESOLUTION_MSEC              (1)
 #define MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC      (100)
+#define MCE_MAX_TCP_TIMER_RESOLUTION_MSEC          (5000)
+#define MCE_MAX_TIMER_RESOLUTION_MSEC              (MCE_MAX_TCP_TIMER_RESOLUTION_MSEC)
+#define MCE_MIN_TCP_RTO_FLOOR_MSEC                 (1)
+#define MCE_MAX_TCP_RTO_FLOOR_MSEC                 (120000)
+#define MCE_DEFAULT_TCP_RTO_FLOOR_MSEC             (600)
 #define MCE_DEFAULT_TCP_CTL_THREAD                 (option_tcp_ctl_thread::CTL_THREAD_DISABLE)
 #define MCE_DEFAULT_TCP_TIMESTAMP_OPTION           (TCP_TS_OPTION_DISABLE)
 #define MCE_DEFAULT_TCP_NODELAY                    (false)

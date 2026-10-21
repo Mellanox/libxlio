@@ -166,6 +166,8 @@ const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TIMER_RESOLUTION_MSEC {
     "performance.threading.internal_handler.timer_msec"};
 const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC {
     "network.protocols.tcp.timer_msec"};
+const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_TCP_RTO_FLOOR_MSEC {
+    "network.protocols.tcp.rto_floor_msec"};
 const config_var_info_t<option_tcp_ctl_thread::mode_t, int64_t> CONFIG_VAR_TCP_CTL_THREAD {
     "performance.threading.internal_handler.behavior"};
 const config_var_info_t<tcp_ts_opt_t, int64_t> CONFIG_VAR_TCP_TIMESTAMP_OPTION {
@@ -555,6 +557,9 @@ void sys_var_configurator::initialize_base_variables()
 
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.tcp_timer_resolution_msec,
                                                       CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC);
+
+    m_runtime_registry.register_and_set_default_value(&m_sys_vars.tcp_rto_floor_msec,
+                                                      CONFIG_VAR_TCP_RTO_FLOOR_MSEC);
 
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.tcp_ctl_thread,
                                                       CONFIG_VAR_TCP_CTL_THREAD);
@@ -981,12 +986,12 @@ void sys_var_configurator::configure_after_user_settings()
                     MAX_STATS_FD_NUM);
     }
 
-    if (m_sys_vars.tx_num_wr <= (m_sys_vars.tx_num_wr_to_signal * 2)) {
-        m_runtime_registry.set_value(CONFIG_VAR_TX_NUM_WRE,
-                                     static_cast<int64_t>(m_sys_vars.tx_num_wr_to_signal * 2),
-                                     change_reason::AutoCorrected,
-                                     std::string(CONFIG_VAR_TX_NUM_WRE.name) + " must be > 2 * " +
-                                         CONFIG_VAR_TX_NUM_WRE_TO_SIGNAL.name);
+    if (m_sys_vars.tx_num_wr < (m_sys_vars.tx_num_wr_to_signal * 2)) {
+        m_runtime_registry.set_value(
+            CONFIG_VAR_TX_NUM_WRE, static_cast<int64_t>(m_sys_vars.tx_num_wr_to_signal * 2),
+            change_reason::AutoCorrected,
+            std::string(CONFIG_VAR_TX_NUM_WRE.name) + " must be at least " +
+                CONFIG_VAR_TX_NUM_WRE_TO_SIGNAL.name + " * 2");
     }
 
     if (m_sys_vars.enable_striding_rq &&
@@ -1002,12 +1007,12 @@ void sys_var_configurator::configure_after_user_settings()
                     CONFIG_VAR_STRQ_NUM_STRIDES.name, CONFIG_VAR_RX_NUM_WRE.name,
                     MAX_MLX5_CQ_SIZE_ITEMS, CONFIG_VAR_RX_NUM_WRE.name, m_sys_vars.rx_num_wr);
     }
-    if (m_sys_vars.rx_num_wr <= (m_sys_vars.rx_num_wr_to_post_recv * 2)) {
-        m_runtime_registry.set_value(CONFIG_VAR_RX_NUM_WRE,
-                                     static_cast<int64_t>(m_sys_vars.rx_num_wr_to_post_recv * 2),
-                                     change_reason::AutoCorrected,
-                                     std::string(CONFIG_VAR_RX_NUM_WRE.name) + " must be > 2 * " +
-                                         CONFIG_VAR_RX_NUM_WRE_TO_POST_RECV.name);
+    if (m_sys_vars.rx_num_wr < (m_sys_vars.rx_num_wr_to_post_recv * 2)) {
+        m_runtime_registry.set_value(
+            CONFIG_VAR_RX_NUM_WRE, static_cast<int64_t>(m_sys_vars.rx_num_wr_to_post_recv * 2),
+            change_reason::AutoCorrected,
+            std::string(CONFIG_VAR_RX_NUM_WRE.name) + " must be at least " +
+                CONFIG_VAR_RX_NUM_WRE_TO_POST_RECV.name + " * 2");
     }
 
     if (m_sys_vars.rx_poll_num == 0) {
@@ -1167,6 +1172,26 @@ void sys_var_configurator::configure_after_user_settings()
                                      change_reason::AutoCorrected, "Out of range, using default");
     }
 
+    if (m_sys_vars.timer_resolution_msec < MCE_MIN_TIMER_RESOLUTION_MSEC) {
+        vlog_printf(VLOG_WARNING,
+                    "Timer resolution (%s=%u) must be greater than zero. "
+                    "Using default %d msec.\n",
+                    CONFIG_VAR_TIMER_RESOLUTION_MSEC.name, m_sys_vars.timer_resolution_msec,
+                    MCE_DEFAULT_TIMER_RESOLUTION_MSEC);
+        m_runtime_registry.set_value(CONFIG_VAR_TIMER_RESOLUTION_MSEC,
+                                     static_cast<int64_t>(MCE_DEFAULT_TIMER_RESOLUTION_MSEC),
+                                     change_reason::AutoCorrected, "Must be greater than zero");
+    } else if (m_sys_vars.timer_resolution_msec > MCE_MAX_TIMER_RESOLUTION_MSEC) {
+        vlog_printf(VLOG_WARNING,
+                    "Timer resolution (%s=%u) exceeds maximum %d. "
+                    "Setting timer resolution to %d msec.\n",
+                    CONFIG_VAR_TIMER_RESOLUTION_MSEC.name, m_sys_vars.timer_resolution_msec,
+                    MCE_MAX_TIMER_RESOLUTION_MSEC, MCE_MAX_TIMER_RESOLUTION_MSEC);
+        m_runtime_registry.set_value(
+            CONFIG_VAR_TIMER_RESOLUTION_MSEC, static_cast<int64_t>(MCE_MAX_TIMER_RESOLUTION_MSEC),
+            change_reason::AutoCorrected, "Exceeds maximum TCP timer resolution");
+    }
+
     if (m_sys_vars.tcp_timer_resolution_msec < m_sys_vars.timer_resolution_msec) {
         vlog_printf(VLOG_WARNING,
                     "TCP timer resolution (%s=%d) cannot be smaller than timer resolution "
@@ -1178,6 +1203,17 @@ void sys_var_configurator::configure_after_user_settings()
             CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC,
             static_cast<int64_t>(m_sys_vars.timer_resolution_msec), change_reason::AutoCorrected,
             std::string("Cannot be smaller than ") + CONFIG_VAR_TIMER_RESOLUTION_MSEC.name);
+    }
+    if (m_sys_vars.tcp_timer_resolution_msec > MCE_MAX_TCP_TIMER_RESOLUTION_MSEC) {
+        vlog_printf(VLOG_WARNING,
+                    "TCP timer resolution (%s=%u) exceeds maximum %d. "
+                    "Setting TCP timer resolution to %d msec.\n",
+                    CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC.name, m_sys_vars.tcp_timer_resolution_msec,
+                    MCE_MAX_TCP_TIMER_RESOLUTION_MSEC, MCE_MAX_TCP_TIMER_RESOLUTION_MSEC);
+        m_runtime_registry.set_value(CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC,
+                                     static_cast<int64_t>(MCE_MAX_TCP_TIMER_RESOLUTION_MSEC),
+                                     change_reason::AutoCorrected,
+                                     "Exceeds maximum supported TCP timer resolution");
     }
 
     if (strcmp(m_sys_vars.internal_thread_affinity_str, "-1") != 0) {
@@ -1254,9 +1290,6 @@ void sys_var_configurator::configure_after_user_settings()
 
     // From fixup_params
     if (m_sys_vars.worker_threads > 0) {
-        m_runtime_registry.set_value(
-            CONFIG_VAR_SELECT_NUM_POLLS, static_cast<int64_t>(-1), change_reason::AutoCorrected,
-            "Working in threads mode:" + std::string(CONFIG_VAR_WORKER_THREADS.name) + " > 0");
         m_runtime_registry.set_value(
             CONFIG_VAR_PROGRESS_ENGINE_INTERVAL, static_cast<int64_t>(0),
             change_reason::AutoCorrected,

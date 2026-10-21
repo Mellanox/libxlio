@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+#include <cstdint>
 #include <functional>
+#include <mutex>
+#include <new>
 #include <numeric>
 #include <stdio.h>
 #include <sys/time.h>
@@ -18,11 +21,16 @@
 #include "util/libxlio.h"
 #include "util/instrumentation.h"
 #include "util/list.h"
+#include "util/blocking_wait.h"
+#include "util/blocking_wait_sock.h"
+#include "sock/blocking_wait_results.h"
 #include "event/event_handler_manager.h"
 #include "event/event_handler_manager_local.h"
 #include "event/poll_group.h"
 #include "proto/route_table_mgr.h"
 #include "proto/xlio_lwip.h"
+#include "proto/xlio_time.h"
+#include "core/lwip/tcp_rto.h"
 #include "proto/dst_entry_tcp.h"
 #include "iomux/io_mux_call.h"
 #include "sock-redirect.h"
@@ -194,7 +202,7 @@ inline void sockinfo_tcp::return_pending_tx_buffs()
 
 // todo inline void sockinfo_tcp::return_pending_tcp_segs()
 
-inline void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
+void sockinfo_tcp::reuse_buffer(mem_buf_desc_t *buff)
 {
     /* Special case when ZC buffers are used in RX path. */
     if (buff->lwip_pbuf.type == PBUF_ZEROCOPY) {
@@ -928,7 +936,10 @@ void sockinfo_tcp::clean_socket_obj()
     unlock_tcp_con();
 
     event_handler_manager *p_event_mgr = get_event_mgr();
-    bool delegated_timers_exit = g_b_exit &&
+    // Poll-group sockets keep their timers in the group collection even in delegate mode.
+    // Unregister those timers before deleting the socket so the group cannot retain a stale
+    // pointer.
+    bool delegated_timers_exit = g_b_exit && !m_p_group &&
         (safe_mce_sys().tcp_ctl_thread == option_tcp_ctl_thread::CTL_THREAD_DELEGATE_TCP_TIMERS);
 
     if (p_event_mgr->is_running() && !delegated_timers_exit) {
@@ -1130,13 +1141,13 @@ void sockinfo_tcp::unlock_rx_q()
     unlock_tcp_con();
 }
 
-void sockinfo_tcp::tcp_timer()
+void sockinfo_tcp::tcp_timer(int64_t timer_now_us)
 {
     if (m_state == SOCKINFO_DESTROYING) {
         return;
     }
 
-    tcp_tmr(&m_pcb);
+    tcp_tmr(&m_pcb, timer_now_us);
 
     return_pending_rx_buffs();
     return_pending_tx_buffs();
@@ -1164,7 +1175,52 @@ bool sockinfo_tcp::prepare_dst_to_send(bool is_accepted_socket /* = false */)
     return ret_val;
 }
 
+namespace {
+// lock_tcp_con / unlock_tcp_con as wait_until's Lock. RX, TX, connect, accept.
+struct tcp_con_lock_adapter {
+    explicit tcp_con_lock_adapter(sockinfo_tcp &sock)
+        : m_sock(sock)
+    {
+    }
+    void lock() { m_sock.lock_tcp_con(); }
+    void unlock() { m_sock.unlock_tcp_con(); }
+    sockinfo_tcp &m_sock;
+};
+} // namespace
+
 unsigned sockinfo_tcp::tx_wait(bool blocking)
+{
+    // Worker-threads blocking: park. Else ring-poll (R2C and non-blocking).
+    if (blocking && safe_mce_sys().is_threads_mode()) {
+        loops_timer send_timeout(m_loops_timer.get_timeout_msec());
+        return tx_wait_threads_mode(send_timeout);
+    }
+    return tx_wait_poll(blocking);
+}
+
+// Entered with the socket lock held (tcp_tx_slow_path). Do not lock again.
+unsigned sockinfo_tcp::tx_wait_threads_mode(loops_timer &send_timeout)
+{
+    const int timeout_ms = send_timeout.time_left_msec();
+
+    tcp_con_lock_adapter lock_adapter(*this);
+    blocking_wait_sock_waiter waiter(m_sock_wakeup_pipe, m_rx_epfd);
+
+    // Terminals (!is_rts, exit) must be in pred: producers wake without sndbuf space.
+    const blocking_wait::result r = blocking_wait::wait_until(
+        lock_adapter, waiter, [this]() { return sndbuf_available() > 0 || g_b_exit || !is_rts(); },
+        timeout_ms);
+
+    const unsigned sz = sndbuf_available();
+    const tx_wait_outcome outcome = map_tx_wait_result(r, sz > 0, g_b_exit);
+    if (outcome.err) {
+        errno = outcome.err;
+    }
+    return outcome.has_space ? sz : 0U;
+}
+
+// Entered and returned with the socket lock held.
+unsigned sockinfo_tcp::tx_wait_poll(bool blocking)
 {
     unsigned sz = sndbuf_available();
     int poll_count = 0;
@@ -1311,20 +1367,52 @@ ssize_t sockinfo_tcp::tcp_tx(xlio_tx_call_attr_t &tx_arg)
     return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp);
 }
 
+int sockinfo_tcp::tcp_tx_prepare_call_ctx(const xlio_tx_call_attr_t &tx_arg, tx_call_ctx &tx_ctx)
+{
+    if (tx_arg.opcode != TX_SENDMSG || !tx_arg.attr.hdr || tx_arg.attr.hdr->msg_controllen == 0U) {
+        return 0;
+    }
+
+    if (unlikely(!tx_arg.attr.hdr->msg_control)) {
+        stats_update_tx_errors(EFAULT);
+        errno = EFAULT;
+        return -1;
+    }
+
+    try {
+        tx_ctx = tx_call_ctx(tx_arg.opcode, tx_arg.attr.flags, tx_arg.attr.hdr->msg_control,
+                             tx_arg.attr.hdr->msg_controllen);
+    } catch (const std::bad_alloc &) {
+        stats_update_tx_errors(ENOMEM);
+        errno = ENOMEM;
+        return -1;
+    }
+
+    return 0;
+}
+
 ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
 {
     iovec *p_iov = tx_arg.attr.iov;
     size_t sz_iov = tx_arg.attr.sz_iov;
     ssize_t sent_bytes = 0;
-    uint32_t store_used = m_store_offset;
     int errno_tmp = errno;
+    tx_call_ctx tx_ctx;
+    const bool blocking = BLOCK_THIS_RUN(m_b_blocking, tx_arg.attr.flags);
+    loops_timer send_timeout(m_loops_timer.get_timeout_msec());
 
-    // TODO Flags aren't supported now. They usually affect blocking mode and zerocopy.
+    int tx_err = EAGAIN;
 
-    /* Note, we do unprotected access to the socket state. State assignment is expected to be
-     * atomic on supported architectures.
-     * In case of false negative, the TX job execution handles it and subsequent send operation
-     * will likely return expected error.
+    // Bytes live in m_store. m_snd_buf is SO_SNDBUF credit; ACK adds it back.
+    // One app sender owns m_store. Worker ACK only needs m_tcp_con_lock.
+    std::lock_guard<decltype(m_lock_snd)> send_lock(m_lock_snd);
+
+    /* Latch check under m_lock_snd: shutdown() flips the send latch while holding m_lock_snd
+     * before posting its SHUTDOWN job, so the check cannot interleave with the flip - either
+     * the flip is visible here (EPIPE, no bytes accepted) or every job this send posts
+     * precedes the SHUTDOWN job in the worker FIFO. close() during a concurrent send() on
+     * the same fd remains an application lifecycle race with no ordering guarantee; its
+     * committed jobs drop at the TX gate with a warning.
      */
     if (!is_rts()) {
         std::lock_guard<decltype(m_tcp_con_lock)> _lock(m_tcp_con_lock);
@@ -1334,61 +1422,110 @@ ssize_t sockinfo_tcp::tcp_tx_thread(xlio_tx_call_attr_t &tx_arg)
         }
     }
 
+    if (unlikely(tcp_tx_prepare_call_ctx(tx_arg, tx_ctx) != 0)) {
+        return -1;
+    }
+
     size_t bytes_to_send =
         std::accumulate(&p_iov[0], &p_iov[sz_iov], 0U,
                         [](size_t sum, const iovec &curr) { return sum + curr.iov_len; });
-
-    int32_t prev_sndbuf = m_snd_buf.fetch_sub(bytes_to_send);
-    if (prev_sndbuf <= 0) {
-        m_snd_buf += bytes_to_send;
-        goto exit;
-    }
-    if (prev_sndbuf < static_cast<int32_t>(bytes_to_send)) {
-        // TODO Allow to make m_snd_buf negative not to send too small buffers.
-        m_snd_buf += bytes_to_send - prev_sndbuf;
-        bytes_to_send = prev_sndbuf;
+    if (bytes_to_send == 0U) {
+        return 0;
     }
 
-    for (size_t i = 0; i < sz_iov; ++i) {
-        size_t offset = 0;
-        while (offset < p_iov[i].iov_len) {
+    // Snapshot under m_lock_snd: a concurrent writer advances m_store_offset, and a stale
+    // snapshot would stage this send over the other writer's not-yet-transmitted region.
+    uint32_t store_used = m_store_offset;
+
+    size_t iov_i = 0;
+    size_t iov_off = 0;
+    while (bytes_to_send > 0) {
+        // Optimistic grab of remaining request. fetch_sub returns credit before the grab.
+        int32_t prev_sndbuf = m_snd_buf.fetch_sub(static_cast<int32_t>(bytes_to_send));
+        if (prev_sndbuf <= 0) {
+            // Empty/overdrawn. Undo reservation.
+            m_snd_buf += static_cast<int32_t>(bytes_to_send);
+            if (!blocking) {
+                break;
+            }
+            // Park is still inside the loop, so the after-loop flush would not run.
+            // Post the partial store now or the worker never TXes and credit never returns.
+            if (m_store && store_used > m_store_offset) {
+                m_entity_context->add_job(entity_context::job_desc {
+                    entity_context::JOB_TYPE_SOCK_TX, entity_context::JOB_FLAG_TX_LAST_CHUNK, this,
+                    m_store, m_store_offset, store_used - m_store_offset, tx_ctx});
+                m_store = nullptr;
+                m_store_offset = 0;
+                store_used = 0;
+            }
+            lock_tcp_con();
+            errno = 0;
+            const unsigned available = tx_wait_threads_mode(send_timeout);
+            if (available == 0U) {
+                if (!is_rts()) {
+                    is_connected_and_ready_to_send();
+                }
+                if (errno != 0) {
+                    tx_err = errno;
+                }
+                unlock_tcp_con();
+                break;
+            }
+            unlock_tcp_con();
+            continue;
+        }
+
+        size_t remaining_batch;
+        if (prev_sndbuf < static_cast<int32_t>(bytes_to_send)) {
+            // Partial credit. Undo overshoot; copy only prev_sndbuf this batch.
+            m_snd_buf += static_cast<int32_t>(bytes_to_send) - prev_sndbuf;
+            remaining_batch = static_cast<size_t>(prev_sndbuf);
+        } else {
+            remaining_batch = bytes_to_send; // Enough credit for the rest.
+        }
+
+        while (remaining_batch > 0 && iov_i < sz_iov) {
+            if (iov_off >= p_iov[iov_i].iov_len) {
+                ++iov_i;
+                iov_off = 0;
+                continue;
+            }
             if (!m_store) {
                 m_store = m_p_connected_dst_entry->get_tx_buffer();
                 if (unlikely(!m_store)) {
-                    goto exit;
+                    m_snd_buf += static_cast<int32_t>(remaining_batch);
+                    break;
                 }
                 m_store_offset = 0;
                 store_used = 0;
                 m_store->p_next_desc = nullptr;
             }
 
-            size_t len = std::min(p_iov[i].iov_len - offset, m_store->sz_buffer - store_used);
-            len = std::min(len, bytes_to_send);
-            memcpy(m_store->p_buffer + store_used, (uint8_t *)p_iov[i].iov_base + offset, len);
+            size_t len = std::min(p_iov[iov_i].iov_len - iov_off, m_store->sz_buffer - store_used);
+            len = std::min(len, remaining_batch);
+            memcpy(m_store->p_buffer + store_used, (uint8_t *)p_iov[iov_i].iov_base + iov_off, len);
 
-            offset += len;
+            iov_off += len;
             store_used += len;
             sent_bytes += static_cast<ssize_t>(len);
+            remaining_batch -= len;
             bytes_to_send -= len;
 
             if (store_used == m_store->sz_buffer) {
                 m_entity_context->add_job(entity_context::job_desc {
                     entity_context::JOB_TYPE_SOCK_TX, entity_context::JOB_FLAG_TX_LAST_CHUNK, this,
-                    m_store, m_store_offset, store_used - m_store_offset});
+                    m_store, m_store_offset, store_used - m_store_offset, tx_ctx});
                 m_store = nullptr;
             }
-
-            if (bytes_to_send == 0) {
-                goto exit;
-            }
+        }
+        if (remaining_batch > 0) {
+            break;
         }
     }
 
-exit:
     if (unlikely(sent_bytes == 0)) {
-        // Only user thread increments the EAGAIN counter, so no need to lock
-        stats_update_tx_errors(EAGAIN);
-        errno = EAGAIN;
+        errno = tx_err;
+        stats_update_tx_errors(errno);
         return -1;
     }
 
@@ -1400,7 +1537,7 @@ exit:
 
         m_entity_context->add_job(entity_context::job_desc {
             entity_context::JOB_TYPE_SOCK_TX, !!last_chunk * entity_context::JOB_FLAG_TX_LAST_CHUNK,
-            this, m_store, m_store_offset, store_used - m_store_offset});
+            this, m_store, m_store_offset, store_used - m_store_offset, tx_ctx});
 
         m_store_offset = store_used;
         if (last_chunk) {
@@ -1412,7 +1549,8 @@ exit:
     return sent_bytes;
 }
 
-void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32_t size, int flags)
+void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32_t size, int flags,
+                                    const tx_call_ctx &tx_ctx)
 {
     const struct iovec iov = {.iov_base = buf->p_buffer + offset, .iov_len = size};
     int rc;
@@ -1435,7 +1573,19 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32
         ++buf->lwip_pbuf.ref;
     }
 
-    rc = tcp_tx_express(&iov, 1, buf->lkey, XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE, buf);
+#ifdef DEFINED_UTLS
+    auto *tls_ops = dynamic_cast<sockinfo_tcp_ops_tls *>(m_ops);
+    if (unlikely(tls_ops && tls_ops->is_tls_tx_enabled())) {
+        (void)tls_ops->tx_thread_commit(buf, offset, size, tx_ctx);
+        return;
+    }
+#else
+    NOT_IN_USE(tx_ctx);
+#endif /* DEFINED_UTLS */
+
+    rc = tcp_tx_express(
+        &iov, 1, buf->lkey,
+        XLIO_EXPRESS_OP_TYPE_DESC | XLIO_EXPRESS_MSG_MORE | XLIO_EXPRESS_TX_COMMITTED, buf);
     if (rc < 0) {
         /* TODO
          * tcp_tx_express() doesn't fail socket properly on ENOMEM. m_sock_state remains connected
@@ -1445,12 +1595,37 @@ void sockinfo_tcp::tx_thread_commit(mem_buf_desc_t *buf, uint32_t offset, uint32
          * close().
          * Need to trigger epoll EPOLLERR event in case of ENOMEM.
          */
+        // These bytes were reported to the application as sent, so the drop must be visible.
+        // A peer reset discards in-flight send data in kernel TCP too - debug level; any other
+        // cause (own FIN sequenced under accepted bytes, ENOMEM) is anomalous - warning.
+        if (errno == ECONNRESET) {
+            si_tcp_logdbg("dropping %u accepted TX bytes (errno=%d, tcp_state=%d, conn_state=%d)",
+                          size, errno, get_tcp_state(&m_pcb), m_conn_state);
+        } else {
+            si_tcp_logwarn("dropping %u accepted TX bytes (errno=%d, tcp_state=%d, conn_state=%d)",
+                           size, errno, get_tcp_state(&m_pcb), m_conn_state);
+        }
         // Handles reference of the current operation and buffer release if needed.
         buf->p_desc_owner->mem_buf_tx_release(buf, true);
     } else {
         // tcp_tx_express() doesn't account this counter, but ack_recvd_lwip_cb() does
         IF_STATS(m_p_socket_stats->n_tx_ready_byte_count += size);
     }
+}
+
+void sockinfo_tcp::tx_thread_shutdown(int how)
+{
+    lock_tcp_con();
+    const int shut_rx = (how != SHUT_WR);
+    const int shut_tx = (how != SHUT_RD);
+    if (get_tcp_state(&m_pcb) != LISTEN) {
+        if (shut_rx && m_n_rx_pkt_ready_list_count) {
+            abort_connection();
+        } else {
+            tcp_shutdown(&m_pcb, shut_rx, shut_tx);
+        }
+    }
+    unlock_tcp_con();
 }
 
 /**
@@ -1607,16 +1782,9 @@ ssize_t sockinfo_tcp::tcp_tx_slow_path(xlio_tx_call_attr_t &tx_arg)
     return tcp_tx_handle_done_and_unlock(total_tx, errno_tmp);
 }
 
-static bool inspect_socket_error_state(const mem_buf_desc_t *mem_buf_desc, struct tcp_pcb *pcb)
+static bool has_tx_completion_error(const mem_buf_desc_t *mem_buf_desc)
 {
-    // this means a retransmit happened - let's check the error_state we'll put if we got error
-    // cqe
-    if (mem_buf_desc->m_flags & mem_buf_desc_t::HAD_CQE_ERROR) {
-        TCP_EVENT_ERR(pcb->errf, pcb->my_container, ERR_RST);
-        return true;
-    }
-
-    return false;
+    return mem_buf_desc->m_flags & mem_buf_desc_t::HAD_CQE_ERROR;
 }
 
 /*
@@ -1644,8 +1812,7 @@ err_t sockinfo_tcp::ip_output(struct pbuf *p, struct tcp_seg *seg, void *v_p_con
     int count = 0;
 
     if (unlikely(flags & XLIO_TX_PACKET_REXMIT)) {
-        if (unlikely(inspect_socket_error_state(reinterpret_cast<const mem_buf_desc_t *>(seg->p),
-                                                reinterpret_cast<struct tcp_pcb *>(v_p_conn)))) {
+        if (unlikely(has_tx_completion_error(reinterpret_cast<const mem_buf_desc_t *>(seg->p)))) {
             return ERR_RST;
         }
     }
@@ -1841,6 +2008,8 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
         return;
     }
 
+    ASSERT_LOCKED(conn->m_tcp_con_lock);
+
     /*
      * In case we got RST from the other end we need to marked this socket as ready to read for
      * epoll
@@ -1888,10 +2057,58 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
 }
 
 // Execute TCP timers of this connection
-void sockinfo_tcp::handle_timer_expired()
+void sockinfo_tcp::handle_timer_expired(int64_t timer_now_us)
 {
     si_tcp_logfunc("");
-    tcp_timer();
+    tcp_timer(timer_now_us);
+}
+
+static void update_tcp_timer_skips_high_water(socket_stats_t *socket_stats, uint32_t value)
+{
+    if (socket_stats && value > socket_stats->n_tcp_timer_consecutive_skips_max) {
+        socket_stats->n_tcp_timer_consecutive_skips_max = value;
+    }
+
+    uint32_t global_prev =
+        g_tuning_report_counters.tcp_timer_consecutive_skips_max.load(std::memory_order_relaxed);
+    while (value > global_prev &&
+           !g_tuning_report_counters.tcp_timer_consecutive_skips_max.compare_exchange_weak(
+               global_prev, value, std::memory_order_relaxed, std::memory_order_relaxed)) {
+    }
+}
+
+void sockinfo_tcp::note_tcp_timer_attempt_missed()
+{
+    /* Timer collection serialization makes this streak single-writer. Publish
+     * each high-water before teardown can discard socket state. */
+    if (m_tcp_timer_consecutive_skips < UINT8_MAX) {
+        ++m_tcp_timer_consecutive_skips;
+    }
+    update_tcp_timer_skips_high_water(m_p_socket_stats, m_tcp_timer_consecutive_skips);
+}
+
+void sockinfo_tcp::note_tcp_timer_attempt_acquired()
+{
+    if (m_tcp_timer_consecutive_skips == 0) {
+        return;
+    }
+    const uint32_t timer_cadence_ms = safe_mce_sys().tcp_timer_resolution_msec;
+    const unsigned long long drift_us =
+        (unsigned long long)m_tcp_timer_consecutive_skips * timer_cadence_ms * 1000ULL;
+    /* Report sustained contention at INFO and isolated misses at DEBUG once
+     * per streak. Not using WARN because it fails Ver. group tests */
+    if (m_tcp_timer_consecutive_skips >= XLIO_TCP_TIMER_SKIP_WARN_THRESHOLD) {
+        si_tcp_loginfo("TCP timer trylock starvation: %u consecutive missed timer visits "
+                       "(~%llu us drift at cadence %u ms) [%s -> %s]",
+                       m_tcp_timer_consecutive_skips, drift_us, timer_cadence_ms,
+                       m_bound.to_str_ip_port(true).c_str(),
+                       m_connected.to_str_ip_port(true).c_str());
+    } else {
+        si_tcp_logdbg("TCP timer trylock skip: %u missed timer visit "
+                      "(~%llu us drift at cadence %u ms)",
+                      m_tcp_timer_consecutive_skips, drift_us, timer_cadence_ms);
+    }
+    m_tcp_timer_consecutive_skips = 0;
 }
 
 void sockinfo_tcp::abort_connection()
@@ -1950,6 +2167,10 @@ err_t sockinfo_tcp::ack_recvd_lwip_cb(void *arg, struct tcp_pcb *tpcb, u32_t ack
     if (conn->sndbuf_available()) {
         // This method can be called for closing socket. In this case there is no epoll context.
         NOTIFY_ON_EVENTS(conn, EPOLLOUT);
+        // Owner-gated: R2C has no sleeper on this pipe.
+        if (conn->get_entity_context()) {
+            conn->m_sock_wakeup_pipe.do_wakeup();
+        }
     }
     vlog_func_exit();
 
@@ -2362,19 +2583,31 @@ ssize_t sockinfo_tcp::rx_read_ready_packets(iovec *p_iov, ssize_t sz_iov, int *p
         return 0;
     }
 
-    int errno_tmp = errno;
+    const int errno_tmp = errno;
     loops_timer rcv_timeout(m_loops_timer.get_timeout_msec());
-    int rx_tot_size = 0;
-    int rc = rx_wait_for_data(*p_flags, __msg, rcv_timeout);
+    size_t min_ready_bytes = 1U;
+
+    if (unlikely((*p_flags & MSG_WAITALL) != 0)) {
+        size_t requested = 0U;
+        for (ssize_t i = 0; i < sz_iov; ++i) {
+            if (SIZE_MAX - requested < p_iov[i].iov_len) {
+                errno = EINVAL;
+                return -1;
+            }
+            requested += p_iov[i].iov_len;
+        }
+        if (requested == 0U) {
+            return 0;
+        }
+        min_ready_bytes = requested;
+    }
+    const int rc = rx_wait_for_data(*p_flags, __msg, rcv_timeout, min_ready_bytes);
     if (rc < 1) {
         return rc;
     }
 
-    rx_tot_size += rx_fetch_ready_buffers(p_iov, p_iov + sz_iov, __msg);
-
-    // Currently MSG_WAITALL and MSG_PEEK are not supported.
-    // In case of MSG_WAITALL we should loop here until all data is received.
-    // Error queue is not supported.
+    const ssize_t fetched =
+        static_cast<ssize_t>(rx_fetch_ready_buffers(p_iov, p_iov + sz_iov, __msg));
 
     if (__from && __fromlen) {
         // For TCP connected 5T fetch from m_connected.
@@ -2382,11 +2615,11 @@ ssize_t sockinfo_tcp::rx_read_ready_packets(iovec *p_iov, ssize_t sz_iov, int *p
         m_connected.get_sa_by_family(__from, *__fromlen, m_family);
     }
 
-    si_tcp_logfunc("RX completed, %d bytes. tid: %d", rx_tot_size, gettid());
+    si_tcp_logfunc("RX completed, %d bytes. tid: %d", fetched, gettid());
 
     // Restore errno on function entry in case successs
     errno = errno_tmp;
-    return rx_tot_size;
+    return fetched;
 }
 
 size_t sockinfo_tcp::rx_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, struct msghdr *__msg)
@@ -2523,12 +2756,13 @@ void sockinfo_tcp::rx_data_recvd(uint32_t tot_size)
     }
 }
 
-int sockinfo_tcp::rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout)
+int sockinfo_tcp::rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_timer &rcv_timeout,
+                                   size_t min_ready_bytes)
 {
     // This conditions ensures that m_rx_pkt_ready_list.front() is not null later.
-    if (m_rx_ready_byte_count < 1) {
+    if (m_rx_ready_byte_count < min_ready_bytes) {
         bool blocking = BLOCK_THIS_RUN(m_b_blocking, in_flags);
-        if ((!blocking && (errno = EAGAIN)) || (rx_sleep_wait(rcv_timeout) < 1)) {
+        if ((!blocking && (errno = EAGAIN)) || (rx_sleep_wait(rcv_timeout, min_ready_bytes) < 1)) {
             int ret = handle_rx_error(blocking);
             if (__msg && ret == 0) {
                 /* We don't return a control message in this case. */
@@ -2541,13 +2775,49 @@ int sockinfo_tcp::rx_wait_for_data(int in_flags, struct msghdr *__msg, loops_tim
     return 1;
 }
 
-// Temporary implementation for blocking RX.
-int sockinfo_tcp::rx_sleep_wait(loops_timer &rcv_timeout)
+int sockinfo_tcp::rx_sleep_wait(loops_timer &rcv_timeout, size_t min_ready_bytes)
 {
     __log_info_func("");
+
+    if (safe_mce_sys().is_threads_mode()) {
+        return rx_sleep_wait_threads_mode(rcv_timeout, min_ready_bytes);
+    }
+    return rx_sleep_wait_poll(rcv_timeout, min_ready_bytes);
+}
+
+// Entered and returned without the socket lock.
+int sockinfo_tcp::rx_sleep_wait_threads_mode(loops_timer &rcv_timeout, size_t min_ready_bytes)
+{
+    lock_tcp_con();
+
+    tcp_con_lock_adapter lock_adapter(*this);
+    blocking_wait_sock_waiter waiter(m_sock_wakeup_pipe, m_rx_epfd);
+
+    const int timeout_ms = rcv_timeout.time_left_msec();
+
+    // Terminals (exit, !is_rtr) must be in pred: producers wake without RX data.
+    const blocking_wait::result r = blocking_wait::wait_until(
+        lock_adapter, waiter,
+        [this, min_ready_bytes]() {
+            return m_rx_ready_byte_count >= min_ready_bytes || g_b_exit || !is_rtr();
+        },
+        timeout_ms);
+
+    const rx_sleep_wait_outcome outcome =
+        map_rx_sleep_wait_result(r, m_rx_ready_byte_count >= min_ready_bytes);
+    if (outcome.err) {
+        errno = outcome.err;
+    }
+
+    unlock_tcp_con();
+    return outcome.proceed ? 1 : -1;
+}
+
+int sockinfo_tcp::rx_sleep_wait_poll(loops_timer &rcv_timeout, size_t min_ready_bytes)
+{
     int32_t busy_loop_count = 0;
 
-    while (m_rx_ready_byte_count < 1 &&
+    while (m_rx_ready_byte_count < min_ready_bytes &&
            (busy_loop_count < safe_mce_sys().rx_poll_num || safe_mce_sys().rx_poll_num == -1)) {
         if (unlikely(g_b_exit || !is_rtr())) {
             return -1;
@@ -2569,7 +2839,7 @@ int sockinfo_tcp::rx_sleep_wait(loops_timer &rcv_timeout)
 
     lock_tcp_con();
 
-    if (m_rx_ready_byte_count >= 1) {
+    if (m_rx_ready_byte_count >= min_ready_bytes) {
         return 1;
     }
 
@@ -2608,7 +2878,8 @@ int sockinfo_tcp::rx_sleep_wait(loops_timer &rcv_timeout)
 
     rmb(); // For the CPU to fetch m_rx_ready_byte_count which can be updated from another core.
 
-    if (m_rx_ready_byte_count == 0U && prev_sndbuf == sndbuf_available()) { // Final check
+    if (m_rx_ready_byte_count < min_ready_bytes &&
+        prev_sndbuf == sndbuf_available()) { // Final check
         errno = EAGAIN;
         return -1;
     }
@@ -2688,16 +2959,31 @@ bool sockinfo_tcp::rx_input_cb(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_info, void 
     }
 #endif
 
-    if (sock == this) {
-        L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
-    } else {
+    if (sock != this) {
         sock->m_tcp_con_lock.lock();
-        L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
+    }
+    L3_level_tcp_input((pbuf *)p_rx_pkt_mem_buf_desc_info, pcb);
+
+    // Take the wake target from the PCB socket: a reused TIME_WAIT connection
+    // can receive the handshake directly through its existing steering rule.
+    sockinfo_tcp *parent_to_wake = sock->m_accept_parent_to_wake;
+    sock->m_accept_parent_to_wake = nullptr;
+    if (sock != this) {
         sock->m_tcp_con_lock.unlock();
     }
 
     m_iomux_ready_fd_array = nullptr;
     unlock_tcp_con();
+
+    if (parent_to_wake) {
+        // Both receive locks must be released: accept() harvests in the
+        // opposite order (parent then RSS child).
+        // Listener close waits for this worker's child-close job, so the
+        // parent remains alive until this RX callback has returned.
+        std::lock_guard<decltype(parent_to_wake->m_tcp_con_lock)> lock(
+            parent_to_wake->m_tcp_con_lock);
+        parent_to_wake->m_sock_wakeup_pipe.do_wakeup();
+    }
 
     return true;
 }
@@ -2782,10 +3068,11 @@ int sockinfo_tcp::connect(const sockaddr *__to, socklen_t __tolen)
         return -1;
     }
 
-    if (safe_mce_sys().is_threads_mode()) {
+    if (should_use_threads_mode()) {
         // For Threads mode need to do partial preparation and the rest will be done by the Thread.
-        connect_threads_mode();
-        return -1; // Currently no blocking socket support.
+        // A non-blocking socket returns -1/EINPROGRESS; a blocking socket now waits for the
+        // worker to complete/fail the handshake and returns 0 on success.
+        return connect_threads_mode();
     }
 
     if (unlikely(!prepare_dst_to_send(false))) {
@@ -2905,19 +3192,20 @@ void sockinfo_tcp::connect_async_set_errs()
     si_tcp_logdbg("NON blocking connect");
 }
 
-void sockinfo_tcp::connect_threads_mode()
+int sockinfo_tcp::connect_threads_mode()
 {
-    if (m_b_blocking) {
-        m_error_status = ECANCELED; // Temporary no support for blocking sockets.
-        errno = m_error_status;
-        m_conn_state = TCP_CONN_FAILED;
-        si_tcp_logerr("Blocking sockets are not supported in Threads mode.");
-        return;
+    // Job already posted. In-flight blocking wait stays BOUND, so the sock_state
+    // gate above cannot see it. Do not post a second ADD_AND_CONNECT.
+    if (m_conn_state != TCP_CONN_INIT) {
+        errno = EALREADY;
+        return -1;
     }
 
     m_p_connected_dst_entry->prepare_to_send(m_so_ratelimit, false, true);
     if (!connect_bind_any_and_check_rules()) {
-        return;
+        // Non-offloaded / rule mismatch: connect_bind_any_and_check_rules() already set
+        // passthrough or errno.
+        return -1;
     }
 
     fit_rcv_wnd(true);
@@ -2928,28 +3216,89 @@ void sockinfo_tcp::connect_threads_mode()
 
     if (!m_b_blocking) {
         connect_async_set_errs();
-        return;
+        return -1;
     }
 
-    // Wait for the worker thread to process connect job.
+    // Non-blocking: EINPROGRESS. Blocking: wait for the worker handshake.
+    return connect_wait_threads_mode();
+}
 
-    errno = m_error_status;
-    si_tcp_logdbg("Blocking connect error, m_sock_state=%d", static_cast<int>(m_sock_state));
+// Entered with connect()'s socket lock held. wait_until releases it around block().
+int sockinfo_tcp::connect_wait_threads_mode()
+{
+    const int timeout_ms = -1;
+
+    tcp_con_lock_adapter lock_adapter(*this);
+    blocking_wait_sock_waiter waiter(m_sock_wakeup_pipe, m_rx_epfd);
+
+    // Handshake done, INITED, passthrough, CLOSING, or exit. Passthrough and CLOSING must be in
+    // the pred: worker setPassthrough() leaves CONNECTING; close() may not move conn/sock state.
+    // Without them the sleeper re-arms on that wake and hangs.
+    const blocking_wait::result r = blocking_wait::wait_until(
+        lock_adapter, waiter,
+        [this]() {
+            return m_conn_state != TCP_CONN_CONNECTING || m_sock_state == TCP_SOCK_INITED ||
+                isPassthrough() || m_state >= SOCKINFO_CLOSING || g_b_exit;
+        },
+        timeout_ms);
+
+    // The passthrough result is checked by map_connect_wait_result.
+    /* coverity[check_return] */
+    const connect_wait_outcome outcome =
+        map_connect_wait_result(r, m_conn_state == TCP_CONN_CONNECTED,
+                                m_conn_state == TCP_CONN_TIMEOUT, g_b_exit, isPassthrough());
+
+    if (outcome.ok) {
+        // Match R2C success: CONNECTED_RDWR, not passthrough.
+        m_sock_state = TCP_SOCK_CONNECTED_RDWR;
+        setPassthrough(false);
+        si_tcp_logdbg("+++ CONNECT OK!!!! ++++");
+        return 0;
+    }
+
+    if (outcome.err) {
+        errno = outcome.err;
+    }
+    m_error_status = errno;
+    // Force a terminal m_conn_state if we were woken by g_b_exit while still connecting, so a
+    // later connect()/close() sees a coherent failed state (mirrors connect()'s EINTR handling).
+    if (m_conn_state == TCP_CONN_CONNECTING) {
+        m_conn_state = TCP_CONN_FAILED;
+        // R2C tcp_close()s the pcb on this thread. The worker owns the pcb here, so post
+        // cancel instead. FAILED is set first under this lock so a late SYN-ACK cannot
+        // publish CONNECTED. Passthrough is the OS-connect redirect; close owns CLOSING.
+        if (!isPassthrough() && m_state < SOCKINFO_CLOSING && m_entity_context) {
+            m_entity_context->add_job(entity_context::job_desc {
+                entity_context::JOB_TYPE_SOCK_CONNECT_CANCEL, 0, this, nullptr, 0U, 0U});
+        }
+    }
+    si_tcp_logdbg("Blocking connect error, m_conn_state=%d m_sock_state=%d errno=%d",
+                  static_cast<int>(m_conn_state), static_cast<int>(m_sock_state), errno);
+    return -1;
 }
 
 void sockinfo_tcp::connect_entity_context()
 {
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
+    // EINTR/cancel can land before this queued job. Do not send SYN after the app was
+    // told connect() failed.
+    if (m_conn_state != TCP_CONN_CONNECTING || m_state >= SOCKINFO_CLOSING) {
+        return;
+    }
+
     if (!prepare_dst_to_send(false)) {
         si_tcp_logdbg("non offloaded socket --> connect only via OS (prepare_dst_to_send failed)");
         setPassthrough();
+        // Wake parked blocking connect(); lock already held. Non-blocking: no sleeper.
+        m_sock_wakeup_pipe.do_wakeup();
         return;
     }
 
     if (!attach_as_uc_receiver((role_t)NULL, true)) {
         si_tcp_logdbg("Unable to attach uc receiver, falling back to passthrough.");
         setPassthrough();
+        m_sock_wakeup_pipe.do_wakeup(); // Wake the parked blocking connect() (see above).
         return;
     }
 
@@ -2964,6 +3313,7 @@ void sockinfo_tcp::connect_entity_context()
         si_tcp_logdbg("Unable to send SYN packet, falling back to passthrough.");
 
         setPassthrough();
+        m_sock_wakeup_pipe.do_wakeup(); // Wake the parked blocking connect() (see above).
         return;
     }
 
@@ -2972,6 +3322,29 @@ void sockinfo_tcp::connect_entity_context()
     // since wait_for_conn_ready_blocking may block on epoll_wait and the timer sends SYN
     // rexmits.
     register_timer();
+}
+
+void sockinfo_tcp::cancel_connect_entity_context()
+{
+    std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
+
+    if (m_state >= SOCKINFO_CLOSING || isPassthrough() || m_conn_state == TCP_CONN_CONNECTED) {
+        return;
+    }
+    if (m_conn_state != TCP_CONN_CONNECTING && m_conn_state != TCP_CONN_FAILED) {
+        return;
+    }
+
+    remove_timer();
+    const enum tcp_state state = get_tcp_state(&m_pcb);
+    if (state == SYN_SENT || state == CLOSED) {
+        tcp_close(&m_pcb);
+    } else {
+        tcp_abort(&m_pcb);
+    }
+    destructor_helper_tcp();
+    m_conn_state = TCP_CONN_FAILED;
+    m_sock_wakeup_pipe.do_wakeup();
 }
 
 int sockinfo_tcp::bind(const sockaddr *__addr, socklen_t __addrlen)
@@ -3221,8 +3594,7 @@ int sockinfo_tcp::listen(int backlog)
     tcp_accepted_pcb(&m_pcb, sockinfo_tcp::accepted_pcb_cb);
 
     bool success = false;
-    // Check if XLIO threads are enforced (> 0) for entity context distribution
-    if (safe_mce_sys().worker_threads > 0) {
+    if (should_use_threads_mode()) {
         create_listen_context();
         start_sockinfo_tcp_listen_objects();
         success = wait_for_listen_rss_children_ready();
@@ -3287,6 +3659,42 @@ int sockinfo_tcp::rx_verify_available_data()
     return ret;
 }
 
+// Entered with accept_helper's listen lock held.
+int sockinfo_tcp::accept_wait_threads_mode(loops_timer &accept_timeout)
+{
+    const int timeout_ms = accept_timeout.time_left_msec();
+
+    tcp_con_lock_adapter lock_adapter(*this);
+    blocking_wait_sock_waiter waiter(m_sock_wakeup_pipe, m_rx_epfd, m_fd);
+
+    // Child enqueue is not parent m_ready_conn_cnt until harvest. Save errno (harvest sets EAGAIN).
+    const blocking_wait::result r = blocking_wait::wait_until(
+        lock_adapter, waiter,
+        [this, &waiter]() {
+            if (g_b_exit || m_sock_state != TCP_SOCK_ACCEPT_READY) {
+                return true;
+            }
+            if (m_ready_conn_cnt > 0) {
+                return true;
+            }
+            if (waiter.was_woken_by_watched_fd()) {
+                return true;
+            }
+            const int saved_errno = errno;
+            harvest_sockinfo_tcp_listen_objects();
+            errno = saved_errno;
+            return m_ready_conn_cnt > 0;
+        },
+        timeout_ms);
+
+    const accept_wait_outcome outcome = map_accept_wait_result(
+        r, m_ready_conn_cnt > 0, g_b_exit, m_sock_state != TCP_SOCK_ACCEPT_READY);
+    if (outcome.err) {
+        errno = outcome.err;
+    }
+    return outcome.ok ? 0 : -1;
+}
+
 int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
                                 int __flags /* = 0 */)
 {
@@ -3317,6 +3725,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
         return -1;
     }
 
+    loops_timer accept_timeout(m_loops_timer.get_timeout_msec());
     lock_tcp_con();
 
     si_tcp_logdbg("sock state = %d", get_tcp_state(&m_pcb));
@@ -3353,8 +3762,16 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
             }
         }
 
-        int tmp_ret = safe_mce_sys().worker_threads > 0 ? harvest_sockinfo_tcp_listen_objects()
-                                                        : rx_wait(poll_count, m_b_blocking);
+        // Worker-threads: do not ring-poll. Non-blocking: harvest once (EAGAIN if empty).
+        // Blocking: park; harvest lives in accept_wait_threads_mode()'s pred.
+        // R2C keeps rx_wait().
+        int tmp_ret;
+        if (should_use_threads_mode()) {
+            tmp_ret = m_b_blocking ? accept_wait_threads_mode(accept_timeout)
+                                   : harvest_sockinfo_tcp_listen_objects();
+        } else {
+            tmp_ret = rx_wait(poll_count, m_b_blocking);
+        }
         if (tmp_ret < 0) {
             si_tcp_logdbg("interrupted accept");
             unlock_tcp_con();
@@ -3381,7 +3798,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     m_ready_conn_cnt--;
     IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog--);
 
-    safe_mce_sys().worker_threads ? assert(m_syn_received.empty()) : remove_received_syn_socket(ns);
+    should_use_threads_mode() ? assert(m_syn_received.empty()) : remove_received_syn_socket(ns);
 
     unlock_tcp_con();
 
@@ -3747,6 +4164,12 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
 
     new_sock->lock_tcp_con();
 
+    // Defer the RSS parent wake until rx_input_cb() releases both receive
+    // locks. conn's unlock above may only drop a recursive acquisition.
+    if (conn->is_sockinfo_tcp_listen_rss_child()) {
+        new_sock->m_accept_parent_to_wake = conn->m_listen_ctx->get_parent_listen_socket();
+    }
+
     return ERR_OK;
 }
 
@@ -3872,10 +4295,20 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     IF_STATS_O(new_sock, print_full_stats(new_sock->m_p_socket_stats, nullptr, g_stats_file));
 
     new_sock->socket_stats_init();
+    /*
+     * socket_stats_init() clears the properties that are otherwise assigned only by
+     * the constructor, which doesn't run for a reused socket. It can also allocate a
+     * stats object here for a socket that found the pool exhausted at construction
+     * time. Restore the properties from the socket object in both cases.
+     */
+    IF_STATS_O(new_sock, new_sock->m_p_socket_stats->socket_type = SOCK_STREAM);
+    IF_STATS_O(new_sock, new_sock->m_p_socket_stats->b_is_offloaded = !new_sock->isPassthrough());
 
     new_sock->m_state = SOCKINFO_OPENED;
     new_sock->m_sock_state = TCP_SOCK_INITED;
     new_sock->m_conn_state = TCP_CONN_INIT;
+    // Recycle is a new life. The first close already consumed the one-shot latch.
+    new_sock->m_worker_close_routed = false;
     new_sock->m_parent = listen_sock;
     tcp_recv(&new_sock->m_pcb, sockinfo_tcp::rx_lwip_cb);
     tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb);
@@ -4043,6 +4476,18 @@ err_t sockinfo_tcp::connect_lwip_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
     if (conn->m_conn_state == TCP_CONN_TIMEOUT) {
         // tcp_si_logdbg("conn timeout");
         conn->m_error_status = ETIMEDOUT;
+        conn->unlock_tcp_con();
+        return ERR_OK;
+    }
+    // Blocking wait already returned failure (EINTR/exit) and marked FAILED. lwIP
+    // has already set ESTABLISHED before this callback; abort so tcp_input skips
+    // tcp_ack_now and RECV. Do not abort TIMEOUT (above) or CONNECTED.
+    if (conn->m_conn_state == TCP_CONN_FAILED) {
+        conn->abort_connection();
+        conn->unlock_tcp_con();
+        return ERR_ABRT;
+    }
+    if (conn->m_conn_state != TCP_CONN_CONNECTING) {
         conn->unlock_tcp_con();
         return ERR_OK;
     }
@@ -4322,6 +4767,14 @@ int sockinfo_tcp::shutdown(int __how)
         return SYSCALL(shutdown, m_fd, __how);
     }
 
+    // Same order as tcp_tx_thread: m_lock_snd then tcp. In-flight send finishes posting first.
+    std::unique_lock<decltype(m_lock_snd)> send_lock(m_lock_snd, std::defer_lock);
+    const bool defer_tx_fin = m_entity_context && safe_mce_sys().is_threads_mode() &&
+        (__how == SHUT_WR || __how == SHUT_RDWR);
+    if (defer_tx_fin) {
+        send_lock.lock();
+    }
+
     lock_tcp_con();
 
     shut_tx = shut_rx = 0;
@@ -4377,12 +4830,17 @@ int sockinfo_tcp::shutdown(int __how)
             tcp_accept(&m_pcb, nullptr);
             tcp_syn_handled(&m_pcb, sockinfo_tcp::syn_received_drop_lwip_cb);
         }
+    } else if (get_tcp_state(&m_pcb) != LISTEN && shut_rx && m_n_rx_pkt_ready_list_count) {
+        abort_connection();
+    } else if (defer_tx_fin) {
+        // FIN behind queued SOCK_TX. App-thread tcp_shutdown() overtakes the tail.
+        m_sock_wakeup_pipe.do_wakeup();
+        unlock_tcp_con();
+        m_entity_context->add_job(entity_context::job_desc {entity_context::JOB_TYPE_SOCK_SHUTDOWN,
+                                                            __how, this, nullptr, 0U, 0U});
+        return 0;
     } else {
-        if (get_tcp_state(&m_pcb) != LISTEN && shut_rx && m_n_rx_pkt_ready_list_count) {
-            abort_connection();
-        } else {
-            err = tcp_shutdown(&m_pcb, shut_rx, shut_tx);
-        }
+        err = tcp_shutdown(&m_pcb, shut_rx, shut_tx);
     }
 
     m_sock_wakeup_pipe.do_wakeup();
@@ -4614,7 +5072,11 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                         ret = -1;
                         break;
                     }
-                    ops = new sockinfo_tcp_ops_tls(this);
+                    if (get_entity_context()) {
+                        ops = new sockinfo_tcp_ops_tls_thread(this);
+                    } else {
+                        ops = new sockinfo_tcp_ops_tls(this);
+                    }
 
                     if (unlikely(!ops)) {
                         errno = ENOMEM;
@@ -4952,8 +5414,20 @@ void sockinfo_tcp::get_tcp_info(struct tcp_info *ti)
     ti->tcpi_state = state < TCP_STATE_NR ? pcb_to_tcp_state[state] : 0;
     ti->tcpi_options = (!!(m_pcb.flags & TF_TIMESTAMP) * TCPI_OPT_TIMESTAMPS) |
         (!!(m_pcb.flags & TF_WND_SCALE) * TCPI_OPT_WSCALE);
-    // We keep rto with TCP slow timer granularity and need to convert it to usec.
-    ti->tcpi_rto = m_pcb.rto * safe_mce_sys().tcp_timer_resolution_msec * 2 * 1000U;
+
+    /* Estimator clamps guarantee non-negative TCP_INFO values. */
+    assert(m_pcb.rto_us >= 0 && "rto_us must be non-negative; tcp_rto_clamp_us bypassed?");
+    ti->tcpi_rto = (uint32_t)m_pcb.rto_us;
+    /* tcp_info reports microseconds; sa_us and sv_us store 8*SRTT and
+     * 4*RTTVAR. Lock-free reads may span estimator updates. */
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTT
+    assert(m_pcb.sa_us >= 0 && "sa_us must be non-negative; estimator clamp bypassed?");
+    ti->tcpi_rtt = (uint32_t)(m_pcb.sa_us >> 3);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTTVAR
+    assert(m_pcb.sv_us >= 0 && "sv_us must be non-negative; estimator clamp bypassed?");
+    ti->tcpi_rttvar = m_pcb.sa_us != 0 ? (uint32_t)(m_pcb.sv_us >> 2) : 0;
+#endif
     ti->tcpi_advmss = m_pcb.advtsd_mss;
     ti->tcpi_snd_mss = m_pcb.mss;
     ti->tcpi_retransmits = m_pcb.nrtx;
@@ -5080,7 +5554,10 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
         break;
     case SOL_SOCKET:
         switch (__optname) {
-        case SO_ERROR:
+        case SO_ERROR: {
+            // Read and clear only after the worker finishes publishing the
+            // connection result, even if readiness was already observed.
+            std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
             if (*__optlen >= sizeof(int)) {
                 *(int *)__optval = m_error_status;
                 si_tcp_logdbg("(SO_ERROR) status: %d", m_error_status);
@@ -5090,6 +5567,7 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                 errno = EINVAL;
             }
             break;
+        }
         case SO_REUSEADDR:
             if (*__optlen >= sizeof(int)) {
                 *(int *)__optval = m_pcb.so_options & SOF_REUSEADDR;
@@ -5612,11 +6090,12 @@ void sockinfo_tcp::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
                 m_snd_buf_max);
 
     // Retransmission
-    vlog_printf(log_level, "Retransmission : rtime %hd, rto %u, nrtx %u\n", pcb.rtime, pcb.rto,
-                pcb.nrtx);
+    vlog_printf(log_level, "Retransmission : rtime %hd, rto_us %d, rto_deadline_us %lld, nrtx %u\n",
+                pcb.rtime, (int)pcb.rto_us, (long long)pcb.rto_deadline_us, pcb.nrtx);
 
     // RTT
-    vlog_printf(log_level, "RTT variables : rttest %u, rtseq %u\n", pcb.rttest, pcb.rtseq);
+    vlog_printf(log_level, "RTT variables : rttest_us %lld, rtseq %u, sa_us %d, sv_us %d\n",
+                (long long)pcb.rttest_us, pcb.rtseq, (int)pcb.sa_us, (int)pcb.sv_us);
 
     // First unsent
     if (first_unsent_seqno) {
@@ -5901,17 +6380,24 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
     sock_list &bucket = m_p_intervals[m_n_location];
     m_n_location = (m_n_location + 1) % m_n_intervals_size;
 
+    if (bucket.empty()) {
+        return;
+    }
+
+    const int64_t timer_now_us = clock_gettime_monotonic_us();
+    xlio_time_dbg_inc_timer_pass();
+
     auto iter = bucket.begin();
     while (iter != bucket.end()) {
         sockinfo_tcp *p_sock = *iter;
         // Must increment iterator first, the socket can be erased below in case of local timers.
         iter++;
 
-        // TODO Trylock can miss a timer tick and we don't trigger it in unlock() anymore.
         if (!p_sock->trylock_tcp_con()) {
             bool destroyable = false;
             if (!p_sock->is_cleaned()) {
-                p_sock->handle_timer_expired();
+                p_sock->handle_timer_expired(timer_now_us);
+                p_sock->note_tcp_timer_attempt_acquired();
                 destroyable = p_sock->is_destroyable_no_lock();
             }
             p_sock->unlock_tcp_con();
@@ -5922,6 +6408,9 @@ void tcp_timers_collection::handle_timer_expired(void *user_data)
                     g_p_fd_collection->destroy_sockfd(p_sock);
                 }
             }
+        } else {
+            /* trylock_tcp_con() returns nonzero on contention. */
+            p_sock->note_tcp_timer_attempt_missed();
         }
     }
 }
@@ -6089,7 +6578,21 @@ int sockinfo_tcp::tcp_tx_express(const struct iovec *iov, unsigned iov_len, uint
 
     std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
 
-    if (unlikely(!is_connected_and_ready_to_send())) {
+    if (flags & XLIO_EXPRESS_TX_COMMITTED) {
+        /* Committed bytes were accepted by a send() that already returned their count.
+         * The SHUT_WR latch (m_sock_state via is_rts()) gates only new sends, under
+         * m_lock_snd, and the SHUTDOWN job is FIFO-ordered behind every committed TX job,
+         * so a live pcb here cannot have sequenced its own FIN yet. Refuse only when the
+         * pcb can no longer legally carry new data (own FIN sequenced by close(), or the
+         * connection reset/closed): accepted bytes are never dropped on the latch.
+         */
+        const enum tcp_state pcb_state = get_tcp_state(&m_pcb);
+        if (unlikely(pcb_state != ESTABLISHED && pcb_state != CLOSE_WAIT)) {
+            errno = (m_conn_state == TCP_CONN_RESETED) ? ECONNRESET : EPIPE;
+            stats_update_tx_errors(errno);
+            return -1;
+        }
+    } else if (unlikely(!is_connected_and_ready_to_send())) {
         stats_update_tx_errors(errno);
         return -1;
     }
