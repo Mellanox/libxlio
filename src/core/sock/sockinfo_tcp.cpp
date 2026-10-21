@@ -818,6 +818,15 @@ void sockinfo_tcp::err_lwip_cb_xlio_socket(void *pcb_container, err_t err)
 sockinfo_tcp::~sockinfo_tcp()
 {
     si_tcp_logfunc("");
+
+    // Release this child's listener reference (taken in clone_conn_cb) before
+    // any member teardown. A listener's own m_pcb.listen_sock is nullptr, so a
+    // listener never releases a reference on itself; this release may free the
+    // parent (deferred delete).
+    if (m_pcb.listen_sock) {
+        reinterpret_cast<sockinfo_tcp *>(m_pcb.listen_sock)->child_ref_release();
+    }
+
     g_global_stat_static.socket_tcp_destructor_counter.fetch_add(1, std::memory_order_relaxed);
     if (isPassthrough()) {
         g_tuning_report_counters.socket_non_offloaded_destructor_counter.fetch_add(
@@ -936,6 +945,27 @@ void sockinfo_tcp::clean_socket_obj()
 
     unlock_tcp_con();
 
+    // A cloned child may still be running a data-path callback that locks this
+    // listen (parent) socket; each live child holds a reference (m_child_refs).
+    // Defer the delete to the last child_ref_release() in that case, or the
+    // child's parent lock would land on freed memory.
+    if (request_child_delete()) {
+        perform_deferred_delete();
+    }
+}
+
+/* Mark this socket delete-requested; true when the caller must perform the
+ * delete (no live children hold a reference). The dedicated lock makes exactly
+ * one of {clean_socket_obj(), the last release} the deleter. */
+bool sockinfo_tcp::request_child_delete()
+{
+    std::lock_guard<lock_spin> guard(m_child_refs_lock);
+    m_child_delete_requested = true;
+    return m_child_refs == 0;
+}
+
+void sockinfo_tcp::perform_deferred_delete()
+{
     event_handler_manager *p_event_mgr = get_event_mgr();
     // Poll-group sockets keep their timers in the group collection even in delegate mode.
     // Unregister those timers before deleting the socket so the group cannot retain a stale
@@ -947,6 +977,34 @@ void sockinfo_tcp::clean_socket_obj()
         p_event_mgr->unregister_socket_timer_and_delete(this);
     } else {
         delete this;
+    }
+}
+
+void sockinfo_tcp::child_ref_acquire()
+{
+    std::lock_guard<lock_spin> guard(m_child_refs_lock);
+    ++m_child_refs;
+    // A wrap here would mean a missed release; catch it rather than corrupt
+    assert(m_child_refs != 0 && "sockinfo_tcp child refcount overflow");
+}
+
+/* Drop one child reference; true when the caller must perform the deferred
+ * delete (last reference out and a delete was requested). m_child_refs_lock is
+ * a dedicated leaf, never held across another lock. */
+bool sockinfo_tcp::release_child_ref()
+{
+    std::lock_guard<lock_spin> guard(m_child_refs_lock);
+    assert(m_child_refs != 0 && "sockinfo_tcp child refcount underflow");
+    --m_child_refs;
+    return (m_child_refs == 0) && m_child_delete_requested;
+}
+
+void sockinfo_tcp::child_ref_release()
+{
+    // WARNING: perform_deferred_delete() may 'delete this'; no member of 'this'
+    // may be touched after a true return from release_child_ref().
+    if (release_child_ref()) {
+        perform_deferred_delete();
     }
 }
 
@@ -4249,7 +4307,14 @@ err_t sockinfo_tcp::clone_conn_cb(void *arg, struct tcp_pcb **newpcb)
         new_sock->m_pcb.my_container = (void *)new_sock;
         /* XXX We have to search for correct listen socket every time,
          * because the listen socket may be closed and reopened. */
+        /* m_pcb.listen_sock is the write-once lifetime anchor for this child's
+         * one reference on the listener; a fresh child must not carry one. */
+        assert(new_sock->m_pcb.listen_sock == nullptr &&
+               "listen_sock must be write-once per child incarnation");
         new_sock->m_pcb.listen_sock = (void *)conn;
+        // Pin the listener for this child's whole lifetime (released in
+        // ~sockinfo_tcp()); both late listener callbacks rely on it.
+        conn->child_ref_acquire();
     } else {
         ret_val = ERR_MEM;
     }
@@ -4273,6 +4338,16 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     sockinfo_tcp *listen_sock = (sockinfo_tcp *)((arg));
 
     if (unlikely(!listen_sock || !newpcb)) {
+        return ERR_VAL;
+    }
+
+    // The TIME_WAIT child holds a reference on the listener, so reading
+    // listen_sock is safe up to 2MSL after the listener's close(). Do not admit
+    // a new connection into a closing/closed listener: drop the reuse (RFC
+    // 6191). The unlocked m_state read is best-effort admission only - the
+    // reference, not this read, is the lifetime guarantee.
+    if (unlikely(listen_sock->m_state == SOCKINFO_CLOSING ||
+                 listen_sock->m_state == SOCKINFO_CLOSED)) {
         return ERR_VAL;
     }
 
