@@ -247,8 +247,12 @@ void poll_group::reuse_sockfd(int fd, sockinfo_tcp *si)
 void poll_group::close_socket(sockinfo_tcp *si, bool force /*=false*/)
 {
     int fd = si->get_fd();
-    close_socket_helper(si, force);
+    // Clear the fd_collection slot before close_socket_helper(), which may free the
+    // socket via clean_socket_obj(). The RX fast path resolves a sink by flow_tag
+    // through a lock-free g_p_fd_collection lookup; clearing the slot first ensures
+    // that lookup can never return this pointer once the object is gone.
     g_p_fd_collection->clear_socket(fd);
+    close_socket_helper(si, force);
 }
 
 void poll_group::close_socket_helper(sockinfo_tcp *si, bool force /*=false*/)
