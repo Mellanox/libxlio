@@ -117,6 +117,8 @@ int poll_group::update(const struct xlio_poll_group_attr *attr)
 {
     if (m_group_flags != attr->flags) {
         // Runtime flags change is not supported for now.
+        grp_logdbg("poll_group::update: cannot change attributes from %d to %d", m_group_flags,
+                   attr->flags);
         errno = EINVAL;
         return -1;
     }
@@ -209,6 +211,8 @@ void poll_group::add_ring(ring *rng, ring_alloc_logic_attr *attr)
                     std::make_pair(std::make_unique<ring_alloc_logic_attr>(*attr), nd));
             }
         }
+
+        notify_ring_added(rng);
     }
 }
 

@@ -1,5 +1,9 @@
 #!/bin/bash -Exel
 
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=safe.directory
+export GIT_CONFIG_VALUE_0="${WORKSPACE}"
+
 topdir=$(git rev-parse --show-toplevel)
 cd "$topdir"
 
@@ -15,7 +19,7 @@ json=$(jq -n \
 
 export SPRING_APPLICATION_JSON="$json"
 export PROJECT_NAME=libxlio
-export PROJECT_VERSION="$sha1"
+export PROJECT_VERSION=${release_tag:-${sha1}}
 export PROJECT_SRC_PATH="$topdir"/
 
 echo "Running BlackDuck (SRC) on $name"

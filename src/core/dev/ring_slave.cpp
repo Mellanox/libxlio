@@ -84,6 +84,14 @@ ring_slave::~ring_slave()
     print_val();
 
     if (m_p_ring_stat) {
+        // Accumulate ring stats before the stats block is removed.
+        // get_aggregated_ring_stats() starts from these accumulated values,
+        // so callers (including the tuning report) see correct totals even
+        // after ring objects are destroyed.
+        if (g_p_net_device_table_mgr) {
+            g_p_net_device_table_mgr->accumulate_closed_ring_stats(*m_p_ring_stat);
+        }
+
         xlio_stats_instance_remove_ring_block(m_p_ring_stat.get());
     }
 
@@ -469,6 +477,14 @@ bool steering_handler<KEY4T, KEY2T, HDR>::detach_flow(flow_tuple &flow_spec_5t, 
         sock_addr rule_key(flow_spec_5t.get_family(), &flow_spec_5t.get_dst_ip(),
                            flow_spec_5t.get_dst_port());
         if (safe_mce_sys().tcp_3t_rules || safe_mce_sys().tcp_2t_rules) {
+            if (safe_mce_sys().tcp_2t_rules) {
+                // Mirror attach_flow(): the 2-tuple steering rule's reference counter is keyed by
+                // destination IP only (port zeroed). Without zeroing the port here the lookup
+                // misses, the shared rule's refcount is never decremented to 0, the rule is never
+                // destroyed and it keeps the TIR (and thus the RX RQ/CQ) alive, leaking the CQ
+                // buffer on every ring teardown (RM#5030951).
+                rule_key.set_in_port(0);
+            }
             auto dst_port_iter = m_ring.m_tcp_dst_port_attach_map.find(rule_key);
             BULLSEYE_EXCLUDE_BLOCK_START
             if (dst_port_iter == m_ring.m_tcp_dst_port_attach_map.end()) {
@@ -1133,6 +1149,26 @@ void ring_slave::flow_del_all_rfs()
 {
     m_steering_ipv4.flow_del_all_rfs();
     m_steering_ipv6.flow_del_all_rfs();
+}
+
+void ring_slave::accumulate_ring_stats(aggregated_ring_stats &agg) const
+{
+    if (!m_p_ring_stat) {
+        return;
+    }
+    // agg is a caller-local object, not the shared m_closed_rings_stats member.
+    // coverity[missing_lock:FALSE]
+    agg.total_rx_packets += m_p_ring_stat->n_rx_pkt_count;
+    agg.total_rx_bytes += m_p_ring_stat->n_rx_byte_count;
+    agg.total_tx_packets += m_p_ring_stat->n_tx_pkt_count;
+    agg.total_tx_bytes += m_p_ring_stat->n_tx_byte_count;
+    agg.total_tx_retransmits += m_p_ring_stat->n_tx_retransmits;
+    agg.total_tx_dropped_wqes += m_p_ring_stat->n_tx_dropped_wqes;
+    agg.total_tx_tso_pkt_count += m_p_ring_stat->n_tx_tso_pkt_count;
+    agg.total_tx_tso_byte_count += m_p_ring_stat->n_tx_tso_byte_count;
+    agg.total_rx_tls_resyncs += m_p_ring_stat->n_rx_tls_resyncs;
+    agg.total_tx_tls_resyncs += m_p_ring_stat->n_tx_tls_resyncs;
+    agg.total_rx_tls_auth_fail += m_p_ring_stat->n_rx_tls_auth_fail;
 }
 
 bool ring_slave::request_more_tx_buffers(pbuf_type type, uint32_t count, uint32_t lkey)

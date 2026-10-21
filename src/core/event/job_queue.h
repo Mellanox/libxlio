@@ -45,14 +45,29 @@ public:
 
     job_queue();
 
-    void insert_job(const T &job);
+    // Returns true if the caller must signal the consumer.
+    bool insert_job(const T &job);
 
     queue_type &get_all();
+
+    // Marks the consumer as sleeping. Returns false if a job is already
+    // pending, in which case the consumer must not sleep.
+    bool try_sleep();
+
+    // Clears the sleeping state.
+    void wake();
 
 private:
     queue_type m_queue_insert;
     queue_type m_queue_fetch;
     lock_spin m_queue_lock;
+    // Lock-free hint for the polling consumer. It may read stale-false while a
+    // producer is inside insert_job(), which costs one poll iteration. The
+    // sleep transition must not use it - see try_sleep().
+    std::atomic<bool> m_has_pending {false};
+    // Guarded by m_queue_lock. Owning the sleep state here lets a producer take
+    // the wakeup decision inside the critical section it already holds.
+    bool m_sleeping = false;
 };
 
 template <typename T> job_queue<T>::job_queue()
@@ -62,24 +77,52 @@ template <typename T> job_queue<T>::job_queue()
 }
 
 // Should be called only from the producer.
-template <typename T> void job_queue<T>::insert_job(const T &job)
+template <typename T> bool job_queue<T>::insert_job(const T &job)
 {
     std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
     m_queue_insert.push_back(job);
+    m_has_pending.store(true, std::memory_order_release);
+
+    // Claim the wakeup. Producers that follow rely on the signal already sent
+    // and on the consumer draining the whole queue.
+    bool claimed = m_sleeping;
+    m_sleeping = false;
+    return claimed;
 }
 
 // Should be called only from a single consumer.
 template <typename T> typename job_queue<T>::queue_type &job_queue<T>::get_all()
 {
     // Avoid heavy lock activity in case of busy loop and empty queue.
-    std::atomic_thread_fence(std::memory_order::memory_order_acquire);
-    if (m_queue_insert.size() <= 0U) {
+    if (!m_has_pending.load(std::memory_order_acquire)) {
         return m_queue_fetch;
     }
 
     std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
     m_queue_insert.swap(m_queue_fetch);
+    m_has_pending.store(false, std::memory_order_release);
     return m_queue_fetch;
+}
+
+// Should be called only from a single consumer, after it drained the jobs
+// returned by the last get_all() call.
+template <typename T> bool job_queue<T>::try_sleep()
+{
+    std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
+    if (!m_queue_insert.empty()) {
+        return false;
+    }
+    // The producer takes its wakeup decision under this lock, so either the
+    // check above observes the job or insert_job() observes the sleeping state.
+    m_sleeping = true;
+    return true;
+}
+
+// Should be called only from a single consumer.
+template <typename T> void job_queue<T>::wake()
+{
+    std::lock_guard<decltype(m_queue_lock)> lock(m_queue_lock);
+    m_sleeping = false;
 }
 
 #endif // JOB_QUEUE_H

@@ -20,6 +20,7 @@
 #include <string.h>
 #include <ctime>
 #include <iomanip>
+#include <new>
 #include <vector>
 #include <cinttypes>
 #include <sys/mman.h>
@@ -78,11 +79,14 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define TX_MEDIUM_VIEW " %-3s %-3s %10u %10u %" PRIu64 " %8u %7u %29s %7u %" PRIu64 " %7u %7u\n"
 #define CYCLES_SEPARATOR                                                                           \
     "-------------------------------------------------------------------------------\n"
-#define FORMAT_STATS_32bit     "%-20s %u\n"
-#define FORMAT_STATS_s_32bit   "%-20s %d\n"
-#define FORMAT_STATS_64bit     "%-20s %" PRIu64 " %-3s\n"
-#define FORMAT_STATS_double    "%-20s %.1f\n"
-#define FORMAT_RING_PACKETS    "%-20s %zu / %zu [kilobytes/packets] %-3s\n"
+#define FORMAT_STATS_32bit   "%-20s %u\n"
+#define FORMAT_STATS_s_32bit "%-20s %d\n"
+#define FORMAT_STATS_64bit   "%-20s %" PRIu64 " %-3s\n"
+#define FORMAT_STATS_double  "%-20s %.1f\n"
+#define FORMAT_RING_PACKETS  "%-20s %zu / %zu [kilobytes/packets] %-3s\n"
+#define FORMAT_LRO_PACKETS                                                                         \
+    "%-20s %" PRIu64 " / %" PRIu64 " / %.0f%% [avg-bytes/packets/%%total] %-3s\n"
+#define FORMAT_GRO_PACKETS     "%-20s %" PRIu64 " / %.1f / %.0f%% [avg-bytes/avg-frags/%%total] %-3s\n"
 #define FORMAT_RING_STRIDES    "%-20s %zu / %zu / %zu [total/max-per-packet/packets-per-rwqe] %-3s\n"
 #define FORMAT_RING_INTERRUPT  "%-20s %zu / %zu [requests/received] %-3s\n"
 #define FORMAT_RING_MODERATION "%-20s %u / %u [frames/usec period] %-3s\n"
@@ -269,8 +273,21 @@ void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
     p_prev_stat->tls_counters.n_tls_rx_bytes =
         (p_curr_stat->tls_counters.n_tls_rx_bytes - p_prev_stat->tls_counters.n_tls_rx_bytes) /
         delay;
-    p_prev_stat->tls_counters.n_tls_rx_resync =
-        (p_curr_stat->tls_counters.n_tls_rx_resync - p_prev_stat->tls_counters.n_tls_rx_resync) /
+    p_prev_stat->tls_counters.n_tls_rx_resync_attempt =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_attempt -
+         p_prev_stat->tls_counters.n_tls_rx_resync_attempt) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_resync_success =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_success -
+         p_prev_stat->tls_counters.n_tls_rx_resync_success) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_resync_retry =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_retry -
+         p_prev_stat->tls_counters.n_tls_rx_resync_retry) /
+        delay;
+    p_prev_stat->tls_counters.n_tls_rx_resync_long =
+        (p_curr_stat->tls_counters.n_tls_rx_resync_long -
+         p_prev_stat->tls_counters.n_tls_rx_resync_long) /
         delay;
 #endif /* DEFINED_UTLS */
 
@@ -427,6 +444,8 @@ void update_delta_cq_stat(cq_stats_t *p_curr_cq_stats, cq_stats_t *p_prev_cq_sta
         p_prev_cq_stats->n_rx_max_stirde_per_packet = p_curr_cq_stats->n_rx_max_stirde_per_packet;
         p_prev_cq_stats->n_rx_cqe_error =
             (p_curr_cq_stats->n_rx_cqe_error - p_prev_cq_stats->n_rx_cqe_error) / delay;
+        p_prev_cq_stats->n_rx_tls_resync =
+            (p_curr_cq_stats->n_rx_tls_resync - p_prev_cq_stats->n_rx_tls_resync) / delay;
     }
 }
 
@@ -583,25 +602,28 @@ void print_cq_stats(cq_instance_block_t *p_cq_inst_arr)
             printf(FORMAT_STATS_32bit, "Max strides/packet:",
                    static_cast<uint32_t>(p_cq_stats->n_rx_max_stirde_per_packet));
             printf(FORMAT_STATS_double, "Avg strides/packet:",
-                   p_cq_stats->n_rx_stride_count /
-                       static_cast<double>(p_cq_stats->n_rx_packet_count + 1U));
+                   xlio_stats_ratio(p_cq_stats->n_rx_stride_count, p_cq_stats->n_rx_packet_count));
             printf(FORMAT_STATS_double, "Avg packets/rwqe:",
-                   p_cq_stats->n_rx_packet_count /
-                       static_cast<double>(p_cq_stats->n_rx_consumed_rwqe_count + 1U));
+                   xlio_stats_ratio(p_cq_stats->n_rx_packet_count,
+                                    p_cq_stats->n_rx_consumed_rwqe_count));
             if (p_cq_stats->n_rx_lro_packets) {
-                printf(FORMAT_RING_PACKETS,
-                       "Rx lro:", p_cq_stats->n_rx_lro_bytes / BYTES_TRAFFIC_UNIT,
-                       p_cq_stats->n_rx_lro_packets, post_fix);
+                printf(
+                    FORMAT_LRO_PACKETS, "Rx LRO:",
+                    xlio_stats_ratio_u64(p_cq_stats->n_rx_lro_bytes, p_cq_stats->n_rx_lro_packets),
+                    p_cq_stats->n_rx_lro_packets,
+                    xlio_stats_percent(p_cq_stats->n_rx_lro_packets, p_cq_stats->n_rx_packet_count),
+                    post_fix);
             }
             if (p_cq_stats->n_rx_gro_packets) {
-                printf(FORMAT_RING_PACKETS,
-                       "Rx GRO:", p_cq_stats->n_rx_gro_bytes / BYTES_TRAFFIC_UNIT,
-                       p_cq_stats->n_rx_gro_packets, post_fix);
-                printf(FORMAT_STATS_64bit, "Avg GRO packet size:",
-                       p_cq_stats->n_rx_gro_bytes / p_cq_stats->n_rx_gro_packets, post_fix);
                 printf(
-                    FORMAT_STATS_double, "GRO frags per packet:",
-                    static_cast<double>(p_cq_stats->n_rx_gro_frags) / p_cq_stats->n_rx_gro_packets);
+                    FORMAT_GRO_PACKETS, "Rx GRO:",
+                    xlio_stats_ratio_u64(p_cq_stats->n_rx_gro_bytes, p_cq_stats->n_rx_gro_packets),
+                    xlio_stats_ratio(p_cq_stats->n_rx_gro_frags, p_cq_stats->n_rx_gro_packets),
+                    xlio_stats_percent(p_cq_stats->n_rx_gro_packets, p_cq_stats->n_rx_packet_count),
+                    post_fix);
+            }
+            if (p_cq_stats->n_rx_tls_resync) {
+                printf("%-20s %u\n", "HW TLS RX Resync:", p_cq_stats->n_rx_tls_resync);
             }
         }
     }
@@ -975,13 +997,11 @@ void print_full_iomux_stats(const char *func_name, iomux_func_stats_t *p_iomux_s
                    p_iomux_stats->n_iomux_rx_ready, post_fix);
         }
         if (p_iomux_stats->n_iomux_poll_miss + p_iomux_stats->n_iomux_poll_hit) {
-            double iomux_poll_hit = (double)p_iomux_stats->n_iomux_poll_hit;
-            double iomux_poll_hit_percentage =
-                (iomux_poll_hit / (iomux_poll_hit + (double)p_iomux_stats->n_iomux_poll_miss)) *
-                100;
             printf("Polls [miss/hit]%s: %u / %u (%2.2f%%)\n", post_fix,
                    p_iomux_stats->n_iomux_poll_miss, p_iomux_stats->n_iomux_poll_hit,
-                   iomux_poll_hit_percentage);
+                   xlio_stats_percent(p_iomux_stats->n_iomux_poll_hit,
+                                      static_cast<uint64_t>(p_iomux_stats->n_iomux_poll_hit) +
+                                          p_iomux_stats->n_iomux_poll_miss));
             if (p_iomux_stats->n_iomux_timeouts) {
                 printf("Timeouts%s: %u\n", post_fix, p_iomux_stats->n_iomux_timeouts);
             }
@@ -1509,22 +1529,16 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         return;
     }
 
-    prev_instance_blocks = (socket_instance_block_t *)malloc(sizeof(*prev_instance_blocks) *
-                                                             p_sh_mem->max_skt_inst_num);
+    prev_instance_blocks = new (std::nothrow) socket_instance_block_t[p_sh_mem->max_skt_inst_num]();
     if (NULL == prev_instance_blocks) {
         return;
     }
-    curr_instance_blocks = (socket_instance_block_t *)malloc(sizeof(*curr_instance_blocks) *
-                                                             p_sh_mem->max_skt_inst_num);
+    curr_instance_blocks = new (std::nothrow) socket_instance_block_t[p_sh_mem->max_skt_inst_num]();
     if (NULL == curr_instance_blocks) {
-        free(prev_instance_blocks);
+        delete[] prev_instance_blocks;
         return;
     }
 
-    memset((void *)prev_instance_blocks, 0,
-           sizeof(socket_instance_block_t) * p_sh_mem->max_skt_inst_num);
-    memset((void *)curr_instance_blocks, 0,
-           sizeof(socket_instance_block_t) * p_sh_mem->max_skt_inst_num);
     memset((void *)prev_cq_blocks, 0, sizeof(cq_instance_block_t) * NUM_OF_SUPPORTED_CQS);
     memset((void *)curr_cq_blocks, 0, sizeof(cq_instance_block_t) * NUM_OF_SUPPORTED_CQS);
     memset((void *)prev_ring_blocks, 0, sizeof(ring_instance_block_t) * NUM_OF_SUPPORTED_RINGS);
@@ -1539,10 +1553,6 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         prev_global_blocks[i].init();
         curr_global_blocks[i].init();
     }
-    memset((void *)prev_global_blocks, 0,
-           sizeof(global_instance_block_t) * NUM_OF_SUPPORTED_GLOBALS);
-    memset((void *)curr_global_blocks, 0,
-           sizeof(global_instance_block_t) * NUM_OF_SUPPORTED_GLOBALS);
     memset(&prev_iomux_blocks, 0, sizeof(prev_iomux_blocks));
     memset(&curr_iomux_blocks, 0, sizeof(curr_iomux_blocks));
 
@@ -1550,16 +1560,18 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
            NUM_OF_SUPPORTED_ENTITY_CTX * sizeof(entity_context_instance_block_t));
 
     if (user_params.print_details_mode == e_deltas) {
-        memcpy((void *)prev_instance_blocks, (void *)p_sh_mem->skt_inst_arr,
-               p_sh_mem->max_skt_inst_num * sizeof(socket_instance_block_t));
+        for (size_t i = 0; i < p_sh_mem->max_skt_inst_num; i++) {
+            prev_instance_blocks[i] = p_sh_mem->skt_inst_arr[i];
+        }
         memcpy((void *)prev_cq_blocks, (void *)p_sh_mem->cq_inst_arr,
                NUM_OF_SUPPORTED_CQS * sizeof(cq_instance_block_t));
         memcpy((void *)prev_ring_blocks, (void *)p_sh_mem->ring_inst_arr,
                NUM_OF_SUPPORTED_RINGS * sizeof(ring_instance_block_t));
         memcpy((void *)prev_bpool_blocks, (void *)p_sh_mem->bpool_inst_arr,
                NUM_OF_SUPPORTED_BPOOLS * sizeof(bpool_instance_block_t));
-        memcpy((void *)prev_global_blocks, (void *)p_sh_mem->global_inst_arr,
-               NUM_OF_SUPPORTED_GLOBALS * sizeof(global_instance_block_t));
+        for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+            prev_global_blocks[i] = p_sh_mem->global_inst_arr[i];
+        }
         prev_iomux_blocks = curr_iomux_blocks;
         uint64_t delay_int_micro = SEC_TO_MICRO(user_params.interval);
         if (!g_b_exit && check_if_process_running(pid)) {
@@ -1583,16 +1595,18 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
         }
 
         if (user_params.print_details_mode == e_deltas) {
-            memcpy((void *)curr_instance_blocks, (void *)p_sh_mem->skt_inst_arr,
-                   p_sh_mem->max_skt_inst_num * sizeof(socket_instance_block_t));
+            for (size_t i = 0; i < p_sh_mem->max_skt_inst_num; i++) {
+                curr_instance_blocks[i] = p_sh_mem->skt_inst_arr[i];
+            }
             memcpy((void *)curr_cq_blocks, (void *)p_sh_mem->cq_inst_arr,
                    NUM_OF_SUPPORTED_CQS * sizeof(cq_instance_block_t));
             memcpy((void *)curr_ring_blocks, (void *)p_sh_mem->ring_inst_arr,
                    NUM_OF_SUPPORTED_RINGS * sizeof(ring_instance_block_t));
             memcpy((void *)curr_bpool_blocks, (void *)p_sh_mem->bpool_inst_arr,
                    NUM_OF_SUPPORTED_BPOOLS * sizeof(bpool_instance_block_t));
-            memcpy((void *)curr_global_blocks, (void *)p_sh_mem->global_inst_arr,
-                   NUM_OF_SUPPORTED_GLOBALS * sizeof(global_instance_block_t));
+            for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+                curr_global_blocks[i] = p_sh_mem->global_inst_arr[i];
+            }
             curr_iomux_blocks = p_sh_mem->iomux;
         }
 
@@ -1651,16 +1665,18 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
                 show_bpool_stats(curr_bpool_blocks, prev_bpool_blocks);
                 show_global_stats(curr_global_blocks, prev_global_blocks);
             }
-            memcpy((void *)prev_instance_blocks, (void *)curr_instance_blocks,
-                   p_sh_mem->max_skt_inst_num * sizeof(socket_instance_block_t));
+            for (size_t i = 0; i < p_sh_mem->max_skt_inst_num; i++) {
+                prev_instance_blocks[i] = curr_instance_blocks[i];
+            }
             memcpy((void *)prev_cq_blocks, (void *)curr_cq_blocks,
                    NUM_OF_SUPPORTED_CQS * sizeof(cq_instance_block_t));
             memcpy((void *)prev_ring_blocks, (void *)curr_ring_blocks,
                    NUM_OF_SUPPORTED_RINGS * sizeof(ring_instance_block_t));
             memcpy((void *)prev_bpool_blocks, (void *)curr_bpool_blocks,
                    NUM_OF_SUPPORTED_BPOOLS * sizeof(bpool_instance_block_t));
-            memcpy((void *)prev_global_blocks, (void *)curr_global_blocks,
-                   NUM_OF_SUPPORTED_GLOBALS * sizeof(global_instance_block_t));
+            for (int i = 0; i < NUM_OF_SUPPORTED_GLOBALS; i++) {
+                prev_global_blocks[i] = curr_global_blocks[i];
+            }
             prev_iomux_blocks = curr_iomux_blocks;
             break;
         default:
@@ -1692,8 +1708,8 @@ void stats_reader_handler(sh_mem_t *p_sh_mem, int pid)
     }
 
 out:
-    free(prev_instance_blocks);
-    free(curr_instance_blocks);
+    delete[] prev_instance_blocks;
+    delete[] curr_instance_blocks;
 }
 
 bool check_if_app_match(char *app_name, char *pid_str)

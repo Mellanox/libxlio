@@ -17,13 +17,17 @@ class wakeup_pipe : public wakeup {
 public:
     wakeup_pipe(void);
     ~wakeup_pipe();
+    // do_wakeup() and remove_wakeup_fd() keep m_wakeup_pending in sync with the
+    // epfd registration. The owner must serialize them under the same lock.
     void do_wakeup();
     virtual inline bool is_wakeup_fd(int fd) { return fd == g_wakeup_pipes[0]; };
     virtual void remove_wakeup_fd();
+    void force_remove_wakeup_fd(); // DEL; ignores m_is_sleeping
 
 private:
     static int g_wakeup_pipes[2];
     static atomic_t ref_count;
+    bool m_wakeup_pending;
 };
 
 #endif /* WAKEUP_PIPE_H */

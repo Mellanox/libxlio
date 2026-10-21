@@ -27,7 +27,7 @@
 
 time_converter_ib_ctx::time_converter_ib_ctx(struct ibv_context *ctx,
                                              ts_conversion_mode_t ctx_time_converter_mode,
-                                             uint64_t hca_core_clock)
+                                             uint64_t hca_core_clock_khz)
     : m_p_ibv_context(ctx)
     , m_ctx_parmeters_id(0)
 {
@@ -37,7 +37,7 @@ time_converter_ib_ctx::time_converter_ib_ctx(struct ibv_context *ctx,
             &m_ctx_convert_parmeters[m_ctx_parmeters_id];
 
         m_converter_status = TS_CONVERSION_MODE_RAW;
-        current_parameters_set->hca_core_clock = hca_core_clock * USEC_PER_SEC;
+        current_parameters_set->hca_core_clock = hca_core_clock_khz * HZ_PER_KHZ;
 
         if (ctx_time_converter_mode != TS_CONVERSION_MODE_RAW) {
             if (sync_clocks(&current_parameters_set->sync_systime,
@@ -54,7 +54,7 @@ time_converter_ib_ctx::time_converter_ib_ctx(struct ibv_context *ctx,
         }
     }
 #else
-    NOT_IN_USE(hca_core_clock);
+    NOT_IN_USE(hca_core_clock_khz);
 #endif
     if (ctx_time_converter_mode != m_converter_status) {
         ibchtc_logwarn(

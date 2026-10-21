@@ -1,4 +1,4 @@
-AM_CFLAGS = -Wno-error -Wno-unused-parameter -Wno-unused-function -D_GNU_SOURCE
+AM_CFLAGS = -Wno-error -Wno-unused-parameter -Wno-unused-function -D_GNU_SOURCE -fPIC
 
 SUBDIRS = .
 

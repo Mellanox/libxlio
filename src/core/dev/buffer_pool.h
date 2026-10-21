@@ -89,6 +89,9 @@ public:
      */
     size_t get_free_count();
 
+    /** Read-only access to buffer pool stats for reporting. */
+    const bpool_stats_t *get_stats() const { return m_p_bpool_stat; }
+
 private:
     /**
      * Add a buffer to the pool

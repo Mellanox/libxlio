@@ -82,12 +82,19 @@ static void lwip_ack_received(struct tcp_pcb *pcb, uint16_t type)
         }
     } else if (type == CC_ACK) {
         if (pcb->cwnd < pcb->ssthresh) {
-            if ((u32_t)(pcb->cwnd + pcb->mss) > pcb->cwnd) {
-                pcb->cwnd += pcb->mss;
+            u32_t increase = tcp_calc_slow_start_increment(pcb->acked, pcb->mss);
+            if ((u32_t)(pcb->cwnd + increase) > pcb->cwnd) {
+                pcb->cwnd += increase;
             }
             LWIP_DEBUGF(TCP_CWND_DEBUG, ("tcp_receive: slow start cwnd %" U32_F "\n", pcb->cwnd));
         } else {
-            u32_t new_cwnd = (pcb->cwnd + ((u32_t)pcb->mss * (u32_t)pcb->mss) / pcb->cwnd);
+            u32_t increment = ((u32_t)pcb->mss * (u32_t)pcb->mss) / pcb->cwnd;
+
+            if (increment == 0) {
+                increment = 1;
+            }
+
+            u32_t new_cwnd = pcb->cwnd + increment;
             if (new_cwnd > pcb->cwnd) {
                 pcb->cwnd = new_cwnd;
             }
@@ -130,7 +137,8 @@ static void lwip_post_recovery(struct tcp_pcb *pcb)
 
 static void lwip_conn_init(struct tcp_pcb *pcb)
 {
-    pcb->cwnd = ((pcb->cwnd == 1) ? (pcb->mss * 2) : pcb->mss);
+    pcb->cwnd = tcp_calc_initial_cwnd(pcb->mss);
+    pcb->ssthresh = tcp_calc_initial_ssthresh();
 }
 
 #endif // TCP_CC_ALGO_MOD

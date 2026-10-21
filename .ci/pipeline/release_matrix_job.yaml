@@ -52,20 +52,11 @@ runs_on_dockers:
      tag: '20251214',
      build_args: '--no-cache --target bduck',
      category: 'tool',
-     limits: '{memory: 5Gi, cpu: 4000m}',
-     requests: '{memory: 5Gi, cpu: 4000m}'
+     limits: '{memory: 8Gi, cpu: 6000m}',
+     requests: '{memory: 8Gi, cpu: 6000m}'
     }
 
 steps:
-# We are getting internal dpcp from cidemo-init.sh at the start of the run, source is stored in ${WORKSPACE}/jenkins/default/_dpcp-last
-  - name: Build-dpcp
-    parallel: false
-    containerSelector:
-      - "{name: 'rhel8.6'}"
-    run: |
-      cd "${WORKSPACE}/jenkins/default/_dpcp-last"
-      ./autogen.sh && ./configure --prefix=/usr && sudo make install
-
   - name: Release
     parallel: false
     containerSelector:

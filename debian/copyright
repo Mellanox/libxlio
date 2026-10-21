@@ -39,8 +39,6 @@ License: GPL-2 or BSD
 Files:
  src/core/lwip/cc.c
  src/core/lwip/cc.h
- src/core/lwip/cc_cubic.c
- src/core/lwip/cc_cubic.h
  src/core/lwip/cc_lwip.c
 Copyright:
  2007-2008, Swinburne University of Technology, Melbourne, Australia.

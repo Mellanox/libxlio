@@ -56,8 +56,6 @@ static inline bool is_set(xlio_wr_tx_packet_attr state_, xlio_wr_tx_packet_attr 
 static inline const char *lwip_cc_algo_str(uint32_t algo)
 {
     switch (algo) {
-    case CC_MOD_CUBIC:
-        return "(CUBIC)";
     case CC_MOD_NONE:
         return "(NONE)";
     case CC_MOD_LWIP:

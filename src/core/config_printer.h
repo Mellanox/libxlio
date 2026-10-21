@@ -49,23 +49,23 @@ private:
      * @param element Current value for the parameter, as any
      * @param def_value_any Default value for the parameter, as std::any.
              When there is no default value defined, it is empty
-    */
+     */
     void print_config_element(const std::string &key, const parameter_descriptor *param_descriptor,
                               const std::experimental::any &element,
                               const std::experimental::any &def_value_any);
 
     // Helpers to print_config_element()
     // Each halper handles an element of a specific type
-    void print_int64_config_element(const std::string &key, const std::string &title,
+    void print_int64_config_element(const std::string &bracket_display, const std::string &title,
                                     const parameter_descriptor *param_descriptor,
                                     const std::experimental::any &element,
                                     const std::experimental::any &def_value_any);
 
-    void print_bool_config_element(const std::string &key, const std::string &title,
+    void print_bool_config_element(const std::string &bracket_display, const std::string &title,
                                    const std::experimental::any &element,
                                    const std::experimental::any &def_value_any);
 
-    void print_string_config_element(const std::string &key, const std::string &title,
+    void print_string_config_element(const std::string &bracket_display, const std::string &title,
                                      const std::experimental::any &element,
                                      const std::experimental::any &def_value_any);
 
@@ -73,6 +73,12 @@ private:
                              const std::experimental::any &element);
 
     void print_config_map(const std::string &key, const std::experimental::any &element);
+
+    /**
+     * @brief Returns the key string to display in brackets; appends [reason] when runtime
+     *        registry has a non-NotChanged reason for the key.
+     */
+    std::string key_with_reason(const std::string &key) const;
 
     // Print functions for specific fields which we handle  in a non-standard way
     void print_log_level(const std::string &key, const std::string &title);

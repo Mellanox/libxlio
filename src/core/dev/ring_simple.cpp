@@ -416,6 +416,14 @@ int ring_simple::poll_and_process_element_tx()
     return ret;
 }
 
+void ring_simple::ack_cq_events()
+{
+    m_lock_ring_rx.lock();
+    m_p_cq_mgr_rx->ack_cq_events();
+    ++m_p_ring_stat->n_rx_interrupt_received;
+    m_lock_ring_rx.unlock();
+}
+
 void ring_simple::wait_for_notification_and_process_element(void *pv_fd_ready_array /*NULL*/)
 {
     m_lock_ring_rx.lock();
@@ -759,7 +767,8 @@ void ring_simple::inc_cq_moderation_stats()
 // call under m_lock_ring_tx lock
 mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_bufs)
 {
-    mem_buf_desc_t *head;
+    mem_buf_desc_t *head = nullptr;
+    mem_buf_desc_t **next;
     descq_t &pool = type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
 
     if (unlikely(pool.size() < n_num_mem_bufs)) {
@@ -783,24 +792,18 @@ mem_buf_desc_t *ring_simple::get_tx_buffers(pbuf_type type, uint32_t n_num_mem_b
             return nullptr;
         }
     }
-    /* coverity[returned_null] */
-    head = pool.get_and_pop_back();
-    /* coverity[null_deref] */
-    head->lwip_pbuf.ref = 1;
-    assert(head->lwip_pbuf.type == type);
-    head->lwip_pbuf.type = type;
-    n_num_mem_bufs--;
 
-    mem_buf_desc_t *next = head;
-    while (n_num_mem_bufs) {
-        next->p_next_desc = pool.get_and_pop_back();
-        next = next->p_next_desc;
-        next->lwip_pbuf.ref = 1;
-        assert(head->lwip_pbuf.type == type);
-        next->lwip_pbuf.type = type;
-        n_num_mem_bufs--;
+    for (next = &head; n_num_mem_bufs > 0; --n_num_mem_bufs) {
+        mem_buf_desc_t *pdesc = pool.get_and_pop_back();
+        // We track number of elements in the list, so this check is to silent static analyzers.
+        if (likely(pdesc)) {
+            assert(pdesc->lwip_pbuf.type == type);
+            pdesc->lwip_pbuf.ref = 1;
+            *next = pdesc;
+            next = &pdesc->p_next_desc;
+        }
     }
-    next->p_next_desc = nullptr;
+    *next = nullptr;
 
     return head;
 }
@@ -846,6 +849,13 @@ int ring_simple::put_tx_buffer_helper(mem_buf_desc_t *buff)
     if (buff->lwip_pbuf.ref == 0) {
         descq_t &pool = buff->lwip_pbuf.type == PBUF_ZEROCOPY ? m_zc_pool : m_tx_pool;
         buff->p_next_desc = nullptr;
+
+        // Workaround for RM#4917604:
+        // During ring teardown, suppress ZCOPY completion callbacks to avoid
+        // use-after-free: the socket referenced by tx.zc.ctx has already been destroyed.
+        if (buff->lwip_pbuf.type == PBUF_ZEROCOPY && unlikely(!m_up_tx)) {
+            buff->m_flags &= ~mem_buf_desc_t::ZCOPY;
+        }
         free_lwip_pbuf(&buff->lwip_pbuf);
         pool.push_back(buff);
         return 1;

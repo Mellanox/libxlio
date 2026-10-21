@@ -25,6 +25,10 @@
 #define rfs_logfunc    __log_info_func
 #define rfs_logfuncall __log_info_funcall
 
+// Source port stride for hardware flow steering. Value of 2 ensures 100% of
+// source ports map to a worker. Higher values create gaps in steering coverage.
+static constexpr int SRC_PORT_STRIDE = 2;
+
 rfs_uc::rfs_uc(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_filter,
                uint32_t flow_tag_id, int steering_index)
     : rfs(flow_spec_5t, p_ring, rule_filter, flow_tag_id)
@@ -78,12 +82,10 @@ void rfs_uc::prepare_flow_spec()
             }
 
             m_match_mask.src_port =
-                static_cast<uint16_t>((g_p_app->workers_pow2 * g_p_app->src_port_stride) - 2);
-            m_match_value.src_port = static_cast<uint16_t>(src_port * g_p_app->src_port_stride);
+                static_cast<uint16_t>((g_p_app->workers_pow2 * SRC_PORT_STRIDE) - 2);
+            m_match_value.src_port = static_cast<uint16_t>(src_port * SRC_PORT_STRIDE);
 
             m_priority = 1;
-            rfs_logdbg("src_port_stride: %d workers_num %d \n", g_p_app->src_port_stride,
-                       g_p_app->workers_num);
             rfs_logdbg("sp_tcp_udp->val.src_port: %d p_tcp_udp->mask.src_port %d \n",
                        m_match_value.src_port, m_match_mask.src_port);
 
@@ -105,13 +107,10 @@ void rfs_uc::prepare_flow_spec_worker_thread_mode()
 
     int entity_context_pow2 = entity_context_manager::calculate_entity_context_pow2();
 
-    m_match_mask.src_port =
-        static_cast<uint16_t>((entity_context_pow2 * MCE_DEFAULT_SRC_PORT_STRIDE) - 2);
-    m_match_value.src_port = static_cast<uint16_t>(m_steering_index * MCE_DEFAULT_SRC_PORT_STRIDE);
+    m_match_mask.src_port = static_cast<uint16_t>((entity_context_pow2 * SRC_PORT_STRIDE) - 2);
+    m_match_value.src_port = static_cast<uint16_t>(m_steering_index * SRC_PORT_STRIDE);
 
     m_priority = 2;
-    rfs_logdbg("src_port_stride: %d workers_num %d \n", MCE_DEFAULT_SRC_PORT_STRIDE,
-               entity_context_pow2);
 }
 
 void rfs_uc::prepare_flow_spec_secondary_rule()
@@ -120,10 +119,7 @@ void rfs_uc::prepare_flow_spec_secondary_rule()
     int src_port = safe_mce_sys().worker_threads + m_steering_index;
 
     // We use the same m_match_mask as the first rule.
-    m_match_value.src_port = static_cast<uint16_t>(src_port * MCE_DEFAULT_SRC_PORT_STRIDE);
-
-    rfs_logdbg("secondary rule src_port_stride: %d workers_num %d \n", MCE_DEFAULT_SRC_PORT_STRIDE,
-               safe_mce_sys().worker_threads);
+    m_match_value.src_port = static_cast<uint16_t>(src_port * SRC_PORT_STRIDE);
 }
 
 bool rfs_uc::if_secondary_rule_needed()

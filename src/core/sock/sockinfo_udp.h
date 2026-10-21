@@ -63,7 +63,8 @@ public:
 
     void setPassthrough() override
     {
-        IF_STATS(m_p_socket_stats->b_is_offloaded = m_sock_offload = false);
+        m_sock_offload = false;
+        IF_STATS(m_p_socket_stats->b_is_offloaded = false);
     }
     bool isPassthrough() override { return !m_sock_offload; }
 
@@ -135,8 +136,8 @@ public:
      * true)
      */
     ssize_t tx(xlio_tx_call_attr_t &tx_arg) override;
-    void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size,
-                          int flags) override;
+    void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size, int flags,
+                          const tx_call_ctx &tx_ctx) override;
     /**
      * Check that a call to this sockinof rx() will not block
      * -> meaning, we got a ready rx packet

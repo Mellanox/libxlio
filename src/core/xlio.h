@@ -363,7 +363,7 @@ int xlio_poll_group_destroy(xlio_poll_group_t group);
  * @brief Update polling group attributes
  *
  * Updates the attributes of an existing polling group. This allows changing
- * callback functions or flags without recreating the group.
+ * callback functions. Changing flags is currently not supported.
  *
  * @param group The polling group to update
  * @param attr New attributes for the group
@@ -398,6 +398,32 @@ void xlio_poll_group_poll(xlio_poll_group_t group);
  * zero-copy capabilities. They are represented by opaque handles rather than
  * file descriptors.
  *
+ * XLIO sockets can be created in one of two ways:
+ * 1. By calling xlio_socket_create() - this is done for client sockets (i.e. outgoing
+ *    connections) and for listening sockets.
+ * 2. By xlio_poll_group_poll(), when it sees a listening socket which has received a
+ *    new connection. In this case, the polling group accept_callback is called with
+ *    the new socket, so that the application is made aware of it.
+ *
+ * Normally, XLIO sockets are owned by (== attached to) a single polling group - either
+ * the one specified by attr->group in the xlio_socket_create() call, or by the group
+ * owning the listening socket which created the new socket.
+ * When sockets are moved between polling groups (using xlio_socket_detach_group()
+ * followed by xlio_socket_attach_group()), the socket is not owned by any group during
+ * the time between the detach and attach operations.
+ *
+ * The handle returned by sock_out is valid until one of the following conditions occurs:
+ * 1. The polling group owning this socket calls the event callback with a
+ *    XLIO_SOCKET_EVENT_TERMINATED event.
+ * 2. The socket is not owned by a polling group and the application calls xlio_socket_destroy()
+ *    for this socket.
+ * As long as the socket is valid, the application can use the socket handle in the various
+ * xlio_socket_XXX() function calls, and should expect callbacks for this socket to be made
+ * by the polling group.
+ * Specifically, note that even after the application calls xlio_socket_destroy() for a
+ * socket, if it is owned by a polling group, callbacks for this socket are expected, until
+ * the final event callback with a XLIO_SOCKET_EVENT_TERMINATED event.
+ *
  * @{
  */
 
@@ -405,7 +431,7 @@ void xlio_poll_group_poll(xlio_poll_group_t group);
  * @brief Create a new XLIO socket
  *
  * Creates a new XLIO socket with the specified attributes. The socket is
- * automatically associated with the specified polling group and configured
+ * automatically associated with the polling group attr->group and is configured
  * for high-performance operation.
  *
  * @param attr Socket attributes
@@ -438,6 +464,8 @@ int xlio_socket_create(const struct xlio_socket_attr *attr, xlio_socket_t *sock_
  *
  * @note Zero-copy completion events may still arrive after calling this function
  * until the TERMINATED event is received.
+ * If the socket is not attached to a polling group, it is destroyed immediately,
+ * and the application should not expect any callbacks for this socket anymore.
  */
 int xlio_socket_destroy(xlio_socket_t sock);
 
@@ -448,7 +476,7 @@ int xlio_socket_destroy(xlio_socket_t sock);
  * changing socket behavior and context without recreating the socket.
  *
  * @param sock The socket to update
- * @param flags New flags for the socket
+ * @param flags New flags for the socket - Currently ignored.
  * @param userdata_sq New user data for the socket
  * @return 0 on success, -1 on error
  */
@@ -657,8 +685,8 @@ int xlio_socket_attach_group(xlio_socket_t sock, xlio_poll_group_t group);
  * - ENOMEM: Insufficient memory (recoverable by retrying later)
  * - Other errors are generally not recoverable
  *
- * @note For zero-copy operation, the memory must be registered with the
- * InfiniBand protection domain obtained from xlio_socket_get_pd().
+ * @note For zero-copy operation, the parameter 'data' must point to memory which is
+ * registered with the InfiniBand protection domain obtained from xlio_socket_get_pd().
  *
  * @see xlio_socket_send_attr
  */
@@ -720,6 +748,11 @@ void xlio_socket_flush(xlio_socket_t sock);
  * The XLIO Ultra API provides zero-copy receive capabilities through
  * a buffer management system. Received data is delivered via callbacks
  * with buffer descriptors that must be returned to the system.
+ *
+ * Specifically, each time the socket_rx_cb callback is called, the application
+ * gets ownership of the buffer pointed to by the 'buf' parameter, and it must
+ * later call xlio_socket_buf_free() or xlio_poll_group_buf_free() to return
+ * the buffer to the system.
  *
  * xlio_buf structure contains an uninitialized userdata field which can be used
  * by the application to store any data during its ownership on the buffer.

@@ -135,9 +135,9 @@ extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
     g_user_memory_cb = attr->memory_cb;
 
     if (attr->memory_alloc) {
-        safe_mce_sys().user_alloc.memalloc = attr->memory_alloc;
-        safe_mce_sys().user_alloc.memfree = attr->memory_free;
-        safe_mce_sys().memory_limit_user =
+        mce_sys_var::safe_instance().user_alloc.memalloc = attr->memory_alloc;
+        mce_sys_var::safe_instance().user_alloc.memfree = attr->memory_free;
+        mce_sys_var::safe_instance().memory_limit_user =
             std::max(safe_mce_sys().memory_limit_user, safe_mce_sys().memory_limit);
     }
 
@@ -179,6 +179,8 @@ extern "C" int xlio_poll_group_update(xlio_poll_group_t group,
     poll_group *grp = reinterpret_cast<poll_group *>(group);
 
     if (!attr || !attr->socket_event_cb) {
+        __log_dbg("xlio_poll_group_update: Invalid parameter, %s must not be null",
+                  attr ? "attr->socket_event_cb" : "attr");
         errno = EINVAL;
         return -1;
     }
@@ -212,6 +214,8 @@ extern "C" int xlio_socket_create(const struct xlio_socket_attr *attr, xlio_sock
         return -1;
     }
     si->set_xlio_socket(attr);
+    // App just created this socket so surely it is aware of it.
+    si->set_xlio_app_callbacks_allowed();
 
     poll_group *grp = reinterpret_cast<poll_group *>(attr->group);
     grp->add_socket(si);

@@ -397,6 +397,19 @@ int ring_bond::drain_and_proccess()
     }
 }
 
+void ring_bond::ack_cq_events()
+{
+    m_lock_ring_rx.lock();
+
+    for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
+        if (m_recv_rings[i]->is_up()) {
+            m_recv_rings[i]->ack_cq_events();
+        }
+    }
+
+    m_lock_ring_rx.unlock();
+}
+
 void ring_bond::wait_for_notification_and_process_element(void *pv_fd_ready_array /*NULL*/)
 {
     m_lock_ring_rx.lock();
@@ -640,7 +653,7 @@ void ring_bond::update_rx_channel_fds()
     m_p_n_rx_channel_fds = new int[m_recv_rings.size()];
     for (uint32_t i = 0; i < m_recv_rings.size(); i++) {
         size_t num_rx_channel_fds;
-        int *p_rx_channel_fds = m_bond_rings[i]->get_rx_channel_fds(num_rx_channel_fds);
+        int *p_rx_channel_fds = m_recv_rings[i]->get_rx_channel_fds(num_rx_channel_fds);
         /* Assume that a slave ring contains exactly 1 channel fd. */
         NOT_IN_USE(num_rx_channel_fds);
         m_p_n_rx_channel_fds[i] = p_rx_channel_fds[0];
@@ -761,6 +774,20 @@ uint64_t ring_bond::get_rx_cq_out_of_buffer_drop()
         accumulator += m_recv_rings[i]->get_rx_cq_out_of_buffer_drop();
     }
     return accumulator;
+}
+
+// m_bond_rings vector is structurally stable (only ctor/dtor modify it;
+// event handler modifies m_xmit_rings/m_recv_rings, not m_bond_rings),
+// so iterating without synchronization is safe for the vector structure.
+// Uses m_bond_rings (all slaves) rather than m_recv_rings (active subset)
+// to capture historical traffic from all slaves across failovers.
+void ring_bond::accumulate_ring_stats(aggregated_ring_stats &agg) const
+{
+    for (const ring_slave *slave : m_bond_rings) {
+        if (slave) {
+            slave->accumulate_ring_stats(agg);
+        }
+    }
 }
 
 void ring_bond::slave_create(int if_index)

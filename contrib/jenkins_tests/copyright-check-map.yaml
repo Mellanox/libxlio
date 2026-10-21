@@ -5,6 +5,7 @@ general:
         - "\\.dockers.*"
         - "build.*"
         - "third_party\\.*"
+        - "submodules\\.*"
         - "contrib/jenkins_tests.*"
         - "contrib/valgrind.*"
         - "contrib/xlio-bench.*"

@@ -10,6 +10,7 @@
 
 #include "main.h"
 #include "config_printer.h"
+#include "tuning_report_printer.h"
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/resource.h>
@@ -24,6 +25,7 @@
 #include <sstream>
 #include <algorithm>
 
+#include "config/config_var_definitions.h"
 #include "vlogger/vlogger.h"
 #include "utils/compiler.h"
 #include "utils/rdtsc.h"
@@ -57,7 +59,6 @@
 #include "config/descriptors/config_descriptor.h"
 
 #include "util/instrumentation.h"
-#include "util/agent.h"
 #include "xlio.h"
 
 void check_netperf_flags();
@@ -65,6 +66,7 @@ void check_netperf_flags();
 // Start of xlio_version_str - used in "$ strings libxlio.so | grep XLIO_VERSION"
 #define STR_EXPAND(x) #x
 #define STR(x)        STR_EXPAND(x)
+/* cppcheck-suppress unknownMacro */
 const char *xlio_version_str = "XLIO_VERSION: " PACKAGE_VERSION "-" STR(PRJ_LIBRARY_RELEASE)
 
 #if _BullseyeCoverage
@@ -102,15 +104,6 @@ static int free_libxlio_resources()
 
     worker_thread_manager::destroy();
 
-    if (safe_mce_sys().print_report != option_3::OFF) {
-        bool print_only_critical = (safe_mce_sys().print_report == option_3::AUTO);
-        buffer_pool::print_full_report(VLOG_INFO, print_only_critical);
-        g_hugepage_mgr.print_report(VLOG_INFO, print_only_critical);
-        if (g_p_net_device_table_mgr) {
-            g_p_net_device_table_mgr->print_report(VLOG_INFO, print_only_critical);
-        }
-    }
-
     entity_context_manager::destroy();
 
     // Destroy polling groups before fd_collection to clear XLIO sockets from the fd_collection
@@ -142,6 +135,12 @@ static int free_libxlio_resources()
     if (g_p_fd_collection_temp) {
         delete g_p_fd_collection_temp;
     }
+
+    // Generate the tuning report after all socket destructors have run,
+    // so destructor counters are complete and sock_stats data is finalized.
+    // Must precede net_device_table_mgr and sock_stats destruction.
+    finalize_tuning_report();
+    safe_mce_sys().destroy_registry();
 
     if (g_p_lwip) {
         delete g_p_lwip;
@@ -236,15 +235,12 @@ static int free_libxlio_resources()
     }
     g_p_event_handler_manager = nullptr;
 
-    if (g_p_agent) {
-        delete g_p_agent;
-    }
-    g_p_agent = nullptr;
-
+    // Allow config to change as part of exit
+    mce_sys_var::safe_instance().unfreeze();
     if (safe_mce_sys().app_name) {
         free(safe_mce_sys().app_name);
     }
-    safe_mce_sys().app_name = nullptr;
+    mce_sys_var::safe_instance_non_const().app_name = nullptr;
 
     vlog_printf(VLOG_DEBUG, "Stopping logger module\n");
 
@@ -254,10 +250,7 @@ static int free_libxlio_resources()
 
     vlog_stop();
 
-    if (g_stats_file) {
-        fclose(g_stats_file);
-        g_stats_file = nullptr;
-    }
+    close_stats_file();
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     if (g_p_app) {
@@ -468,9 +461,6 @@ void print_env_vars_xlio_global_settings()
     VLOG_STR_PARAM_STRING("Stats shared memory directory", safe_mce_sys().stats_shmem_dirname,
                           MCE_DEFAULT_STATS_SHMEM_DIR, SYS_VAR_STATS_SHMEM_DIRNAME,
                           safe_mce_sys().stats_shmem_dirname);
-    VLOG_STR_PARAM_STRING("SERVICE output directory", safe_mce_sys().service_notify_dir,
-                          MCE_DEFAULT_SERVICE_FOLDER, SYS_VAR_SERVICE_DIR,
-                          safe_mce_sys().service_notify_dir);
     VLOG_PARAM_NUMBER("Stats FD Num (max)", safe_mce_sys().stats_fd_num_max,
                       MCE_DEFAULT_STATS_FD_NUM, SYS_VAR_STATS_FD_NUM);
     VLOG_STR_PARAM_STRING("Application ID", safe_mce_sys().app_id, MCE_DEFAULT_APP_ID,
@@ -499,14 +489,16 @@ void print_env_vars_xlio_global_settings()
         vlog_printf(VLOG_WARNING,
                     "user_id is not supported using "
                     "environment variable , use etra_api, using default\n");
-        safe_mce_sys().ring_allocation_logic_rx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX;
+        mce_sys_var::safe_instance_non_const().ring_allocation_logic_rx =
+            MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX;
     }
 
     if (safe_mce_sys().ring_allocation_logic_tx == RING_LOGIC_PER_USER_ID) {
         vlog_printf(VLOG_WARNING,
                     "user_id is not supported using "
                     "environment variable , use etra_api, using default\n");
-        safe_mce_sys().ring_allocation_logic_tx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX;
+        mce_sys_var::safe_instance_non_const().ring_allocation_logic_tx =
+            MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX;
     }
 
     VLOG_PARAM_NUMBER("Ring migration ratio TX", safe_mce_sys().ring_migration_ratio_tx,
@@ -651,15 +643,24 @@ void print_env_vars_xlio_global_settings()
                           MCE_DEFAULT_SELECT_SKIP_OS, SYS_VAR_SELECT_SKIP_OS, "Disabled");
     }
 
-    if (safe_mce_sys().progress_engine_interval_msec == MCE_CQ_DRAIN_INTERVAL_DISABLED ||
-        safe_mce_sys().progress_engine_wce_max == 0) {
-        vlog_printf(VLOG_INFO, FORMAT_STRING, "CQ Drain Thread", "Disabled",
-                    SYS_VAR_PROGRESS_ENGINE_INTERVAL);
-    } else {
-        VLOG_PARAM_NUMBER("CQ Drain Interval (msec)", safe_mce_sys().progress_engine_interval_msec,
+    // Always show both parameters individually
+    if (safe_mce_sys().progress_engine_interval_msec == MCE_CQ_DRAIN_INTERVAL_DISABLED) {
+        VLOG_PARAM_STRING("Periodic drain interval (msec)",
+                          safe_mce_sys().progress_engine_interval_msec,
                           MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC,
-                          SYS_VAR_PROGRESS_ENGINE_INTERVAL);
-        VLOG_PARAM_NUMBER("CQ Drain WCE (max)", safe_mce_sys().progress_engine_wce_max,
+                          SYS_VAR_PROGRESS_ENGINE_INTERVAL, "0 (Disabled)");
+    } else {
+        VLOG_PARAM_NUMBER(
+            "Periodic drain interval (msec)", safe_mce_sys().progress_engine_interval_msec,
+            MCE_DEFAULT_PROGRESS_ENGINE_INTERVAL_MSEC, SYS_VAR_PROGRESS_ENGINE_INTERVAL);
+    }
+
+    if (safe_mce_sys().progress_engine_wce_max == 0) {
+        VLOG_PARAM_STRING("Periodic drain max CQEs", safe_mce_sys().progress_engine_wce_max,
+                          MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX, SYS_VAR_PROGRESS_ENGINE_WCE_MAX,
+                          "0 (Disabled)");
+    } else {
+        VLOG_PARAM_NUMBER("Periodic drain max CQEs", safe_mce_sys().progress_engine_wce_max,
                           MCE_DEFAULT_PROGRESS_ENGINE_WCE_MAX, SYS_VAR_PROGRESS_ENGINE_WCE_MAX);
     }
 
@@ -699,6 +700,8 @@ void print_env_vars_xlio_global_settings()
                       MCE_DEFAULT_TIMER_RESOLUTION_MSEC, SYS_VAR_TIMER_RESOLUTION_MSEC);
     VLOG_PARAM_NUMBER("TCP Timer Resolution (msec)", safe_mce_sys().tcp_timer_resolution_msec,
                       MCE_DEFAULT_TCP_TIMER_RESOLUTION_MSEC, SYS_VAR_TCP_TIMER_RESOLUTION_MSEC);
+    VLOG_PARAM_NUMBER("TCP RTO Floor (msec)", safe_mce_sys().tcp_rto_floor_msec,
+                      MCE_DEFAULT_TCP_RTO_FLOOR_MSEC, SYS_VAR_TCP_RTO_FLOOR_MSEC);
     VLOG_PARAM_STRING(
         "TCP control thread", option_tcp_ctl_thread::to_str(safe_mce_sys().tcp_ctl_thread),
         option_tcp_ctl_thread::to_str(MCE_DEFAULT_TCP_CTL_THREAD), SYS_VAR_TCP_CTL_THREAD,
@@ -717,9 +720,6 @@ void print_env_vars_xlio_global_settings()
     VLOG_PARAM_STRING("Avoid sys-calls on tcp fd", safe_mce_sys().avoid_sys_calls_on_tcp_fd,
                       MCE_DEFAULT_AVOID_SYS_CALLS_ON_TCP_FD, SYS_VAR_AVOID_SYS_CALLS_ON_TCP_FD,
                       safe_mce_sys().avoid_sys_calls_on_tcp_fd ? "Enabled" : "Disabled");
-    VLOG_PARAM_STRING("Allow privileged sock opt", safe_mce_sys().allow_privileged_sock_opt,
-                      MCE_DEFAULT_ALLOW_PRIVILEGED_SOCK_OPT, SYS_VAR_ALLOW_PRIVILEGED_SOCK_OPT,
-                      safe_mce_sys().allow_privileged_sock_opt ? "Enabled" : "Disabled");
     VLOG_PARAM_NUMBER("Delay after join (msec)", safe_mce_sys().wait_after_join_msec,
                       MCE_DEFAULT_WAIT_AFTER_JOIN_MSEC, SYS_VAR_WAIT_AFTER_JOIN_MSEC);
     VLOG_STR_PARAM_STRING("Internal Thread Affinity", safe_mce_sys().internal_thread_affinity_str,
@@ -791,10 +791,6 @@ void print_env_vars_xlio_global_settings()
                                                             : MCE_DEFAULT_APP_WORKERS_NUM),
                       MCE_DEFAULT_APP_WORKERS_NUM, SYS_VAR_ENVOY_WORKERS_NUM);
 #endif /* DEFINED_ENVOY */
-#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    VLOG_PARAM_NUMBER("Src port stirde", safe_mce_sys().app.src_port_stride,
-                      MCE_DEFAULT_SRC_PORT_STRIDE, SYS_VAR_SRC_PORT_STRIDE);
-#endif
     VLOG_PARAM_STRING("fork() support", safe_mce_sys().handle_fork, MCE_DEFAULT_FORK_SUPPORT,
                       SYS_VAR_FORK, safe_mce_sys().handle_fork ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("close on dup2()", safe_mce_sys().close_on_dup2, MCE_DEFAULT_CLOSE_ON_DUP2,
@@ -877,6 +873,9 @@ void print_xlio_global_settings()
     int ret = get_ofed_version_info(ofed_version_info, MAX_VERSION_STR_LEN);
     if (!ret && strlen(ofed_version_info) > 0) {
         vlog_printf(VLOG_INFO, "OFED Version: %s\n", ofed_version_info);
+        // Cache for tuning report — avoids popen() during shutdown.
+        auto &cached = mce_sys_var::safe_instance_non_const().cached_ofed_version;
+        snprintf(cached, sizeof(cached), "%s", ofed_version_info);
     }
 
     if (!uname(&sys_info)) {
@@ -890,22 +889,6 @@ void print_xlio_global_settings()
 
     config_printer printer = config_printer(safe_mce_sys());
     printer.print_to_log();
-    // Once we are done with the registry, destroy it to free the memory
-    safe_mce_sys().destroy_registry();
-
-    if (safe_mce_sys().ring_allocation_logic_rx == RING_LOGIC_PER_USER_ID) {
-        vlog_printf(VLOG_WARNING,
-                    "user_id is not supported using "
-                    "environment variable , use etra_api, using default\n");
-        safe_mce_sys().ring_allocation_logic_rx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_RX;
-    }
-
-    if (safe_mce_sys().ring_allocation_logic_tx == RING_LOGIC_PER_USER_ID) {
-        vlog_printf(VLOG_WARNING,
-                    "user_id is not supported using "
-                    "environment variable , use etra_api, using default\n");
-        safe_mce_sys().ring_allocation_logic_tx = MCE_DEFAULT_RING_ALLOCATION_LOGIC_TX;
-    }
 
     vlog_printf(VLOG_INFO,
                 "---------------------------------------------------------------------------\n");
@@ -1000,9 +983,9 @@ extern "C" void sock_redirect_exit(void)
 static std::string get_invalid_calc_info_message()
 {
     const std::string strq_num_strides =
-        g_use_new_config ? CONFIG_VAR_STRQ_NUM_STRIDES : SYS_VAR_STRQ_NUM_STRIDES;
+        g_use_new_config ? CONFIG_VAR_STRQ_NUM_STRIDES.name : SYS_VAR_STRQ_NUM_STRIDES;
     const std::string strq_stride_size_bytes =
-        g_use_new_config ? CONFIG_VAR_STRQ_STRIDE_SIZE_BYTES : SYS_VAR_STRQ_STRIDE_SIZE_BYTES;
+        g_use_new_config ? CONFIG_VAR_STRQ_STRIDE_SIZE_BYTES.name : SYS_VAR_STRQ_STRIDE_SIZE_BYTES;
 
     return "The requested " + strq_num_strides + "(%" PRIu32 + ") * " + strq_stride_size_bytes +
         "(%" PRIu32 ") = %zu " + "is less then MTU + Headers (%zu)";
@@ -1070,12 +1053,15 @@ static void do_global_ctors_helper()
     PROFILE_BLOCK("xlio_ctors")
 
     g_init_global_ctors_done = true;
+
+    // Unfreeze in case it was already frozen
+    safe_mce_sys().unfreeze();
     set_env_params();
     prepare_fork();
 
     // Adjust configuration before subsystems initialization. We do this here
     // not to affect XLIO header output.
-    safe_mce_sys().update_multi_process_params();
+    mce_sys_var::safe_instance_non_const().update_multi_process_params();
 
     if (g_is_forked_child == true) {
         g_is_forked_child = false;
@@ -1086,15 +1072,6 @@ static void do_global_ctors_helper()
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     NEW_CTOR(g_p_app, app_conf());
 #endif
-
-    /* Open communication with daemon */
-    if (safe_mce_sys().service_enable) {
-        NEW_CTOR(g_p_agent, agent());
-        vlog_printf(VLOG_DEBUG, "Agent setup state: g_p_agent=%p active=%d\n", g_p_agent,
-                    (g_p_agent ? g_p_agent->state() : -1));
-    } else {
-        vlog_printf(VLOG_DEBUG, "Agent is disabled\n");
-    }
 
     // Create all global management objects
     NEW_CTOR(g_p_event_handler_manager, event_handler_manager());
@@ -1133,7 +1110,7 @@ static void do_global_ctors_helper()
 
     if (safe_mce_sys().rx_buf_size <=
         get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(), safe_mce_sys().lwip_mss)) {
-        safe_mce_sys().rx_buf_size = 0;
+        mce_sys_var::safe_instance_non_const().rx_buf_size = 0;
     }
 
     NEW_CTOR(g_buffer_pool_rx_rwqe,
@@ -1149,7 +1126,7 @@ static void do_global_ctors_helper()
 
     if (safe_mce_sys().tx_buf_size <=
         get_lwip_tcp_mss(g_p_net_device_table_mgr->get_max_mtu(), safe_mce_sys().lwip_mss)) {
-        safe_mce_sys().tx_buf_size = 0;
+        mce_sys_var::safe_instance_non_const().tx_buf_size = 0;
     }
     NEW_CTOR(g_buffer_pool_tx,
              buffer_pool(BUFFER_POOL_TX,
@@ -1233,6 +1210,7 @@ int do_global_ctors()
 
 void reset_globals()
 {
+    safe_mce_sys().unfreeze();
     worker_thread_manager::fork_nullify();
     entity_context_manager::fork_nullify();
     poll_group::fork_nullify();
@@ -1248,7 +1226,6 @@ void reset_globals()
     g_tcp_timers_collection = nullptr;
     g_p_vlogger_timer_handler = nullptr;
     g_p_event_handler_manager = nullptr;
-    g_p_agent = nullptr;
     g_p_route_table_mgr = nullptr;
     g_bind_no_port = nullptr;
     g_p_rule_table_mgr = nullptr;
@@ -1342,6 +1319,7 @@ extern "C" int xlio_init(void)
     get_orig_funcs();
 #endif /* XLIO_STATIC_BUILD */
     safe_mce_sys();
+    xlio_sigint_init();
 
     g_init_xlio_init_done = true;
 
@@ -1353,6 +1331,7 @@ extern "C" int xlio_init(void)
     } else {
         print_env_vars_xlio_global_settings();
     }
+    mce_sys_var::safe_instance().freeze();
 
     check_debug();
     check_cpu_speed();
@@ -1370,6 +1349,12 @@ extern "C" EXPORT_SYMBOL int xlio_exit(void)
     int rc = 0;
 
     PROFILE_FUNC
+
+    // SIGINT can be intercepted before the global constructors run, therefore the restoration
+    // is gated by the signal initialization state and not by the resource cleanup state.
+    if (g_init_xlio_init_done) {
+        xlio_sigint_exit();
+    }
 
     if (g_init_global_ctors_done) {
         rc = free_libxlio_resources();

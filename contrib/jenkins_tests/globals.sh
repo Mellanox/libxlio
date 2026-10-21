@@ -3,6 +3,8 @@
 main()
 {
 WORKSPACE=${WORKSPACE:=$(pwd)}
+source "$(dirname "${BASH_SOURCE[0]}")/git_safe_directory.sh"
+
 BUILD_NUMBER=${BUILD_NUMBER:=0}
 HOSTNAME=${HOSTNAME:=$(uname -n 2>/dev/null)}
 
@@ -24,12 +26,10 @@ cppcheck_dir=${WORKSPACE}/${prefix}/cppcheck
 csbuild_dir=${WORKSPACE}/${prefix}/csbuild
 vg_dir=${WORKSPACE}/${prefix}/vg
 style_dir=${WORKSPACE}/${prefix}/style
-tool_dir=${WORKSPACE}/${prefix}/tool
 commit_dir=${WORKSPACE}/${prefix}/commit
 tidy_dir=${WORKSPACE}/${prefix}/tidy
 
 prj_lib=libxlio.so
-prj_service=xliod
 
 NPROC=$(nproc 2>/dev/null || echo 2)
 # Set NPROC based on container cgroup
@@ -70,7 +70,6 @@ function on_exit()
     echo "[${0##*/}]..................exit code = $rc"
     pkill -9 sockperf
     pkill -9 xlio
-    pkill -9 ${prj_service}
 }
 
 function do_cmd()
@@ -312,29 +311,6 @@ do_version_check()
             exit (a[1] '$operator' b[1]) ? 0 : 1
         }
     }'
-}
-
-do_check_dpcp()
-{
-    local ret=0
-	local dpcp_dir="${WORKSPACE}/${prefix}/_dpcp-last"
-
-	echo "Checking dpcp usage"
-	pushd "${dpcp_dir}" > /dev/null 2>&1
-    set +e
-    if [ ! -d "${dpcp_dir}/install" ]; then
-        eval "./autogen.sh && ./configure --prefix=${dpcp_dir}/install && make $make_opt install"
-        ret=$?
-    fi
-    set -e
-
-    popd > /dev/null 2>&1
-    if [ $ret -eq 0 ]; then
-        eval "$1=${dpcp_dir}/install"
-        echo "dpcp: ${dpcp_dir}/install"
-    else
-        echo "dpcp: no"
-    fi
 }
 
 #######################################################

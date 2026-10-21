@@ -43,12 +43,16 @@ public:
     config_registry();
 
     /**
-     * @brief Constructor with custom loaders and descriptor provider
+     * @brief Constructor with custom loaders and pre-loaded descriptor
+     *
+     * This constructor is primarily used for testing, where loaders and
+     * descriptor are created independently.
+     *
      * @param value_loaders Queue of loaders to use (in priority order)
-     * @param descriptor_provider Provider for parameter descriptors
+     * @param descriptor Pre-loaded config descriptor
      */
     config_registry(std::queue<std::unique_ptr<loader>> &&value_loaders,
-                    std::unique_ptr<descriptor_provider> descriptor_provider);
+                    config_descriptor descriptor);
 
     /**
      * @brief Virtual destructor
@@ -88,7 +92,9 @@ public:
      */
     template <typename T> T get_value(const std::string &key) const
     {
-        return get_value_impl<T>(key, [this](const std::string &k) { return get_value_as_any(k); });
+        T ret =
+            get_value_impl<T>(key, [this](const std::string &k) { return get_value_as_any(k); });
+        return ret;
     }
 
     /**
@@ -101,12 +107,16 @@ public:
     const config_descriptor &get_config_descriptor() const { return m_config_descriptor; }
 
 private:
+    // Holds all values set by config file / inline config
     std::map<std::string, std::experimental::any> m_config_data;
+    // Holds all possible configurable keys and their default values, as defined in the config
+    // schema
     config_descriptor m_config_descriptor;
+    // Holds all sources that contributed to the configuration
     std::vector<std::string> m_sources;
+
     std::experimental::any get_default_value_as_any(const std::string &key) const;
-    void initialize_registry(std::queue<std::unique_ptr<loader>> &&value_loaders,
-                             std::unique_ptr<descriptor_provider> descriptor_provider);
+    void initialize_from_loaders(std::queue<std::unique_ptr<loader>> &&value_loaders);
 
     /**
      * @brief Helper implementation for retrieving non-integer values

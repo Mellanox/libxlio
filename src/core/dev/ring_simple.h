@@ -46,6 +46,7 @@ public:
     bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *rx_reuse_lst) override; // No locks
     void mem_buf_rx_release(mem_buf_desc_t *p_mem_buf_desc) override;
     int drain_and_proccess() override;
+    void ack_cq_events() override;
     void wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr) override;
     void mem_buf_desc_return_to_owner_tx(mem_buf_desc_t *p_mem_buf_desc);
     void mem_buf_desc_return_to_owner_rx(mem_buf_desc_t *p_mem_buf_desc,
@@ -112,19 +113,28 @@ public:
     bool tls_tx_supported(void) override { return m_tls.tls_tx; }
     bool tls_rx_supported(void) override { return m_tls.tls_rx; }
     bool tls_sync_dek_supported() { return m_tls.tls_synchronize_dek; }
-    xlio_tis *tls_context_setup_tx(const xlio_tls_info *info) override
+    xlio_tis *tls_reserve_tis(const xlio_tls_info *info) override
+    {
+        /* Firmware object commands only - the send queue is not touched, so the ring tx lock is
+         * not required. The TIS/DEK cache lists are protected by a dedicated lock inside
+         * hw_queue_tx.
+         */
+        return m_hqtx->tls_reserve_tis(info);
+    }
+    int tls_reserve_rx_dek(xlio_tir *tir, const xlio_tls_info *info) override
+    {
+        /* DEK is an adapter-level object - no ring lock is required. */
+        return m_hqtx->tls_reserve_rx_dek(tir, info);
+    }
+    void tls_context_setup_tx(const xlio_tls_info *info, xlio_tis *tis) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
 
-        xlio_tis *tis = m_hqtx->tls_context_setup_tx(info);
-        if (likely(tis != NULL)) {
-            ++m_p_ring_stat->n_tx_tls_contexts;
-        }
+        m_hqtx->tls_context_setup_tx(info, tis);
+        ++m_p_ring_stat->n_tx_tls_contexts;
 
         /* Do polling to speedup handling of the completion. */
         m_p_cq_mgr_tx->poll_and_process_element_tx();
-
-        return tis;
     }
     xlio_tir *tls_create_tir(bool cached) override
     {
@@ -135,22 +145,17 @@ public:
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         return m_hqrx->tls_create_tir(cached);
     }
-    int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
-                             xlio_comp_cb_t callback, void *callback_arg) override
+    void tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t next_record_tcp_sn,
+                              xlio_comp_cb_t callback, void *callback_arg) override
     {
         /* Protect with TX lock since we post WQEs to the send queue. */
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
 
-        int rc =
-            m_hqtx->tls_context_setup_rx(tir, info, next_record_tcp_sn, callback, callback_arg);
-        if (likely(rc == 0)) {
-            ++m_p_ring_stat->n_rx_tls_contexts;
-        }
+        m_hqtx->tls_context_setup_rx(tir, info, next_record_tcp_sn, callback, callback_arg);
+        ++m_p_ring_stat->n_rx_tls_contexts;
 
         /* Do polling to speedup handling of the completion. */
         m_p_cq_mgr_tx->poll_and_process_element_tx();
-
-        return rc;
     }
     void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static) override
     {

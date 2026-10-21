@@ -6,8 +6,8 @@
         - github:
              url: "https://github.com/Mellanox/libxlio"
         - build-discarder:
-            days-to-keep: 50
-            num-to-keep: 20
+            days-to-keep: 20
+            num-to-keep: 100
         - inject:
             keep-system-variables: true
             properties-content: |
@@ -32,6 +32,14 @@
             default: 0
             description: "Enable debug prints and traces, valid values are 0-9."
         - bool:
+            name: "do_setup"
+            default: true
+            description: "Print build environment info."
+        - bool:
+            name: "do_autogen"
+            default: true
+            description: "Regenerate Autotools build files."
+        - bool:
             name: "do_build"
             default: true
             description: "This verifies different configuration using gcc compiler."
@@ -52,10 +60,6 @@
             default: true
             description: "Run static analysis using csbuild tool."
         - bool:
-            name: "do_service"
-            default: true
-            description: "Verify service."
-        - bool:
             name: "do_style"
             default: true
             description: "Analysis source code for coding style."
@@ -75,6 +79,10 @@
             name: "do_gtest"
             default: true
             description: "Use google tests."
+        - bool:
+            name: "do_unit_test"
+            default: true
+            description: "Run unit tests."
         - bool:
             name: "do_valgrind"
             default: true
@@ -103,6 +111,10 @@
             name: "do_secretscan"
             default: true
             description: "Check for secrets in source code"
+        - bool:
+            name: "do_chaos"
+            default: false
+            description: "Enable chaos testing mode"
     triggers:
         - github-pull-request:
             cron: 'H/5 * * * *'
@@ -140,8 +152,8 @@
         - github:
              url: "https://github.com/Mellanox/libxlio"
         - build-discarder:
-            days-to-keep: 120
-            num-to-keep: 20
+            days-to-keep: 20
+            num-to-keep: 100
         - inject:
             keep-system-variables: true
             properties-content: |
@@ -187,6 +199,49 @@
                 browser-url: "{jjb_git}"
         script-path: ".ci/Jenkinsfile"
 
+- job-template:
+    name: "{jjb_proj}-chaos"
+    project-type: pipeline
+    folder: "{jjb_folder}"
+    properties:
+        - github:
+             url: "https://github.com/Mellanox/libxlio"
+        - build-discarder:
+            days-to-keep: 50
+            num-to-keep: 10
+        - inject:
+            keep-system-variables: true
+            properties-content: |
+              jjb_proj={jjb_proj}-chaos
+    description: Do NOT edit this job through the Web GUI !
+    concurrent: true
+    parameters:
+        - string:
+            name: "sha1"
+            default: "vNext"
+            description: "Branch or commit to run chaos testing on"
+        - string:
+            name: "mail_to"
+            default: "c6dabe6c.NVIDIA.onmicrosoft.com@amer.teams.ms"
+            description: "Mail for chaos test results"
+        - string:
+            name: "conf_file"
+            default: ".ci/pipeline/chaos_matrix_job.yaml"
+            description: "Chaos launcher config file. Do not change it"
+    triggers:
+        - timed: "0 2 * * 6"
+    pipeline-scm:
+        scm:
+            - git:
+                url: "{jjb_git}"
+                credentials-id: 'svc-nbu-swx-media_ssh_key'
+                branches: ['$sha1']
+                shallow-clone: false
+                refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/* +refs/tags/*:refs/remotes/origin/tags/*"
+                browser: githubweb
+                browser-url: "{jjb_git}"
+        script-path: ".ci/Jenkinsfile"
+
 - project:
     name: LibXLIO-opensource
     jjb_email: 'nwolfer@nvidia.com'
@@ -197,3 +252,4 @@
     jobs:
         - "{jjb_proj}"
         - "{jjb_proj}-ultra-api"
+        - "{jjb_proj}-chaos"

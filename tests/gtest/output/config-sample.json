@@ -3,17 +3,18 @@
     "log": {
       "level": 3
     },
-    "exit_report": 1
+    "report": {
+      "mode": "enable"
+    }
   },
   "core": {
-    "daemon": {
-      "enable": true,
-      "dir": "/funny-dir"
-    },
     "resources": {
       "hugepages": {
-        "enable": true
+        "enable": false
       }
+    },
+    "exception_handling": {
+      "mode": "log_error_undo_offload"
     }
   },
   "hardware_features": {
@@ -26,9 +27,14 @@
       "lro": "enable"
     }
   },
-  "applications": {
-    "nginx": {
-      "src_port_stride": 3
+  "network": {
+    "protocols": {
+      "tcp": {
+        "rto_floor_msec": 200,
+        "nodelay": {
+          "byte_threshold": 42
+        }
+      }
     }
   },
   "acceleration_control": {
@@ -93,7 +99,8 @@
       "cpu_affinity": "1,2,3",
       "internal_handler": {
         "behavior": "delegate"
-      }
+      },
+      "mutex_over_spinlock": true
     },
     "polling": {
       "skip_cq_on_rx": 1,

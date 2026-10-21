@@ -25,13 +25,8 @@
             "dup2_close_fd": true,
             "fork_support": true,
             "deferred_close": false,
-            "allow_privileged_sockopt": true,
             "avoid_ctl_syscalls": false,
             "sendfile_cache_limit": 10737418240
-        },
-        "daemon": {
-            "enable": false,
-            "dir": "/tmp/xlio"
         }
     },
     "network": {
@@ -54,6 +49,7 @@
                 "congestion_control": 0,
                 "timestamps": 0,
                 "timer_msec": 100,
+                "rto_floor_msec": 200,
                 "mss": 0
             }
         },
@@ -187,7 +183,6 @@
     },
     "applications": {
         "nginx": {
-            "src_port_stride": 2,
             "workers_num": 0,
             "udp_pool_size": 0,
             "udp_socket_pool_reuse": 0,
@@ -222,10 +217,12 @@
             "shmem_dir": "/tmp/xlio",
             "cpu_usage": false
         },
-        "exit_report": -1
+        "report": {
+            "mode": "auto",
+            "file_path": "/tmp/xlio_report_%d.txt"
+        }
     },
     "profiles": {
         "spec": 0
     }
 }
-

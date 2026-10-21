@@ -16,6 +16,10 @@
 
 class udp_send : public udp_base {};
 
+// Keep above XLIO default network.neighbor.arp.uc_delay_msec (10s)
+// so cold/stale neighbor resolution timeout does not race these UDP fork send/recv tests.
+static constexpr int UDP_NEIGHBOR_RESOLUTION_TIMEOUT_SEC = 20;
+
 /**
  * @test udp_send.ti_1
  * @brief
@@ -504,7 +508,7 @@ TEST_F(udp_send, null_iov_elements)
         int fd = udp_base::sock_create();
         EXPECT_LE_ERRNO(0, fd);
         if (0 <= fd) {
-            int rc = set_socket_rcv_timeout(fd, 5);
+            int rc = set_socket_rcv_timeout(fd, UDP_NEIGHBOR_RESOLUTION_TIMEOUT_SEC);
             EXPECT_EQ_ERRNO(0, rc);
 
             rc = bind(fd, &server_addr.addr, sizeof(server_addr));
@@ -603,7 +607,7 @@ TEST_F(udp_send, null_iov_elements_single_iov)
         int fd = udp_base::sock_create();
         EXPECT_LE_ERRNO(0, fd);
         if (0 <= fd) {
-            int rc = set_socket_rcv_timeout(fd, 5);
+            int rc = set_socket_rcv_timeout(fd, UDP_NEIGHBOR_RESOLUTION_TIMEOUT_SEC);
             EXPECT_EQ_ERRNO(0, rc);
 
             rc = bind(fd, &server_addr.addr, sizeof(server_addr));
@@ -723,7 +727,7 @@ TEST_F(udp_send, DISABLED_null_iov_elements_fragmented)
         int fd = udp_base::sock_create();
         EXPECT_LE_ERRNO(0, fd);
         if (0 <= fd) {
-            int rc = set_socket_rcv_timeout(fd, 5);
+            int rc = set_socket_rcv_timeout(fd, UDP_NEIGHBOR_RESOLUTION_TIMEOUT_SEC);
             EXPECT_EQ_ERRNO(0, rc);
 
             rc = bind(fd, &server_addr.addr, sizeof(server_addr));

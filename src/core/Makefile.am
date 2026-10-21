@@ -19,9 +19,10 @@ SUBDIRS = infra netlink
 
 EXTRA_DIST = \
 	config/descriptor_providers/xlio_config_schema.json \
-	config/descriptor_providers/libxlio_config.json
+	config/descriptor_providers/libxlio_config.json \
+	util/libxlio.conf
 
-sysconf_DATA = config/descriptor_providers/xlio_config_schema.json config/descriptor_providers/libxlio_config.json
+sysconf_DATA = config/descriptor_providers/xlio_config_schema.json config/descriptor_providers/libxlio_config.json util/libxlio.conf
 otherincludedir = $(includedir)/mellanox
 otherinclude_HEADERS = \
 	xlio.h \
@@ -49,7 +50,7 @@ DISTCLEANFILES = config/descriptor_providers/xlio_config_schema.h
 libxlio_la_CFLAGS = $(XLIO_STATIC_BUILD) $(XLIO_LTO) $(XLIO_PROFILE)
 libxlio_la_CXXFLAGS = $(XLIO_STATIC_BUILD) $(XLIO_LTO) $(XLIO_PROFILE)
 
-libxlio_la_LDFLAGS := $(XLIO_LTO) $(XLIO_PROFILE) -no-undefined \
+libxlio_la_LDFLAGS := $(XLIO_LTO) $(XLIO_PROFILE) -Wl,--exclude-libs,libdpcp.a -no-undefined \
 	-version-number @PRJ_LIBRARY_MAJOR@:@PRJ_LIBRARY_MINOR@:@PRJ_LIBRARY_REVISION@
 
 libxlio_la_LIBADD = \
@@ -63,7 +64,6 @@ libxlio_la_LIBADD = \
 	libconfig_parser.la
 
 dist_noinst_DATA = config/descriptor_providers/xlio_config_schema.json
-
 
 libxlio_la_SOURCES := \
 	dev/allocator.cpp \
@@ -123,14 +123,15 @@ libxlio_la_SOURCES := \
 	lwip/tcp.c \
 	lwip/tcp_in.c \
 	lwip/tcp_out.c \
+	lwip/tcp_rto.c \
 	lwip/cc.c \
 	lwip/cc_lwip.c \
-	lwip/cc_cubic.c \
 	lwip/cc_none.c \
 	\
 	proto/ip_frag.cpp \
 	proto/flow_tuple.cpp \
 	proto/xlio_lwip.cpp \
+	proto/xlio_time.cpp \
 	proto/neighbour.cpp \
 	proto/neighbour_table_mgr.cpp \
 	proto/netlink_socket_mgr.cpp \
@@ -164,40 +165,51 @@ libxlio_la_SOURCES := \
 	util/hugepage_mgr.cpp \
 	util/wakeup.cpp \
 	util/wakeup_pipe.cpp \
+	util/blocking_wait_sock.cpp \
 	util/match.cpp \
 	util/utils.cpp \
 	util/instrumentation.cpp \
 	util/sys_vars.cpp \
-	util/agent.cpp \
+	util/sys_vars_configurator.cpp \
 	util/data_updater.cpp \
 	\
+	config/change_reason.h \
 	config/config_registry.h \
-	config/loaders/inline_loader.h \
-	config/loaders/json_loader.h \
-	config/loaders/loader.h \
-	config/descriptors/parameter_descriptor.h \
+	config/config_strings.h \
 	config/descriptors/config_descriptor.h \
+	config/descriptors/parameter_descriptor.h \
 	config/descriptor_providers/descriptor_provider.h \
 	config/descriptor_providers/json_descriptor_provider.h \
 	config/descriptor_providers/schema_analyzer.h \
-	config/config_strings.h \
 	config/json_object_handle.h \
 	config/json_utils.h \
+	config/loaders/inline_loader.h \
+	config/loaders/json_loader.h \
+	config/loaders/key_resolver.h \
+	config/loaders/loader.h \
+	config/runtime_registry.h \
+	config/config_var_definitions.h \
+	config/config_var_info.h \
+	config/string_utils.h \
 	\
 	config/config_registry.cpp \
-	config/loaders/inline_loader.cpp \
-	config/loaders/json_loader.cpp \
-	config/descriptors/parameter_descriptor.cpp \
+	config/config_strings.cpp \
 	config/descriptors/config_descriptor.cpp \
+	config/descriptors/parameter_descriptor.cpp \
 	config/descriptor_providers/json_descriptor_provider.cpp \
 	config/descriptor_providers/schema_analyzer.cpp \
-	config/config_strings.cpp \
 	config/json_object_handle.cpp \
 	config/json_utils.cpp \
+	config/loaders/inline_loader.cpp \
+	config/loaders/json_loader.cpp \
+	config/loaders/key_resolver.cpp \
+	config/runtime_registry.cpp \
+	config/string_utils.cpp \
 	\
 	$(top_builddir)/src/core/config/descriptor_providers/xlio_config_schema.h \
 	\
 	config_printer.cpp \
+	tuning_report_printer.cpp \
 	libxlio.c \
 	main.cpp \
 	\
@@ -265,7 +277,6 @@ libxlio_la_SOURCES := \
 	iomux/poll_call.h \
 	iomux/select_call.h \
 	\
-	lwip/cc_cubic.h \
 	lwip/cc.h \
 	lwip/def.h \
 	lwip/err.h \
@@ -274,6 +285,7 @@ libxlio_la_SOURCES := \
 	lwip/pbuf.h \
 	lwip/tcp.h \
 	lwip/tcp_impl.h \
+	lwip/tcp_rto.h \
 	\
 	netlink/link_info.h \
 	netlink/neigh_info.h \
@@ -282,6 +294,8 @@ libxlio_la_SOURCES := \
 	\
 	proto/arp.h \
 	proto/mem_desc.h \
+	proto/xlio_cache.h \
+	proto/xlio_time.h \
 	proto/dst_entry.h \
 	proto/dst_entry_tcp.h \
 	proto/dst_entry_udp.h \
@@ -307,6 +321,7 @@ libxlio_la_SOURCES := \
 	\
 	sock/cleanable_obj.h \
 	sock/fd_collection.h \
+	sock/blocking_wait_results.h \
 	sock/sock_stats.h \
 	sock/sockinfo.h \
 	sock/sockinfo_tcp.h \
@@ -316,6 +331,7 @@ libxlio_la_SOURCES := \
 	sock/sock-redirect.h \
 	sock/sock-redirect-internal.h \
 	sock/sock-app.h \
+	sock/tx_call_ctx.h \
 	sock/sock-extra.h \
 	sock/bind_no_port.h \
 	\
@@ -331,6 +347,8 @@ libxlio_la_SOURCES := \
 	util/sock_addr.h \
 	util/sysctl_reader.h \
 	util/sys_vars.h \
+	util/sys_vars_configurator.h \
+	util/sys_vars_types.h \
 	util/to_str.h \
 	util/utils.h \
 	util/valgrind.h \
@@ -340,12 +358,13 @@ libxlio_la_SOURCES := \
 	util/vtypes.h \
 	util/wakeup.h \
 	util/wakeup_pipe.h \
-	util/agent.h \
-	util/agent_def.h \
+	util/blocking_wait.h \
+	util/blocking_wait_sock.h \
 	util/data_updater.h \
 	\
 	$(top_builddir)/third_party/legacy_config_parser/config_parser.h \
 	config_printer.h \
+	tuning_report_printer.h \
 	main.h \
 	xlio.h \
 	xlio_extra.h \
@@ -358,4 +377,46 @@ libxlio_la_DEPENDENCIES = \
 	$(top_builddir)/src/core/netlink/libnetlink.la \
 	$(top_builddir)/src/core/infra/libinfra.la \
 	libconfig_parser.la \
-	$(LIBJSON_LIBS)
+	$(LIBJSON_LIBS) \
+	$(DPCP_LIB_DEPENDENCY)
+
+if XLIO_AND_DPCP_ARE_STATIC
+
+# Adding libdpcp.a into libxlio.so is easy - ar does this automatically.
+# For adding the .o files from libdpcp.a into libxlio.a, we need to use a trick, since
+# simply specifying libdpcp.a, or libdpcp.la, as a dependancy of libxlio, does not work.
+# After Automake links libxlio.la, extract the .o files from libdpcp.a and add them
+# to libxlio.a.
+# Extract each archive member occurrence separately so duplicate member names do
+# not overwrite each other. Rename every object before adding it to libxlio.a so
+# it cannot replace an XLIO object with the same member name.
+# Make the command fail if no DPCP object files were extracted.
+all-local: libxlio.la
+	@echo "Merging $(DPCP_STATIC_LIB) into .libs/libxlio.a ..."; \
+	cd .libs && rm -rf dpcp_objs && mkdir -p dpcp_objs && \
+	$(AR) t $(DPCP_STATIC_LIB) | \
+		awk '{ occurrences[$$0]++; print occurrences[$$0], $$0 }' > dpcp_objs/members && \
+	index=0; \
+	while read -r occurrence member; do \
+		index=$$((index + 1)); \
+		case "$$member" in \
+			*.o) ;; \
+			*) echo "Error: Non-object member $$member found in $(DPCP_STATIC_LIB)"; exit 1 ;; \
+		esac; \
+		object_dir=$$(printf "dpcp_objs/%04d" "$$index"); \
+		mkdir -p "$$object_dir" && \
+		(cd "$$object_dir" && $(AR) xN "$$occurrence" "$(DPCP_STATIC_LIB)" "$$member") && \
+		member_name=$${member##*/} && \
+		renamed_name=$$(printf "dpcp_%04d_%s" "$$index" "$$member_name") && \
+		mv "$$object_dir/$$member_name" "dpcp_objs/$$renamed_name" || exit 1; \
+	done < dpcp_objs/members && \
+	rm -f dpcp_objs/members && rm -rf dpcp_objs/[0-9][0-9][0-9][0-9] && \
+	if [ -n "$$(ls -A dpcp_objs/*.o 2>/dev/null)" ]; then \
+		$(AR) rcs libxlio.a dpcp_objs/*.o; \
+	else \
+		echo "Error: No object files extracted from $(DPCP_STATIC_LIB), look at src/core/.libs/dpcp_objs/"; \
+		false; \
+	fi && \
+	rm -rf dpcp_objs;
+
+endif

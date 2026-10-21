@@ -10,6 +10,7 @@
 #include "dev/ring_simple.h"
 #include <netinet/ip6.h>
 #include <sock/sockinfo_tcp.h>
+#include <proto/tls.h>
 
 #define MODULE_NAME "rfs_uc_tcp_gro"
 
@@ -65,6 +66,16 @@ bool rfs_uc_tcp_gro::rx_dispatch_packet(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_in
     uint16_t explicit_hdr_len; // L3 header size is not included in IPv6 payload field.
     uint16_t tot_len;
 
+#ifdef DEFINED_UTLS
+    /* Do not allow packets with HW TLS RX Resync into GRO.
+     * To avoid the need to propagate that information to the socket.
+     * The resync flag could be on any packet inside a big GRO.
+     */
+    if (p_rx_pkt_mem_buf_desc_info->rx.tls_decrypted == TLS_RX_RESYNC) {
+        goto out;
+    }
+#endif
+
     if (!m_b_active) {
         if (!m_b_reserved && m_p_gro_mgr->is_stream_max()) {
             goto out;
@@ -116,9 +127,7 @@ bool rfs_uc_tcp_gro::rx_dispatch_packet(mem_buf_desc_t *p_rx_pkt_mem_buf_desc_in
             goto out;
         }
 
-        /* Flush gro packet immediately in case
-         * total number of agreggated packets exceeds limit
-         */
+        // Flush GRO packet immediately in case total number of aggregated packets exceeds limit
         if (m_gro_desc.buf_count >= m_n_buf_max) {
             flush_gro_desc(pv_fd_ready_array);
         }
@@ -274,7 +283,7 @@ bool rfs_uc_tcp_gro::tcp_check(mem_buf_desc_t *mem_buf_desc, tcphdr *p_tcp_h)
         return false;
     }
 
-    // Set pbc once here since in constructor we don't have sockinfo yet
+    // Set PCB once here since in constructor we don't have sockinfo yet
     if (unlikely(!m_pcb)) {
         sockinfo_tcp *sock = dynamic_cast<sockinfo_tcp *>(m_sinks_list[0]);
         if (unlikely(!sock)) {

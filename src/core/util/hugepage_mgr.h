@@ -46,6 +46,27 @@ public:
     void print_report(vlog_levels_t log_level, bool print_only_critical = false,
                       bool short_report = false);
 
+    /** Read-only hugepage stat accessors for reporting. */
+    uint32_t get_total_hugepages(size_t hugepage) const
+    {
+        auto iter = m_hugepages.find(hugepage);
+        return iter == m_hugepages.end() ? 0 : iter->second.nr_hugepages_total;
+    }
+
+    uint32_t get_free_hugepages(size_t hugepage) const
+    {
+        auto iter = m_hugepages.find(hugepage);
+        return iter == m_hugepages.end() ? 0 : iter->second.nr_hugepages_free;
+    }
+
+    void get_supported_hugepages(std::vector<size_t> &hugepages) const
+    {
+        hugepages.reserve(m_hugepages.size());
+        for (const auto &p : m_hugepages) {
+            hugepages.push_back(p.first);
+        }
+    }
+
 private:
     enum {
         HUGEPAGE_METRIC_OPTIMAL = 10U,
@@ -75,26 +96,6 @@ private:
     {
         // Percentage of the unused hugepage tail.
         return hugepage_unused_space(hugepage, size) / (hugepage / 100U);
-    }
-
-    uint32_t get_total_hugepages(size_t hugepage)
-    {
-        auto iter = m_hugepages.find(hugepage);
-        return iter == m_hugepages.end() ? 0 : iter->second.nr_hugepages_total;
-    }
-
-    uint32_t get_free_hugepages(size_t hugepage)
-    {
-        auto iter = m_hugepages.find(hugepage);
-        return iter == m_hugepages.end() ? 0 : iter->second.nr_hugepages_free;
-    }
-
-    void get_supported_hugepages(std::vector<size_t> &hugepages)
-    {
-        hugepages.reserve(m_hugepages.size());
-        for (const auto &p : m_hugepages) {
-            hugepages.push_back(p.first);
-        }
     }
 
     size_t m_default_hugepage;

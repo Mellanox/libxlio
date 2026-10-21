@@ -32,6 +32,8 @@ XLIO library
 ============================================================================
 Version: ${PRJ_LIBRARY_MAJOR}.${PRJ_LIBRARY_MINOR}.${PRJ_LIBRARY_REVISION}.${PRJ_LIBRARY_RELEASE}
 Git: ${GIT_VER}
+DPCP: ${DPCP_SUMMARY}
+DPCP CMake flags: ${DPCP_CMAKE_FLAGS_SUMMARY}
 
 EOF
 }

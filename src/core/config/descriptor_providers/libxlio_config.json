@@ -1,1 +1,11 @@
-{}
+{
+    "acceleration_control": {
+        "rules": [
+            {
+                "id": "*",
+                "name": "*",
+                "actions": ["use os udp_connect *:53"]
+            }
+        ]
+    }
+}

@@ -24,7 +24,7 @@ cat /opt/nvidia/ProjectConfig/header-types.json
 
 /opt/nvidia/header_check.py \
   --config ${WORKSPACE}/contrib/jenkins_tests/copyright-check-map.yaml \
-  --path ${WORKSPACE} \
+  --revs HEAD \
   --git-repo ${WORKSPACE} | tee copyrights.log
 exit_code=$?
 echo "exit_code=${exit_code}"
@@ -37,7 +37,7 @@ if [ ${exit_code} -eq 0 ]; then
     echo "Please refer to https://confluence.nvidia.com/pages/viewpage.action?pageId=788418816"
     /opt/nvidia/header_check.py \
       --config contrib/jenkins_tests/copyright-check-map.yaml \
-      --path ${WORKSPACE} \
+      --revs HEAD \
       --repair \
       --git-repo ${WORKSPACE} | tee copyrights_repair.log
     # create list of modified files

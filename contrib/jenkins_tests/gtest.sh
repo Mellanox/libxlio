@@ -69,11 +69,22 @@ if [[ -z "${MANUAL_RUN}" ]]; then
 	rc=$(($rc+$?))
 fi
 
-eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
-eval "${sudo_cmd} ${install_dir}/sbin/${prj_service} --console -v5 &"
-
 # Test with full coverage of the config-file feature
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_full_coverage.json GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio_*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
+eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 \
+XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_full_coverage.json \
+GTEST_TAP=2 LD_PRELOAD=$gtest_lib \
+$gtest_app $gtest_opt --gtest_filter=-xlio_*:-ultra* \
+--gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
+rc=$(($rc+$?))
+
+# Pin structured-config activation at the 120 s cap. At the cap, tcpi_rto is
+# independent of live RTT variance, so this check remains deterministic on
+# loaded runners.
+eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 \
+XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_rto_floor_max.json \
+XLIO_GTEST_EXPECT_RTO_MSEC=120000 GTEST_TAP=2 LD_PRELOAD=$gtest_lib \
+$gtest_app $gtest_opt --gtest_filter=tcp_sockopt.ti_1b_tcp_info_low_rtt_us \
+--gtest_output=xml:${WORKSPACE}/${prefix}/test-rto-floor-max.xml"
 rc=$(($rc+$?))
 
 # Exclude EXTRA API tests IPv6
@@ -112,31 +123,89 @@ rc=$(($rc+$?))
 eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=ultra_api* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api-ipv6.xml"
 rc=$(($rc+$?))
 
-# Full SQ completion test - Needs XLIO_TCP_CC_ALGO=2 XLIO_TCP_NODELAY=1 to fill SQ deterministically without handling initially small congestion window and delayed packets.
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib XLIO_TCP_CC_ALGO=2 XLIO_TCP_NODELAY=1 $gtest_app $gtest_opt --gtest_filter=ultra_api_socket_send_receive_full_sq* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api_full_sq_completion.xml"
+# Full SQ completion test - Needs XLIO_TCP_CC_ALGO=1 XLIO_TCP_NODELAY=1 to fill SQ deterministically without handling initially small congestion window and delayed packets.
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib XLIO_TCP_CC_ALGO=1 XLIO_TCP_NODELAY=1 $gtest_app $gtest_opt --gtest_filter=ultra_api_socket_send_receive_full_sq* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api_full_sq_completion.xml"
 rc=$(($rc+$?))
 
-# Worker Threads Mode tests
 
 # Worker Threads Mode test filter
-worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:-tcp_bind.mapped_ipv4_bind:tcp_event*"
+worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event*:tcp_stream_integrity*:-tcp_bind.mapped_ipv4_bind"
 
-eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads.xml"
+worker_threads_failures=()
+worker_threads_samples=0
+
+function run_worker_threads_test()
+{
+	local sample_name=$1
+	local command=$2
+	local sample_rc
+
+	if eval "$command"; then
+		sample_rc=0
+	else
+		sample_rc=$?
+		worker_threads_failures+=("$sample_name (rc=$sample_rc)")
+	fi
+	rc=$((rc + sample_rc))
+	worker_threads_samples=$((worker_threads_samples + 1))
+}
+
+for poll_spec in "-1:busy-poll" "0:pure-intr" "10:bounded-poll"
+do
+	IFS=: read -r select_poll poll_mode <<< "$poll_spec"
+
+	run_worker_threads_test "$poll_mode/ipv4/1-worker" \
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}.xml"
+
+	run_worker_threads_test "$poll_mode/ipv6/1-worker" \
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-ipv6.xml"
+
+	run_worker_threads_test "$poll_mode/ipv4/2-workers" \
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-pow2.xml"
+
+	run_worker_threads_test "$poll_mode/ipv4/3-workers" \
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-not-pow2.xml"
+done
+
+echo "Worker Threads Mode tests: $worker_threads_samples samples, ${#worker_threads_failures[@]} failures"
+if ((${#worker_threads_failures[@]})); then
+	printf '  FAILED: %s\n' "${worker_threads_failures[@]}"
+fi
+
+# Passthrough tests
+
+passthrough_filter="tcp_listen_connect_nb.server_client_nb"
+
+# Passthrough via non-offloadable NIC (loopback)
+
+# worker threads mode
+gtest_opt_lo="--addr=127.0.0.1,127.0.0.1"
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_lo --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-loopback-wt.xml"
 rc=$(($rc+$?))
 
-# Worker Threads Mode tests IPv6
-eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-ipv6.xml"
+# R2C mode
+eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_lo --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-loopback-r2c.xml"
 rc=$(($rc+$?))
 
-# Worker Threads Mode - Power of 2 (2 threads)
-eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-pow2.xml"
+###### Passthrough via XLIO offload rules
+
+
+# Create a temporary libxlio.conf with passthrough rules and point XLIO_CONFIG_FILE to it.
+server_ip=$(ip -f inet addr show net2 | awk '/inet / {print $2}' | cut -d/ -f1)
+passthrough_conf=$(mktemp /tmp/libxlio-passthrough-XXXXXX.conf)
+printf "use os tcp_client %s:*:*:*\nuse os tcp_server %s:*\n" "$server_ip" "$server_ip" > "$passthrough_conf"
+
+# worker threads mode
+eval "${sudo_cmd} $timeout_exe env XLIO_CONFIG_FILE=$passthrough_conf XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-rules-wt.xml"
 rc=$(($rc+$?))
 
-# Worker Threads Mode - Non-Power of 2 (3 threads)
-eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-not-pow2.xml"
+# R2C mode
+eval "${sudo_cmd} $timeout_exe env XLIO_CONFIG_FILE=$passthrough_conf GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-rules-r2c.xml"
 rc=$(($rc+$?))
 
-eval "${sudo_cmd} pkill -9 ${prj_service} 2>/dev/null || true"
+rm -f "$passthrough_conf"
+###### End of Passthrough via XLIO offload rules
+
 
 set -eE
 

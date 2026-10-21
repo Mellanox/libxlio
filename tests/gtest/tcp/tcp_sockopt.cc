@@ -156,6 +156,254 @@ TEST_F(tcp_sockopt, ti_1_getsockopt_tcp_info)
 }
 
 /**
+ * @test tcp_sockopt.ti_1b_tcp_info_low_rtt_us
+ * @brief Report microsecond TCP_INFO RTT/RTO after a data round trip.
+ */
+TEST_F(tcp_sockopt, ti_1b_tcp_info_low_rtt_us)
+{
+    auto test_lambda = [this]() {
+        int rc = EOK;
+        int pid = fork();
+
+        if (0 == pid) { /* I am the child (client) */
+            barrier_fork(pid);
+
+            int fd = tcp_base::sock_create();
+            if (fd < 0) {
+                ADD_FAILURE() << "socket creation failed";
+                exit(testing::Test::HasFailure());
+            }
+
+            rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+            if (rc != 0) {
+                ADD_FAILURE() << "client bind failed";
+                close(fd);
+                exit(testing::Test::HasFailure());
+            }
+
+            rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            if (rc != 0) {
+                ADD_FAILURE() << "client connect failed";
+                close(fd);
+                exit(testing::Test::HasFailure());
+            }
+
+            /* Exercise ACK estimation beyond the handshake. */
+            static const char payload[] = HELLO_STR;
+            for (int i = 0; i < 4; ++i) {
+                ssize_t len = send(fd, (void *)payload, sizeof(payload), 0);
+                EXPECT_EQ(static_cast<ssize_t>(sizeof(payload)), len);
+            }
+
+            /* The reply synchronizes ACK processing before TCP_INFO. */
+            char reply = 0;
+            ssize_t got = recv(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), got);
+
+            struct tcp_info ti;
+            socklen_t optlen = sizeof(ti);
+            memset(&ti, 0, sizeof(ti));
+            rc = getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &optlen);
+            EXPECT_EQ(0, rc);
+            /* A synchronized read may observe any live state, but not abort. */
+            EXPECT_NE(TCP_CLOSE, ti.tcpi_state);
+
+            EXPECT_GE(ti.tcpi_rto, 200000U)
+                << "tcpi_rto below the common XLIO/Linux test lower bound";
+
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTT
+            EXPECT_GT(ti.tcpi_rtt, 0U) << "tcpi_rtt missing after real ACK";
+#endif
+
+            const char *expected_rto_msec = getenv("XLIO_GTEST_EXPECT_RTO_MSEC");
+            if (expected_rto_msec) {
+                char *end = nullptr;
+                unsigned long rto_msec = strtoul(expected_rto_msec, &end, 10);
+                const bool valid_expected_rto = expected_rto_msec != end && *end == '\0' &&
+                    rto_msec <= std::numeric_limits<uint32_t>::max() / 1000U;
+                EXPECT_TRUE(valid_expected_rto) << "invalid expected RTO";
+                if (valid_expected_rto) {
+                    EXPECT_EQ(static_cast<uint32_t>(rto_msec * 1000U), ti.tcpi_rto)
+                        << "TCP_INFO does not reflect the configured capped RTO";
+                }
+            }
+
+            /* Hold peer teardown until after TCP_INFO. */
+            static const char done = 'D';
+            ssize_t done_sent = send(fd, &done, sizeof(done), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(done)), done_sent);
+
+            close(fd);
+            exit(testing::Test::HasFailure());
+        } else { /* I am the parent (server) */
+            struct sockaddr_storage peer_addr;
+            socklen_t socklen;
+            char buf[sizeof(HELLO_STR) * 8];
+
+            int l_fd = tcp_base::sock_create();
+            ASSERT_LE(0, l_fd);
+
+            rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = listen(l_fd, 5);
+            ASSERT_EQ(0, rc);
+
+            barrier_fork(pid);
+
+            socklen = sizeof(peer_addr);
+            int fd = accept(l_fd, (struct sockaddr *)&peer_addr, &socklen);
+            ASSERT_LE(0, fd);
+
+            ssize_t total = 0;
+            const ssize_t target = static_cast<ssize_t>(sizeof(HELLO_STR) * 4);
+            while (total < target) {
+                ssize_t len = recv(fd, buf, sizeof(buf), 0);
+                if (len <= 0) {
+                    break;
+                }
+                total += len;
+            }
+
+            char reply = 'X';
+            ssize_t sent = send(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), sent);
+
+            /* Hold teardown until the client's TCP_INFO read completes. */
+            char done = 0;
+            (void)recv(fd, &done, sizeof(done), 0);
+
+            close(fd);
+            close(l_fd);
+
+            ASSERT_EQ(0, wait_fork(pid));
+        }
+    };
+
+    test_lambda();
+}
+
+/**
+ * @test tcp_sockopt.ti_1c_tcp_info_handshake_seeded_rto
+ * @brief Seed TCP_INFO tcpi_rto from handshake RTT before sending data.
+ */
+TEST_F(tcp_sockopt, ti_1c_tcp_info_handshake_seeded_rto)
+{
+    auto test_lambda = [this]() {
+        int rc = EOK;
+        int pid = fork();
+
+        if (0 == pid) { /* I am the child (client) */
+            barrier_fork(pid);
+
+            int fd = tcp_base::sock_create();
+            ASSERT_LE(0, fd);
+
+            /* Fixed test ports can remain in TIME_WAIT. */
+            int reuse = 1;
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+            rc = bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            /* Observe the handshake seed before any data RTT sample. */
+            struct tcp_info ti;
+            socklen_t optlen = sizeof(ti);
+            memset(&ti, 0, sizeof(ti));
+            rc = getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &optlen);
+            ASSERT_EQ(0, rc);
+            ASSERT_NE(TCP_CLOSE, ti.tcpi_state);
+
+            EXPECT_GE(ti.tcpi_rto, 200000U)
+                << "tcpi_rto below the common XLIO/Linux test lower bound";
+            EXPECT_LT(ti.tcpi_rto, 1000000U) << "handshake RTT did not seed tcpi_rto";
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTT
+            EXPECT_EQ(0U, ti.tcpi_rtt);
+#endif
+#ifdef HAVE_STRUCT_TCP_INFO_TCPI_RTTVAR
+            EXPECT_EQ(0U, ti.tcpi_rttvar);
+#endif
+
+            /* Confirm the first data RTT updates steady-state RTO. */
+            static const char payload[] = HELLO_STR;
+            ssize_t len = send(fd, (void *)payload, sizeof(payload), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(payload)), len);
+
+            char reply = 0;
+            ssize_t got = recv(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), got);
+
+            memset(&ti, 0, sizeof(ti));
+            optlen = sizeof(ti);
+            rc = getsockopt(fd, IPPROTO_TCP, TCP_INFO, &ti, &optlen);
+            ASSERT_EQ(0, rc);
+            ASSERT_NE(TCP_CLOSE, ti.tcpi_state);
+            EXPECT_GE(ti.tcpi_rto, 200000U);
+            EXPECT_LT(ti.tcpi_rto, 1000000U) << "data RTT did not update tcpi_rto";
+
+            /* Hold peer teardown until after TCP_INFO. */
+            static const char done = 'D';
+            ssize_t done_sent = send(fd, &done, sizeof(done), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(done)), done_sent);
+
+            close(fd);
+            exit(testing::Test::HasFailure());
+        } else { /* I am the parent (server) */
+            struct sockaddr_storage peer_addr;
+            socklen_t socklen;
+            char buf[sizeof(HELLO_STR) * 8];
+
+            int l_fd = tcp_base::sock_create();
+            ASSERT_LE(0, l_fd);
+
+            /* Fixed test ports can remain in TIME_WAIT. */
+            int reuse = 1;
+            setsockopt(l_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+            rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            ASSERT_EQ(0, rc);
+
+            rc = listen(l_fd, 5);
+            ASSERT_EQ(0, rc);
+
+            barrier_fork(pid);
+
+            socklen = sizeof(peer_addr);
+            int fd = accept(l_fd, (struct sockaddr *)&peer_addr, &socklen);
+            ASSERT_LE(0, fd);
+
+            ssize_t total = 0;
+            const ssize_t target = static_cast<ssize_t>(sizeof(HELLO_STR));
+            while (total < target) {
+                ssize_t len = recv(fd, buf, sizeof(buf), 0);
+                if (len <= 0) {
+                    break;
+                }
+                total += len;
+            }
+
+            char reply = 'X';
+            ssize_t sent = send(fd, &reply, sizeof(reply), 0);
+            EXPECT_EQ(static_cast<ssize_t>(sizeof(reply)), sent);
+
+            /* Hold teardown until the client's TCP_INFO read completes. */
+            char done = 0;
+            (void)recv(fd, &done, sizeof(done), 0);
+
+            close(fd);
+            close(l_fd);
+
+            ASSERT_EQ(0, wait_fork(pid));
+        }
+    };
+
+    test_lambda();
+}
+
+/**
  * @test tcp_sockopt.ti_2_tcp_congestion
  * @brief
  *    TCP_CONGESTION option to change and check congestion control mechanism.
@@ -213,6 +461,171 @@ TEST_F(tcp_sockopt, ti_2_tcp_congestion)
     if (rc == 0) {
         std::string cc_name(buf, strnlen(buf, len));
         EXPECT_EQ(std::string("reno"), cc_name);
+    }
+}
+
+/**
+ * @test tcp_sockopt.ti_3_ext_vlan_tag
+ * @brief
+ *    setsockopt(SO_XLIO_EXT_VLAN_TAG) rejects values that don't fit in the
+ *    12-bit VLAN ID part of the VLAN tag.
+ * @details
+ */
+TEST_F(tcp_sockopt, ti_3_ext_vlan_tag)
+{
+    /* SO_XLIO_EXT_VLAN_TAG is XLIO specific and not recognized by the kernel. */
+    SKIP_TRUE(xlio_get_api(), "This test should be launched under libxlio.so");
+
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_LE(0, fd);
+
+    int val = 4095;
+    int rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &val, sizeof(val));
+    EXPECT_EQ(0, rc);
+
+    val = 4096;
+    rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &val, sizeof(val));
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(EINVAL, errno);
+
+    val = -1;
+    rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &val, sizeof(val));
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(EINVAL, errno);
+
+    short short_val = 1;
+    rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &short_val, sizeof(short_val));
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(EINVAL, errno);
+
+    close(fd);
+}
+
+/**
+ * @test tcp_sockopt.ti_4_ext_vlan_tag_connect_fail
+ * @brief
+ *    SO_XLIO_EXT_VLAN_TAG causes connect() to fail with ETIMEDOUT when the
+ *    tagged SYN packets are not received by the server.
+ * @details
+ */
+TEST_F(tcp_sockopt, ti_4_ext_vlan_tag_connect_fail)
+{
+    SKIP_TRUE(xlio_get_api(), "This test should be launched under libxlio.so");
+
+    int pid = fork();
+    ASSERT_GE(pid, 0);
+
+    if (pid == 0) { /* child - client */
+        barrier_fork(pid);
+
+        int fd = tcp_base::sock_create();
+        ASSERT_LE(0, fd);
+
+        int vlan_tag = 1;
+        int rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &vlan_tag, sizeof(vlan_tag));
+        ASSERT_EQ(0, rc);
+
+        unsigned int user_timeout_ms = 200U;
+        rc = setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms,
+                        sizeof(user_timeout_ms));
+        ASSERT_EQ(0, rc);
+
+        struct timespec ts_start, ts_end;
+        clock_gettime(CLOCK_MONOTONIC, &ts_start);
+
+        rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        EXPECT_EQ(-1, rc);
+        EXPECT_EQ(ETIMEDOUT, errno);
+
+        clock_gettime(CLOCK_MONOTONIC, &ts_end);
+        long elapsed_ms = (ts_end.tv_sec - ts_start.tv_sec) * 1000L +
+            (ts_end.tv_nsec - ts_start.tv_nsec) / 1000000L;
+        EXPECT_GE(elapsed_ms, 200L);
+        // TCP_USER_TIMEOUT is only evaluated at retransmission ticks. With the RFC 6298
+        // 1s initial RTO the abort lands at the first tick (~1s), not at 200ms, so the
+        // upper bound must sit above the initial RTO yet below the next retransmit at
+        // initial + fallback RTO (~4s), proving the timeout fired early instead of
+        // running the full retry chain.
+        EXPECT_LT(elapsed_ms, 3000L);
+
+        close(fd);
+        exit(testing::Test::HasFailure());
+    } else { /* parent - server */
+        int l_fd = tcp_base::sock_create();
+        ASSERT_LE(0, l_fd);
+
+        int rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
+
+        rc = listen(l_fd, 5);
+        ASSERT_EQ(0, rc);
+
+        barrier_fork(pid);
+
+        int wait_rc = wait_fork(pid);
+        close(l_fd);
+        ASSERT_EQ(0, wait_rc);
+    }
+}
+
+/**
+ * @test tcp_sockopt.ti_5_ext_vlan_tag_disable
+ * @brief
+ *    Setting SO_XLIO_EXT_VLAN_TAG to 0 after a non-zero value disables VLAN
+ *    tagging, and a subsequent connect() succeeds normally.
+ * @details
+ */
+TEST_F(tcp_sockopt, ti_5_ext_vlan_tag_disable)
+{
+    SKIP_TRUE(xlio_get_api(), "This test should be launched under libxlio.so");
+
+    int pid = fork();
+    ASSERT_GE(pid, 0);
+
+    if (pid == 0) { /* child - client */
+        barrier_fork(pid);
+
+        int fd = tcp_base::sock_create();
+        ASSERT_LE(0, fd);
+
+        int vlan_tag = 1;
+        int rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &vlan_tag, sizeof(vlan_tag));
+        ASSERT_EQ(0, rc);
+
+        vlan_tag = 0;
+        rc = setsockopt(fd, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &vlan_tag, sizeof(vlan_tag));
+        ASSERT_EQ(0, rc);
+
+        unsigned int user_timeout_ms = 5000U;
+        rc = setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms,
+                        sizeof(user_timeout_ms));
+        ASSERT_EQ(0, rc);
+
+        rc = connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        EXPECT_EQ(0, rc);
+
+        close(fd);
+        exit(testing::Test::HasFailure());
+    } else { /* parent - server */
+        int l_fd = tcp_base::sock_create();
+        ASSERT_LE(0, l_fd);
+
+        int rc = bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        ASSERT_EQ(0, rc);
+
+        rc = listen(l_fd, 5);
+        ASSERT_EQ(0, rc);
+
+        barrier_fork(pid);
+
+        struct sockaddr_storage peer_addr;
+        socklen_t socklen = sizeof(peer_addr);
+        int fd = accept(l_fd, (struct sockaddr *)&peer_addr, &socklen);
+        ASSERT_LE(0, fd);
+
+        close(fd);
+        close(l_fd);
+        ASSERT_EQ(0, wait_fork(pid));
     }
 }
 

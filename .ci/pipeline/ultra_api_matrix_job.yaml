@@ -27,8 +27,9 @@ runs_on_dockers:
       build_args: '--no-cache --target ultra-api',
       category: 'server',
       annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-port1-vlan11@net1' }],
-      limits: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p1: 1}',
-      requests: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p1: 1}',
+      tolerations: "[{key: 'external-hardware', operator: 'Equal', value: 'true', effect: 'NoSchedule'}]",
+      limits: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 6Gi, nvidia.com/sriov-cx6dx-p1: 1}',
+      requests: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 6Gi, nvidia.com/sriov-cx6dx-p1: 1}',
       caps_add: '[ IPC_LOCK, SYS_RESOURCE ]'
     }
   - {
@@ -37,8 +38,9 @@ runs_on_dockers:
       url: '${registry_host}${registry_path}/${arch}/ubuntu22.04/ultra-api:20251215',
       category: 'client',
       annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-port2-vlan11@net1' }],
-      limits: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p2: 1}',
-      requests: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 10Gi, nvidia.com/sriov-cx6dx-p2: 1}',
+      tolerations: "[{key: 'external-hardware', operator: 'Equal', value: 'true', effect: 'NoSchedule'}]",
+      limits: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 6Gi, nvidia.com/sriov-cx6dx-p2: 1}',
+      requests: '{memory: 12Gi, cpu: 8000m, hugepages-2Mi: 6Gi, nvidia.com/sriov-cx6dx-p2: 1}',
       caps_add: '[ IPC_LOCK, SYS_RESOURCE ]'
     }
 

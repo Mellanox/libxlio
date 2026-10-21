@@ -177,11 +177,14 @@ void hw_queue_rx::release_rx_buffers()
     hwqrx_logdbg("draining cq_mgr_rx %p (last_posted_rx_wr_id = %lu)", m_p_cq_mgr_rx,
                  m_last_posted_rx_wr_id);
     uintptr_t last_polled_rx_wr_id = 0;
-    while (m_p_cq_mgr_rx && last_polled_rx_wr_id != m_last_posted_rx_wr_id && errno != EIO &&
+    int drain_err = 0;
+    while (m_p_cq_mgr_rx && last_polled_rx_wr_id != m_last_posted_rx_wr_id && drain_err != EIO &&
            !is_rq_empty() && !m_p_ib_ctx_handler->is_removed()) {
 
         // Process the FLUSH'ed WQE's
+        errno = 0;
         int ret = m_p_cq_mgr_rx->drain_and_proccess(&last_polled_rx_wr_id);
+        drain_err = errno;
         hwqrx_logdbg("draining completed on cq_mgr_rx (%d wce) last_polled_rx_wr_id = %lu", ret,
                      last_polled_rx_wr_id);
 

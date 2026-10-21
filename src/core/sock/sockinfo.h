@@ -6,6 +6,8 @@
 
 #include <unordered_map>
 #include <deque>
+#include <memory>
+#include <vector>
 #include <ifaddrs.h>
 #include <sys/socket.h>
 #include "config.h"
@@ -13,6 +15,7 @@
 #include "dev/cq_mgr_rx.h"
 #include "dev/buffer_pool.h"
 #include "sock/cleanable_obj.h"
+#include "sock/tx_call_ctx.h"
 #include "vlogger/vlogger.h"
 #include "utils/lock_wrapper.h"
 #include "util/data_updater.h"
@@ -256,7 +259,7 @@ public:
     virtual void rx_data_recvd(uint32_t tot_size) = 0;
     virtual ssize_t tx(xlio_tx_call_attr_t &tx_arg) = 0;
     virtual void tx_thread_commit(mem_buf_desc_t *buf_list, uint32_t offset, uint32_t size,
-                                  int flags) = 0;
+                                  int flags, const tx_call_ctx &tx_ctx) = 0;
     virtual bool is_readable(bool do_poll = true, fd_array_t *p_fd_array = nullptr) = 0;
     virtual bool is_writeable() = 0;
     virtual bool is_errorable(int *errors) = 0;
@@ -305,6 +308,14 @@ public:
     inline void sock_pop_descs_rx_ready(descq_t *cache);
 
     entity_context *get_entity_context() const { return m_entity_context; }
+    // Publish owner on the app thread, under the socket lock, before posting ADD_AND_*.
+    // Until the worker's ADD job runs, get_entity_context() would otherwise be null and a racing
+    // close() would SYNCHRONOUSLY free a socket still queued (and maybe parked in connect).
+    void publish_entity_context_owner(entity_context *ec) { m_entity_context = ec; }
+    bool should_use_threads_mode() const
+    {
+        return safe_mce_sys().is_threads_mode() && !m_is_xlio_socket;
+    }
     uint32_t get_epoll_event_flags() { return m_epoll_event_flags; }
     uint32_t get_epoll_event_flags_thread() const { return m_epoll_event_flags_thread; }
     void set_epoll_event_flags(uint32_t events) { m_epoll_event_flags = events; }
@@ -312,6 +323,7 @@ public:
     bool has_epoll_context() { return (!!m_econtext); }
     bool get_rx_pkt_ready_list_count() const { return m_n_rx_pkt_ready_list_count; }
     int get_fd() const { return m_fd; };
+    const sock_addr &get_peername() const { return m_connected; }
     sa_family_t get_family() { return m_family; }
     bool get_reuseaddr(void) { return m_reuseaddr; }
     bool get_reuseport(void) { return m_reuseport; }
@@ -435,7 +447,7 @@ protected:
                   sockaddr *__from, socklen_t *__fromlen, struct msghdr *__msg);
 
     int setsockopt_kernel(int __level, int __optname, const void *__optval, socklen_t __optlen,
-                          int supported, bool allow_priv);
+                          int supported);
 
     transport_t find_target_family(role_t role, const struct sockaddr *sock_addr_first,
                                    const struct sockaddr *sock_addr_second = nullptr);

@@ -32,12 +32,15 @@
 #ifndef __LWIP_TCP_H__
 #define __LWIP_TCP_H__
 
+#include <stdint.h>
+#include <stddef.h>
 #include <sys/uio.h>
 
 #include "core/lwip/opt.h"
 
 #include "core/lwip/pbuf.h"
 #include "core/lwip/ip_addr.h"
+#include "core/proto/xlio_cache.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -82,6 +85,31 @@ struct tcp_pcb;
 #include "core/lwip/cc.h"
 
 extern enum cc_algo_mod lwip_cc_algo_module;
+
+/* RFC 5681 permits an arbitrarily high initial ssthresh; Linux uses an effectively
+ * infinite initial threshold so startup is governed by cwnd, not ssthresh. */
+#define TCP_INITIAL_SSTHRESH ((u32_t)0x7FFFFFFFU)
+
+/* RFC 3390 / upstream lwIP initial window:
+ * min(4 * SMSS, max(2 * SMSS, 4380 bytes)). */
+static inline u32_t tcp_calc_initial_cwnd(u32_t mss)
+{
+    return LWIP_MIN(4U * mss, LWIP_MAX(2U * mss, 4380U));
+}
+
+static inline u32_t tcp_calc_initial_ssthresh(void)
+{
+    return TCP_INITIAL_SSTHRESH;
+}
+
+/* RFC 3465 Appropriate Byte Counting, as implemented by upstream lwIP: cap
+ * slow-start growth from a stretch ACK to at most 2 * SMSS. */
+static inline u32_t tcp_calc_slow_start_increment(u32_t acked, u16_t mss)
+{
+    u32_t max_increment = 2U * (u32_t)mss;
+
+    return LWIP_MIN(acked, max_increment);
+}
 
 /** Function prototype for tcp accept callback functions. Called when a new
  * connection can be accepted on a listening pcb.
@@ -237,8 +265,11 @@ struct tcp_pcb {
     /** TCP specific PCB members */
 
     enum tcp_state private_state; /* TCP state - should only be touched thru get/set functions */
-    bool is_last_seg_dropped;
+    u8_t nrtx; /* number of retransmissions */
     u8_t prio;
+    /* Local-send retry marker: the sole unacked segment did not reach the
+     * wire and must be moved back to unsent before the next attempt. */
+    bool is_last_seg_dropped;
     void *callback_arg;
     void *my_container;
     /* Function to be called when sending data. */
@@ -268,7 +299,8 @@ struct tcp_pcb {
 #define TF_NODELAY   ((u16_t)0x0040U) /* Disable Nagle algorithm */
 #define TF_NAGLEMEMERR                                                                             \
     ((u16_t)0x0080U) /* nagle enabled, memerr, try to output to prevent delayed ACK to happen */
-#define TF_WND_SCALE ((u16_t)0x0100U) /* Window Scale option enabled */
+#define TF_WND_SCALE         ((u16_t)0x0100U) /* Window Scale option enabled */
+#define TF_SYN_RTO_REXMITTED ((u16_t)0x0200U) /* SYN/SYN-ACK retransmitted by RTO timer */
 
     /* the rest of the fields are in host byte order
        as we have to do some math with them */
@@ -280,24 +312,28 @@ struct tcp_pcb {
     u8_t tcp_timer; /* Timer counter to handle calling slow-timer from tcp_tmr() */
     u32_t tmr;
 
-    /* Retransmission timer. */
+    /* Tick-domain marker for duplicate ACK detection and unsent re-drive.
+     * RTO expiration uses rto_deadline_us. */
     s16_t rtime;
 
     u16_t mss; /* maximum segment size */
     u16_t advtsd_mss; /* advertised maximum segment size */
 
-    /* RTT (round trip time) estimation variables */
-    u32_t rttest; /* RTT estimate in 10ms ticks */
+    /* RTT (round trip time) estimation variables, microsecond domain. */
     u32_t rtseq; /* sequence number being timed */
-    u32_t user_timeout_ms; /* timeout in miliseconds */
+    u32_t user_timeout_ms; /* timeout in milliseconds */
     s32_t ticks_since_data_sent;
 #if TCP_CC_ALGO_MOD
     u32_t t_rttupdated; /* number of RTT estimations taken so far */
 #endif
-    s16_t sa, sv; /* @todo document this */
+    s32_t sa_us; /* 8 * SRTT in microseconds; 0 = "no prior sample" sentinel */
+    s32_t sv_us; /* 4 * RTTVAR in microseconds */
 
-    s16_t rto; /* retransmission time-out */
-    u8_t nrtx; /* number of retransmissions */
+    s32_t rto_us; /* retransmission timeout in microseconds */
+    /* Absolute monotonic time at which the in-flight RTT sample started.
+     * Zero means that no sample is in flight.
+     */
+    int64_t rttest_us;
 
     /* fast retransmit/recovery */
     u32_t lastack; /* Highest acknowledged seqno. */
@@ -330,6 +366,10 @@ struct tcp_pcb {
     struct tcp_seg *last_unsent; /* Last unsent (queued) segment. */
     struct tcp_seg *unacked; /* Sent but unacknowledged segments. */
     struct tcp_seg *last_unacked; /* Last element in unacknowledged segments list. */
+
+    /* Absolute CLOCK_MONOTONIC deadline in microseconds; 0 means unarmed.
+     * Located with unacked in one intra-struct cache window for tcp_slowtmr(). */
+    int64_t rto_deadline_us;
 #if TCP_QUEUE_OOSEQ
     struct tcp_seg *ooseq; /* Received out of sequence segments. */
 #endif /* TCP_QUEUE_OOSEQ */
@@ -394,6 +434,40 @@ struct tcp_pcb {
         u32_t max_send_sge;
     } tso;
 };
+
+/* The four TX queue heads form one traversal unit in tcp_output(), ACK
+ * processing, retransmission, and teardown.
+ * Keep them contiguous so queue walks do not interleave unrelated timer state.
+ */
+#if defined(__cplusplus)
+static_assert(offsetof(struct tcp_pcb, last_unacked) - offsetof(struct tcp_pcb, unsent) ==
+                  3 * sizeof(struct tcp_seg *),
+              "TCP TX queue heads must remain contiguous");
+static_assert(!TCP_CC_ALGO_MOD ||
+                  offsetof(struct tcp_pcb, unsent) / CACHELINE_SIZE ==
+                      offsetof(struct tcp_pcb, last_unacked) / CACHELINE_SIZE,
+              "TCP TX queue heads must share a cache window in the default build");
+#else
+_Static_assert(offsetof(struct tcp_pcb, last_unacked) - offsetof(struct tcp_pcb, unsent) ==
+                   3 * sizeof(struct tcp_seg *),
+               "TCP TX queue heads must remain contiguous");
+_Static_assert(!TCP_CC_ALGO_MOD ||
+                   offsetof(struct tcp_pcb, unsent) / CACHELINE_SIZE ==
+                       offsetof(struct tcp_pcb, last_unacked) / CACHELINE_SIZE,
+               "TCP TX queue heads must share a cache window in the default build");
+#endif
+
+/* The assertion guarantees one 64-byte intra-struct window. Runtime
+ * cache-line sharing also depends on the enclosing object's alignment. */
+#if defined(__cplusplus)
+static_assert(offsetof(struct tcp_pcb, rto_deadline_us) / CACHELINE_SIZE ==
+                  offsetof(struct tcp_pcb, unacked) / CACHELINE_SIZE,
+              "rto_deadline_us must share a 64-byte intra-struct window with unacked");
+#else
+_Static_assert(offsetof(struct tcp_pcb, rto_deadline_us) / CACHELINE_SIZE ==
+                   offsetof(struct tcp_pcb, unacked) / CACHELINE_SIZE,
+               "rto_deadline_us must share a 64-byte intra-struct window with unacked");
+#endif
 
 typedef u16_t (*ip_route_mtu_fn)(struct tcp_pcb *pcb);
 void register_ip_route_mtu(ip_route_mtu_fn fn);

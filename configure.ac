@@ -13,7 +13,7 @@ dnl===-----------------------------------------------------------------------===
 # Update version number here:
 #
 define([prj_ver_major], 3)
-define([prj_ver_minor], 61)
+define([prj_ver_minor], 80)
 define([prj_ver_revision], 2)
 define([prj_ver_release], esyscmd([echo ${PRJ_RELEASE:=0}]))
 
@@ -93,8 +93,39 @@ m4_include([config/m4/nl.m4])
 m4_include([config/m4/prof.m4])
 m4_include([config/m4/compiler.m4])
 
-FUNC_CONFIGURE_INIT()
+AC_ARG_WITH([dpcp],
+    AS_HELP_STRING([--with-dpcp@<:@=DIR@:>@],
+                   [Search for dpcp headers and libraries in DIR @<:@default: /usr@:>@]),
+    [dpcp_explicitly_specified=yes],
+    [dpcp_explicitly_specified=no]
+)
 
+dpcp_enabled=yes
+case "$with_dpcp" in
+    yes)
+        with_dpcp=/usr
+        ;;
+    no)
+        dpcp_enabled=no
+        ;;
+esac
+
+AC_ARG_WITH([dpcp-flags],
+    AS_HELP_STRING([--with-dpcp-flags=FLAGS],
+                   [Pass additional FLAGS to the built-in libdpcp CMake configuration]),
+    [],
+    [with_dpcp_flags=""]
+)
+
+if test "x$dpcp_enabled" = "xno"; then
+    AC_MSG_ERROR([--without-dpcp is not supported; use the built-in DPCP or --with-dpcp=DIR])
+fi
+
+if test "x$dpcp_explicitly_specified" = "xyes" && test -n "$with_dpcp_flags"; then
+    AC_MSG_ERROR([--with-dpcp and --with-dpcp-flags are mutually exclusive])
+fi
+
+FUNC_CONFIGURE_INIT()
 
 dnl===-----------------------------------------------------------------------===
 dnl===
@@ -314,6 +345,14 @@ AC_CHECK_FUNCS(__read_chk __recv_chk __recvfrom_chk __poll_chk __ppoll_chk)
 # Check for gettid(). The wrapper appeared in glibc-2.30
 AC_CHECK_FUNCS(gettid)
 
+# Optional struct tcp_info members for sub-millisecond RTT/RTO reporting.
+# Older toolchain headers may not expose tcpi_rtt / tcpi_rttvar; sockinfo_tcp
+# guards the writes with HAVE_STRUCT_TCP_INFO_TCPI_RTT and
+# HAVE_STRUCT_TCP_INFO_TCPI_RTTVAR so the field is set only when present.
+AC_CHECK_MEMBERS([struct tcp_info.tcpi_rtt, struct tcp_info.tcpi_rttvar], [], [], [[
+#include <netinet/tcp.h>
+]])
+
 AC_MSG_CHECKING([for SOF_TIMESTAMPING_SOFTWARE support])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
   #include <linux/net_tstamp.h>
@@ -430,11 +469,8 @@ AC_CONFIG_FILES([
 		tests/gtest/Makefile
 		tests/unit_tests/Makefile
 		tools/Makefile
-		tools/daemon/Makefile
 		docs/man/Makefile
 		third_party/Makefile
-		contrib/scripts/xlio.init
-		contrib/scripts/xlio.service
 		contrib/scripts/libxlio.spec
 		debian/changelog
 		])

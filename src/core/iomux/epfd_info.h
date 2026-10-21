@@ -25,13 +25,19 @@ public:
 
     ~epfd_info_entity_context_events() { m_epoll_ready_sockets.clear(); }
 
-    void add_epoll_ready_socket(uint64_t events, sockinfo *si);
+    // Returns true if the caller must wake up the application.
+    bool add_epoll_ready_socket(uint64_t events, sockinfo *si);
     void remove_epoll_ready_socket(sockinfo *si);
-    void move_epoll_ready_events(ep_ready_fd_list_t &out);
+    void move_epoll_ready_events(ep_ready_fd_list_t &out, bool arm_wakeup);
+    void disarm_wakeup();
 
 private:
     epoll_ready_sock_list m_epoll_ready_sockets;
     lock_spin_recursive m_epoll_ready_sockets_lock;
+    // Guarded by m_epoll_ready_sockets_lock. Set while the application sleeps,
+    // so that a worker takes the wakeup decision inside the critical section it
+    // already holds and touches the shared epfd lock only when it must signal.
+    bool m_app_sleeping = false;
 };
 
 enum class epoll_poll_type_t {
@@ -40,7 +46,7 @@ enum class epoll_poll_type_t {
     POLL_BOTH // Poll both RX and TX rings (default epoll_wait behavior)
 };
 
-class epfd_info : public lock_mutex_recursive, public cleanable_obj, public wakeup_pipe {
+class epfd_info : public lock_spin_recursive, public cleanable_obj, public wakeup_pipe {
 public:
     epfd_info(int epfd, int size);
     ~epfd_info();
@@ -59,12 +65,19 @@ public:
     void get_offloaded_fds_arr_and_size(int **p_p_num_offloaded_fds, int **p_p_offloadded_fds);
 
     /**
-     * check if fd is cq fd according to the data.
-     * if it is, save the fd in ready cq fds queue.
-     * @param data field from event data
-     * @return true if fd is cq fd
+     * Return true when epoll user data contains the XLIO CQ marker.
      */
-    bool is_cq_fd(uint64_t data);
+    static inline bool is_cq_event(uint64_t data) { return (data >> 32) == CQ_FD_MARK; }
+
+    /**
+     * Extract the CQ channel fd encoded in epoll user data.
+     */
+    static inline int cq_event_fd(uint64_t data) { return static_cast<int>(data & CQ_FD_MASK); }
+
+    /**
+     * Queue a ready CQ channel fd for deferred event acknowledgment and processing.
+     */
+    void enqueue_ready_cq_fd(int fd);
 
     /**
      * Get the original user data posted with this fd.
@@ -109,7 +122,8 @@ public:
     void remove_epoll_event(sockinfo *sock_fd, uint32_t event_flags);
     void increase_ring_ref_count(ring *ring);
     void decrease_ring_ref_count(ring *ring);
-    bool move_entity_context_ready_events();
+    bool move_entity_context_ready_events(bool arm_wakeup = false);
+    void disarm_entity_context_wakeup();
     void add_rx_migration_cand(sockinfo *si);
     void rx_migration_check();
 
@@ -124,6 +138,9 @@ public:
     list_node<epfd_info, epfd_info::epfd_info_node_offset> epfd_info_node;
 
 private:
+    static constexpr uint64_t CQ_FD_MARK = 0xabcd;
+    static constexpr uint64_t CQ_FD_MASK = 0xffffffffULL;
+
     const int m_epfd;
     int m_size;
     int *m_p_offloaded_fds;

@@ -26,11 +26,11 @@ enum poll_group_socket_op {
     POLL_GROUP_SOCKET_CLOSE,
     POLL_GROUP_SOCKET_DESTROY,
 };
-/* coverity[no_virtual_dtor] */
+
 class poll_group {
 public:
     poll_group(const struct xlio_poll_group_attr &attr);
-    ~poll_group();
+    virtual ~poll_group();
     static void destroy_all_groups();
     static void fork_nullify();
 
@@ -42,6 +42,7 @@ public:
     void flush();
 
     void add_ring(ring *rng, ring_alloc_logic_attr *attr);
+    virtual void notify_ring_added(ring *rng) { (void)rng; }
 
     void add_socket(sockinfo_tcp *si);
     void add_socket_helper(sockinfo_tcp *si);
@@ -54,6 +55,9 @@ public:
     unsigned get_flags() const { return m_group_flags; }
     event_handler_manager_local *get_event_handler() const { return m_event_handler.get(); }
     tcp_timers_collection *get_tcp_timers() const { return m_tcp_timers.get(); }
+
+protected:
+    const std::vector<ring *> &get_rings() const { return m_rings; }
 
 private:
     void slow_path_run();

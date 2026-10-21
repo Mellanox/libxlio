@@ -39,7 +39,7 @@ hugepage_mgr::hugepage_mgr()
         /* Value 0 means default autodetection behavior. Don't set MCE_DEFAULT_HUGEPAGE_SIZE
          * here, because it can be defined to an unsupported specific value.
          */
-        safe_mce_sys().hugepage_size = 0;
+        mce_sys_var::safe_instance_non_const().hugepage_size = 0;
     }
 }
 

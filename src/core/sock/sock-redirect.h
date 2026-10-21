@@ -204,6 +204,9 @@ extern os_api orig_os_api;
 extern void get_orig_funcs();
 #endif /* XLIO_STATIC_BUILD */
 
+void xlio_sigint_init();
+void xlio_sigint_exit();
+
 /**
  *-----------------------------------------------------------------------------
  *  variables to hold the function-pointers to original functions

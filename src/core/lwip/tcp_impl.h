@@ -45,10 +45,11 @@ extern "C" {
 #pragma GCC visibility push(hidden)
 #endif
 
-void tcp_tmr(struct tcp_pcb *pcb); /* Must be called every (slow_tmr_interval / 2) ms. */
+/* Must be called every (slow_tmr_interval / 2) ms. */
+void tcp_tmr(struct tcp_pcb *pcb, int64_t timer_now_us);
 /* It is also possible to call these two functions at the right
    intervals (instead of calling tcp_tmr()). */
-void tcp_slowtmr(struct tcp_pcb *pcb);
+void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us);
 void tcp_fasttmr(struct tcp_pcb *pcb);
 
 void L3_level_tcp_input(struct pbuf *p, struct tcp_pcb *pcb);
@@ -320,7 +321,13 @@ extern u32_t rcv_wnd_scale;
 extern u8_t enable_push_flag;
 extern u8_t enable_ts_option;
 extern u32_t tcp_ticks;
+extern u32_t slow_tmr_interval;
 extern ip_route_mtu_fn external_ip_route_mtu;
+
+static inline u32_t tcp_ms_to_ticks(u32_t ms)
+{
+    return (u32_t)(((u64_t)ms + slow_tmr_interval - 1U) / slow_tmr_interval);
+}
 
 #if defined(__GNUC__) && (((__GNUC__ == 4) && (__GNUC_MINOR__ >= 4)) || (__GNUC__ > 4))
 #pragma GCC visibility push(hidden)

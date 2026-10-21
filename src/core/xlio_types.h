@@ -26,7 +26,19 @@
 #define SO_XLIO_GET_API          2800
 #define SO_XLIO_RING_ALLOC_LOGIC 2810
 #define SO_XLIO_SHUTDOWN_RX      2821
-#define SO_XLIO_EXT_VLAN_TAG     2824
+/*
+ * Insert an 802.1Q VLAN tag to the following TX packets. Doesn't affect RX packets handling.
+ * The option value is an integer of type `int` which represents the VLAN ID field of the VLAN tag.
+ * The value must be non-negative number less than 4096. Value 0 disables the feature.
+ * The option allows to set VLAN ID to the reserved values 1 and 0xFFF without restrictions.
+ *
+ * Limitations:
+ *  - TCP sockets only
+ *  - Incoming connections are not supported
+ *  - Must be configured on a non-connected socket before calling connect() and affects the first
+ *    SYN segment
+ */
+#define SO_XLIO_EXT_VLAN_TAG 2824
 
 struct xlio_rate_limit_t {
     uint32_t rate; /* rate limit in Kbps */

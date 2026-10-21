@@ -202,7 +202,7 @@
 ###########################################################
 # sockperf
 {
-   sockperf_leak
+   sockperf_free_check
    Memcheck:Free
    fun:free
    fun:_Z9close_ifdiiP8fds_data

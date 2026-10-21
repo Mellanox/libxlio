@@ -159,12 +159,11 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
                 "Rx data packets: %" PRIu64 " / %u / %u / %u [bytes/packets/frags/chained]\n",
                 p_si_stats->counters.n_rx_bytes, p_si_stats->counters.n_rx_data_pkts,
                 p_si_stats->counters.n_rx_frags, p_si_stats->counters.n_gro);
-        if (p_si_stats->counters.n_rx_data_pkts) {
-            fprintf(filename, "Avg. aggr packet size: %" PRIu64 " fragments per packet: %.1f\n",
-                    p_si_stats->counters.n_rx_bytes / p_si_stats->counters.n_rx_data_pkts,
-                    static_cast<double>(p_si_stats->counters.n_rx_frags) /
-                        p_si_stats->counters.n_rx_data_pkts);
-        }
+        fprintf(
+            filename, "Avg. aggr packet size: %" PRIu64 " fragments per packet: %.1f\n",
+            xlio_stats_ratio_u64(p_si_stats->counters.n_rx_bytes,
+                                 p_si_stats->counters.n_rx_data_pkts),
+            xlio_stats_ratio(p_si_stats->counters.n_rx_frags, p_si_stats->counters.n_rx_data_pkts));
     }
     if (p_si_stats->counters.n_rx_os_bytes || p_si_stats->counters.n_rx_os_packets ||
         p_si_stats->counters.n_rx_os_eagain || p_si_stats->counters.n_rx_os_errors) {
@@ -191,12 +190,11 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
         b_any_activiy = true;
     }
     if (p_si_stats->counters.n_rx_poll_miss || p_si_stats->counters.n_rx_poll_hit) {
-        double rx_poll_hit = (double)p_si_stats->counters.n_rx_poll_hit;
-        double rx_poll_hit_percentage =
-            (rx_poll_hit / (rx_poll_hit + (double)p_si_stats->counters.n_rx_poll_miss)) * 100;
         fprintf(filename, "Rx poll: %u / %u (%2.2f%%) [miss/hit]\n",
                 p_si_stats->counters.n_rx_poll_miss, p_si_stats->counters.n_rx_poll_hit,
-                rx_poll_hit_percentage);
+                xlio_stats_percent(p_si_stats->counters.n_rx_poll_hit,
+                                   static_cast<uint64_t>(p_si_stats->counters.n_rx_poll_hit) +
+                                       p_si_stats->counters.n_rx_poll_miss));
         b_any_activiy = true;
     }
 
@@ -207,6 +205,11 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
 
     if (p_si_stats->counters.n_tx_retransmits) {
         fprintf(filename, "Retransmissions: %u\n", p_si_stats->counters.n_tx_retransmits);
+    }
+
+    if (p_si_stats->n_tcp_timer_consecutive_skips_max) {
+        fprintf(filename, "TCP timer trylock skips (high-water): %u consecutive\n",
+                p_si_stats->n_tcp_timer_consecutive_skips_max);
     }
 
     if (p_si_stats->counters.n_tx_sendfile_fallbacks) {
@@ -252,9 +255,12 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
                 p_si_stats->tls_counters.n_tls_rx_records_sw_dec_fail, post_fix);
         b_any_activiy = true;
     }
-    if (p_si_stats->tls_counters.n_tls_rx_resync) {
-        fprintf(filename, "TLS Rx Resyncs: %u [total]%s\n",
-                p_si_stats->tls_counters.n_tls_rx_resync, post_fix);
+    if (p_si_stats->tls_counters.n_tls_rx_resync_attempt) {
+        fprintf(filename, "TLS Rx Resyncs: %u / %u / %u / %u [attempt/success/retry/long]%s\n",
+                p_si_stats->tls_counters.n_tls_rx_resync_attempt,
+                p_si_stats->tls_counters.n_tls_rx_resync_success,
+                p_si_stats->tls_counters.n_tls_rx_resync_retry,
+                p_si_stats->tls_counters.n_tls_rx_resync_long, post_fix);
     }
 #endif /* DEFINED_UTLS */
 

@@ -46,6 +46,20 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 # Checks for libraries.
 
+# Drop -Werror from json-c's feature tests and build.
+#
+# json-c's AC_CHECK_FUNCS probes trigger builtin-declaration-mismatch and
+# implicit-function-declaration warnings what fails the probes compilation with
+# -Werror in CFLAGS. So standard libc functions get misdetected as missing (e.g.
+# strdup, which then breaks strdup_compat.h). XLIO's top-level configure
+# propagates its CFLAGS which may include -Werror.
+# The pattern covers all the -Werror spellings: bare -Werror, -Werror=<warning>
+# and the deprecated -Werror-implicit-function-declaration alias.
+# This assignment is local to json-c's own configure process, so it does not
+# affect XLIO or any other subdir.
+CFLAGS=`echo "$CFLAGS" | sed -e 's/-Werror[[^[:space:]]]*//g'`
+CPPFLAGS=`echo "$CPPFLAGS" | sed -e 's/-Werror[[^[:space:]]]*//g'`
+
 # Checks for header files.
 AM_PROG_CC_C_O
 AC_PROG_CC_C99

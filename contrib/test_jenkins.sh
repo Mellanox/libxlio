@@ -83,7 +83,6 @@ jenkins_test_run=${jenkins_test_run:="no"}
 jenkins_test_gtest=${jenkins_test_gtest:="no"}
 jenkins_test_vg=${jenkins_test_vg:="no"}
 jenkins_test_style=${jenkins_test_style:="no"}
-jenkins_test_tool=${jenkins_test_tool:="no"}
 jenkins_test_commit=${jenkins_test_commit:="no"}
 
 echo
@@ -105,15 +104,9 @@ i=0
 if [ "$TARGET" == "all" -o "$TARGET" == "default" ]; then
     export jenkins_target="default"
     export prefix=${jenkins_test_custom_prefix}/${jenkins_target}
-    do_check_dpcp opt_value
-    if [ ! -z "${opt_value}" ]; then
-        target_list[$i]="default: --with-dpcp=${opt_value}"
-        i=$((i+1))
-    else
-        echo "Requested dpcp support can not be executed"
-		do_err "target: $TARGET"
-		exit 1
-    fi
+    # No extra configure options: libdpcp is built from the bundled submodule
+    target_list[$i]="default:"
+    i=$((i+1))
 fi
 
 echo
@@ -124,7 +117,9 @@ if [ ! -e configure ] && [ -e autogen.sh ]; then
     ./autogen.sh -s
 fi
 
+target_processed=0
 for target_v in "${target_list[@]}"; do
+    target_processed=1
     ret=0
     IFS=':' read target_name target_option <<< "$target_v"
 
@@ -244,16 +239,6 @@ for target_v in "${target_list[@]}"; do
 	        rc=$((rc + $ret))
 	    fi
     fi
-    if [ 10 -lt "$jenkins_opt_exit" -o "$rc" -eq 0 ]; then
-	    if [ "$jenkins_test_tool" = "yes" ]; then
-	        $WORKSPACE/contrib/jenkins_tests/tool.sh
-	        ret=$?
-	        if [ $ret -gt 0 ]; then
-	           do_err "case: [tool: ret=$ret]"
-	        fi
-	        rc=$((rc + $ret))
-	    fi
-    fi
     if [ 11 -lt "$jenkins_opt_exit" -o "$rc" -eq 0 ]; then
 	    if [ "$jenkins_test_commit" = "yes" ]; then
 	        $WORKSPACE/contrib/jenkins_tests/commit.sh
@@ -291,6 +276,11 @@ for target_v in "${target_list[@]}"; do
     fi
 
 done
+
+if [ "$target_processed" -eq 0 ]; then
+    echo "ERROR: No CI targets processed for TARGET=${TARGET}" >&2
+    exit 1
+fi
 
 rm -rf $WORKSPACE/config.cache
 

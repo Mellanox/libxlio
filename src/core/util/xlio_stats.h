@@ -165,7 +165,10 @@ typedef struct {
     uint32_t n_tls_rx_records_mix_enc;
     uint32_t n_tls_rx_records_hw_auth_fail;
     uint32_t n_tls_rx_records_sw_dec_fail;
-    uint32_t n_tls_rx_resync;
+    uint32_t n_tls_rx_resync_attempt;
+    uint32_t n_tls_rx_resync_success;
+    uint32_t n_tls_rx_resync_retry;
+    uint32_t n_tls_rx_resync_long;
 } socket_tls_counters_t;
 #endif /* DEFINED_UTLS */
 
@@ -221,6 +224,8 @@ struct socket_stats_t {
     socket_tls_counters_t tls_counters;
 #endif /* DEFINED_UTLS */
     socket_listen_counters_t listen_counters;
+    /* Socket-lifetime high-water of consecutive TCP timer lock misses. */
+    uint32_t n_tcp_timer_consecutive_skips_max;
 
     // Control Path
     std::bitset<MC_TABLE_SIZE> mc_grp_map;
@@ -261,6 +266,7 @@ struct socket_stats_t {
         bound_port = connected_port = (in_port_t)0;
         threadid_last_rx = threadid_last_tx = pid_t(0);
         n_rx_ready_pkt_count = n_rx_ready_byte_count = n_tx_ready_byte_count = 0;
+        n_tcp_timer_consecutive_skips_max = 0;
         memset(&counters, 0, sizeof(counters));
 #ifdef DEFINED_UTLS
         tls_tx_offload = tls_rx_offload = false;
@@ -319,12 +325,13 @@ typedef struct {
     uint64_t n_rx_hw_pkt_drops;
     uint64_t n_rx_packet_count;
     uint64_t n_rx_consumed_rwqe_count;
-    uint64_t n_rx_sw_pkt_drops;
     uint64_t n_rx_lro_packets;
     uint64_t n_rx_lro_bytes;
     uint64_t n_rx_gro_packets;
     uint64_t n_rx_gro_bytes;
     uint64_t n_rx_gro_frags;
+    uint64_t n_rx_sw_pkt_drops;
+    uint32_t n_rx_tls_resync;
     uint32_t n_rx_sw_queue_len;
     uint32_t n_rx_drained_at_once_max;
     uint32_t n_buffer_pool_len;
@@ -424,7 +431,7 @@ typedef struct {
 BOUNDARY_SIZE_ASSERT(bpool_instance_block_t, CACHELINE_SIZE / 2);
 
 // Global stat info
-typedef struct {
+typedef struct global_stats {
     uint32_t n_tcp_seg_pool_size;
     uint32_t n_tcp_seg_pool_no_segs;
     int n_pending_sockets;
@@ -438,9 +445,26 @@ typedef struct {
         socket_tcp_destructor_counter = 0;
         socket_udp_destructor_counter = 0;
     }
+    global_stats &operator=(const global_stats &other)
+    {
+        if (this != &other) {
+            n_tcp_seg_pool_size = other.n_tcp_seg_pool_size;
+            n_tcp_seg_pool_no_segs = other.n_tcp_seg_pool_no_segs;
+            n_pending_sockets = other.n_pending_sockets;
+
+            socket_tcp_destructor_counter.store(
+                other.socket_tcp_destructor_counter.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+
+            socket_udp_destructor_counter.store(
+                other.socket_udp_destructor_counter.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+        }
+        return *this;
+    }
 } global_stats_t;
 
-typedef struct {
+typedef struct global_instance_block {
     global_stats_t global_stats;
     bool b_enabled;
     void init()
@@ -448,6 +472,14 @@ typedef struct {
         b_enabled = false;
         global_stats.init();
     };
+    global_instance_block &operator=(const global_instance_block &other)
+    {
+        if (this != &other) {
+            b_enabled = other.b_enabled;
+            global_stats = other.global_stats;
+        }
+        return *this;
+    }
 } global_instance_block_t;
 
 // Version info
@@ -574,5 +606,26 @@ void print_full_stats(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, 
 void print_netstat_like(socket_stats_t *p_si_stats, mc_grp_info_t *p_mc_grp_info, FILE *file,
                         int pid);
 void print_netstat_like_headers(FILE *file);
+
+// Returns number of 'a' units per 'b' on average. Example: number of strides per packet.
+static inline double xlio_stats_ratio(uint64_t a, uint64_t b)
+{
+    return (b == 0) ? 0.0 : static_cast<double>(a) / static_cast<double>(b);
+}
+
+// Returns number of 'a' units per 'b' on average. Example: bytes per packet.
+static inline uint64_t xlio_stats_ratio_u64(uint64_t a, uint64_t b)
+{
+    return (b == 0) ? 0 : a / b;
+}
+
+// Returns percentage of 'a' units out of 'b'. Example: percentage of LRO packets.
+static inline double xlio_stats_percent(uint64_t a, uint64_t b)
+{
+    if (b == 0) {
+        return 0.0;
+    }
+    return static_cast<double>(a) * 100.0 / static_cast<double>(b);
+}
 
 #endif // XLIO_STATS_H

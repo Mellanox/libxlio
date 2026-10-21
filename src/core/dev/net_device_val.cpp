@@ -202,7 +202,7 @@ net_device_val::net_device_val(struct net_device_val_desc *desc)
     }
 
     /* Identify device type */
-    if ((get_flags() & IFF_MASTER) || check_bond_device_exist(get_ifname_link())) {
+    if (check_bond_device_exist(get_ifname_link())) {
         verify_bonding_mode();
     } else {
         m_bond = NO_BOND;
@@ -893,6 +893,16 @@ uint64_t net_device_val::get_accumulative_rx_cq_drop_counter()
                   });
     return accumaltor;
 };
+
+void net_device_val::accumulate_ring_stats(aggregated_ring_stats &agg) const
+{
+    for (const auto &entry : m_h_ring_map) {
+        const ring *r = entry.second.first;
+        if (r) {
+            r->accumulate_ring_stats(agg);
+        }
+    }
+}
 
 ring *net_device_val::reserve_ring(resource_allocation_key *key)
 {

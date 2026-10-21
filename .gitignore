@@ -69,18 +69,15 @@ src/stats/xlio_stats
 src/vlogger/vlogger_test
 src/state_machine/state_machine_test
 tests/gtest/gtest
+tests/gtest/ultra_api_connect_helper
 
 # build products
 build/libxlio.spec
 debian/changelog
 contrib/scripts/libxlio.spec
-contrib/scripts/xlio.init
-contrib/scripts/xlio.service
 docs/doxygen
 docs/man/xlio.7
 docs/man/xlio_stats.8
-docs/man/xliod.8
-tools/daemon/xliod
 
 tests/unit_tests/unit_tests
 *.pyc

@@ -209,7 +209,6 @@ Specific options can be selected from following list:
 * jenkins_test_vg=[yes|no]
 * jenkins_test_style=[yes|no]
 * jenkins_test_gtest=[yes|no]
-* jenkins_test_tool=[yes|no]
 * jenkins_test_commit=[yes|no]
 
 Results are stored at $WORKSPACE/jenkins folder

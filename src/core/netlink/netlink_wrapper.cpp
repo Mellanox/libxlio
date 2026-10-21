@@ -10,6 +10,8 @@
 #include <fcntl.h>
 #include <net/route.h>
 
+#include "core/util/sys_vars.h"
+#include "core/util/sysctl_reader.h"
 #include "vlogger/vlogger.h"
 #include "utils/bullseye.h"
 #include "netlink_wrapper.h"
@@ -301,6 +303,14 @@ int netlink_wrapper::open_channel()
         return -1;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
+
+    int rmem_max = safe_mce_sys().sysctl_reader.get_net_core_rmem_max();
+    int wmem_max = safe_mce_sys().sysctl_reader.get_net_core_wmem_max();
+    int err = nl_socket_set_buffer_size(m_socket_handle, rmem_max, wmem_max);
+    if (err < 0) {
+        nl_logdbg("Failed to set netlink socket buffer size to (r=%d, w=%d): %d", rmem_max,
+                  wmem_max, err);
+    }
 
     return 0;
 }

@@ -7,6 +7,7 @@
 #ifndef RING_H
 #define RING_H
 
+#include <cstdint>
 #include <memory>
 #include "ib/base/verbs_extra.h"
 #include "dev/buffer_pool.h"
@@ -39,6 +40,31 @@ typedef size_t ring_user_id_t;
 typedef cached_obj_pool<tcp_seg> tcp_seg_pool;
 extern tcp_seg_pool *g_tcp_seg_pool;
 
+// Aggregated ring-level traffic counters for tuning report.
+// Defined here rather than in a separate header — all consumers already
+// include ring.h transitively, so a separate header would provide no
+// build isolation benefit.
+struct aggregated_ring_stats {
+    uint64_t total_rx_packets = 0;
+    uint64_t total_rx_bytes = 0;
+    uint64_t total_tx_packets = 0;
+    uint64_t total_tx_bytes = 0;
+    uint64_t total_tx_retransmits = 0;
+    uint64_t total_tx_dropped_wqes = 0;
+
+    // TSO validation: if tso=enable but these are 0, TSO is misconfigured or unsupported.
+    uint64_t total_tx_tso_pkt_count = 0;
+    uint64_t total_tx_tso_byte_count = 0;
+
+    // TLS anomaly counters — unconditional here (matching ring_stats_t), output
+    // gated by #ifdef DEFINED_UTLS.
+    // Uses uint64_t (wider than ring_stats_t's uint32_t) because aggregation
+    // sums across all rings — bonded NICs with many slaves could overflow uint32_t.
+    uint64_t total_rx_tls_resyncs = 0;
+    uint64_t total_tx_tls_resyncs = 0;
+    uint64_t total_rx_tls_auth_fail = 0;
+};
+
 class ring {
 public:
     ring();
@@ -47,6 +73,7 @@ public:
 
     virtual void print_val();
     virtual uint64_t get_rx_cq_out_of_buffer_drop() = 0;
+    virtual void accumulate_ring_stats(aggregated_ring_stats &agg) const = 0;
 
     virtual bool attach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, bool force_5t = false) = 0;
     virtual bool detach_flow(flow_tuple &flow_spec_5t, sockinfo *sink, rfs_rule **rule_extract) = 0;
@@ -79,6 +106,7 @@ public:
     virtual bool reclaim_recv_buffers(mem_buf_desc_t *rx_reuse_lst) = 0;
     virtual bool reclaim_recv_buffers_no_lock(mem_buf_desc_t *) { return false; }
     virtual int drain_and_proccess() = 0;
+    virtual void ack_cq_events() = 0;
     virtual void wait_for_notification_and_process_element(void *pv_fd_ready_array = nullptr) = 0;
 
     // @return Zero - Not drained, Positive - Drained with packets, Negative - No packets.
@@ -116,26 +144,40 @@ public:
 #ifdef DEFINED_UTLS
     virtual bool tls_tx_supported(void) { return false; }
     virtual bool tls_rx_supported(void) { return false; }
-    virtual xlio_tis *tls_context_setup_tx(const xlio_tls_info *info)
+    /* Reservation stage: acquire HW objects with firmware commands only, the send queue is not
+     * touched. The setup stage only posts configuration WQEs on pre-reserved objects and cannot
+     * fail.
+     */
+    virtual xlio_tis *tls_reserve_tis(const xlio_tls_info *info)
     {
         NOT_IN_USE(info);
         return NULL;
+    }
+    virtual int tls_reserve_rx_dek(xlio_tir *tir, const xlio_tls_info *info)
+    {
+        NOT_IN_USE(tir);
+        NOT_IN_USE(info);
+        return -1;
+    }
+    virtual void tls_context_setup_tx(const xlio_tls_info *info, xlio_tis *tis)
+    {
+        NOT_IN_USE(info);
+        NOT_IN_USE(tis);
     }
     virtual xlio_tir *tls_create_tir(bool cached)
     {
         NOT_IN_USE(cached);
         return NULL;
     }
-    virtual int tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
-                                     uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
-                                     void *callback_arg)
+    virtual void tls_context_setup_rx(xlio_tir *tir, const xlio_tls_info *info,
+                                      uint32_t next_record_tcp_sn, xlio_comp_cb_t callback,
+                                      void *callback_arg)
     {
         NOT_IN_USE(tir);
         NOT_IN_USE(info);
         NOT_IN_USE(next_record_tcp_sn);
         NOT_IN_USE(callback);
         NOT_IN_USE(callback_arg);
-        return -1;
     }
     virtual rfs_rule *tls_rx_create_rule(const flow_tuple &flow_spec_5t, xlio_tir *tir)
     {
