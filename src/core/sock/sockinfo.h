@@ -333,6 +333,15 @@ public:
     bool is_shadow_socket_present() { return m_fd >= 0 && m_fd != m_rx_epfd; }
     uint32_t get_flow_tag_val() { return m_flow_tag_id; }
     in_protocol_t get_protocol(void) { return m_protocol; }
+    bool is_ipv6only(void) const { return m_is_ipv6only; }
+    int get_back_log(void) const
+    {
+#if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+        return m_back_log;
+#else
+        return 0;
+#endif
+    }
     socket_stats_t *get_sock_stats() const { return m_p_socket_stats; }
     rfs *get_rfs_ptr() const { return m_rfs_ptr; }
     void set_rfs_ptr(rfs *r) { m_rfs_ptr = r; }
@@ -353,6 +362,11 @@ public:
     // If a generic fork() is implemented, this copy should be reimplemented in a more generic way,
     // see is_inherited_option mechanism of sockinfo_tcp for an example.
     void copy_sockopt_fork(const sockinfo *copy_from);
+    // Apply the subset of socket properties copied by copy_sockopt_fork() from
+    // plain values. Used by the Envoy listener-update clone path, which captures
+    // the parent's values in a snapshot at dup() time and never holds a parent
+    // sockinfo pointer at clone time.
+    void copy_sockopt_fork_values(bool is_ipv6only, int back_log);
 #if defined(DEFINED_NGINX)
     virtual void prepare_to_close_socket_pool(bool _push_pop) { NOT_IN_USE(_push_pop); }
     virtual void set_params_for_socket_pool() {};
