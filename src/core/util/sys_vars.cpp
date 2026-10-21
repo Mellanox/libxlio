@@ -893,6 +893,7 @@ void mce_sys_var::get_env_params()
     timer_netlink_update_msec = MCE_DEFAULT_NETLINK_TIMER_MSEC;
 
     deferred_close = MCE_DEFAULT_DEFERRED_CLOSE;
+    exit_barrier = MCE_DEFAULT_EXIT_BARRIER;
     tcp_abort_on_close = MCE_DEFAULT_TCP_ABORT_ON_CLOSE;
     rx_poll_on_tx_tcp = MCE_DEFAULT_RX_POLL_ON_TX_TCP;
     rx_cq_wait_ctrl = MCE_DEFAULT_RX_CQ_WAIT_CTRL;
@@ -1817,6 +1818,10 @@ void mce_sys_var::get_env_params()
 
     if ((env_ptr = getenv(SYS_VAR_DEFERRED_CLOSE))) {
         deferred_close = atoi(env_ptr) ? true : false;
+    }
+
+    if ((env_ptr = getenv(SYS_VAR_EXIT_BARRIER))) {
+        exit_barrier = atoi(env_ptr) ? true : false;
     }
 
     if ((env_ptr = getenv(SYS_VAR_TCP_ABORT_ON_CLOSE))) {
