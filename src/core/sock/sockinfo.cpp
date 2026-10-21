@@ -747,6 +747,12 @@ void sockinfo::copy_sockopt_fork(const sockinfo *copy_from)
         m_back_log = skinfo->m_back_log;
     }
 }
+
+void sockinfo::copy_sockopt_fork_values(bool is_ipv6only, int back_log)
+{
+    m_is_ipv6only = is_ipv6only;
+    m_back_log = back_log;
+}
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////

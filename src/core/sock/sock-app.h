@@ -9,6 +9,7 @@
 
 #include <core/util/sys_vars.h>
 #include <core/util/utils.h>
+#include <core/util/sock_addr.h>
 #include <utils/lock_wrapper.h>
 
 #include <vlogger/vlogger.h>
@@ -24,6 +25,20 @@ extern map_udp_reuse_port_t g_map_udp_resue_port;
 #endif
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
+/* Snapshot of the parent listen socket's properties, captured by the dup()
+ * intercept on Envoy's main thread while the parent is still alive. init_worker()
+ * clones the child listener from this snapshot on the worker thread, so the clone
+ * never dereferences the (possibly already freed) draining parent sockinfo. */
+struct dup_listen_snapshot {
+    sock_addr sa;
+    socklen_t sa_len = 0;
+    sa_family_t family = AF_UNSPEC;
+    bool is_ipv6only = false;
+    bool is_blocking = true;
+    int back_log = 0;
+    bool valid = false;
+};
+
 struct app_conf {
     app_type_t type;
     /* Lock-order contract:
@@ -52,6 +67,10 @@ struct app_conf {
     std::unordered_map<pid_t, int> map_thread_id;
     /* Store duplicated fdwith related original fd */
     std::unordered_map<int, int> map_dup_fd;
+    /* Snapshot of the parent listen socket's properties for a duplicated child
+     * fd, keyed by the child fd. Captured at dup() time so init_worker() can
+     * clone without dereferencing the parent sockinfo. */
+    std::unordered_map<int, dup_listen_snapshot> map_dup_listen;
     /* Collection of unused unique identifiers limited by workers_num */
     std::set<int> unused_worker_id;
     void *context;
@@ -67,6 +86,7 @@ struct app_conf {
         map_listen_fd.clear();
         map_thread_id.clear();
         map_dup_fd.clear();
+        map_dup_listen.clear();
         unused_worker_id.clear();
         context = nullptr;
 

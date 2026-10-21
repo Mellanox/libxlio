@@ -249,6 +249,21 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 #endif
     }
 
+#if defined(DEFINED_ENVOY)
+    /* Drop any dup-tracking state for this fd. Envoy tears down a drained
+     * listener's per-worker fds with close(), which routes here but NOT through
+     * proc_envoy(EPOLL_CTL_DEL). Without this, map_dup_fd / map_dup_listen grow
+     * unbounded across LDS listener updates, and a later dup() that recycles the
+     * same fd number could read a stale snapshot and clone a listener bound to a
+     * stale address. This is a leaf-lock (m_lock) acquisition, never nested under
+     * a device-layer lock, so it cannot invert the lock order. */
+    if (g_p_app && g_p_app->type == APP_ENVOY) {
+        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        g_p_app->map_dup_fd.erase(fd);
+        g_p_app->map_dup_listen.erase(fd);
+    }
+#endif /* DEFINED_ENVOY */
+
     return to_close_now;
 }
 
@@ -913,7 +928,12 @@ EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
          * listen() call for duplicated fds are ignored.
          * Original listen socket is not ignored by listen() function.
          * - reuse_port(true) :
-         * dup() is not used. Unique socket is created for every worker.
+         * On the initial add a unique socket is created for every worker (no dup).
+         * On a same-address listener update (full listener replacement) Envoy dup()s
+         * the old listener's fds; those dup'd fds have no socket object either, and
+         * are offloaded by cloning from the parent-field snapshot captured at dup()
+         * time (map_dup_listen), so the clone never dereferences the draining parent
+         * (see the dup() intercept and proc_envoy()).
          *
          * Store all duplicated fd in map_dup_fd with reference to original fd
          * Store all listen fd in map_listen_fd with tid
@@ -2238,10 +2258,35 @@ EXPORT_SYMBOL int XLIO_SYMBOL(dup)(int __fd)
     // Sanity check to remove any old sockinfo object using the same fd!!
     handle_close(fid, true);
 #if defined(DEFINED_ENVOY)
-    if (g_p_app && g_p_app->type == APP_ENVOY) {
+    if (g_p_app && g_p_app->type == APP_ENVOY && fid >= 0) {
+        /* Snapshot the parent listen socket's properties while it is still alive
+         * on this (Envoy main) thread. init_worker() runs later on a worker
+         * thread and clones the child listener from this snapshot, so it never
+         * dereferences the parent sockinfo - which, for a same-address listener
+         * update, is the draining old listener that may be freed by then.
+         *
+         * getsockname() on a bound listener is a pure read of the cached bound
+         * address and the remaining getters read plain sockinfo fields; none of
+         * them take device-layer locks, so they run outside m_lock (a leaf lock). */
+        dup_listen_snapshot snap;
+        sockinfo *parent = fd_collection_get_sockfd(__fd);
+        if (parent && parent->get_reuseport() && parent->get_protocol() == PROTO_TCP) {
+            socklen_t sa_len = snap.sa.get_socklen();
+            parent->getsockname(snap.sa.get_p_sa(), &sa_len);
+            snap.sa_len = sa_len;
+            snap.family = parent->get_family();
+            snap.is_ipv6only = parent->is_ipv6only();
+            snap.is_blocking = parent->is_blocking();
+            snap.back_log = parent->get_back_log();
+            snap.valid = true;
+        }
+
         std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
         g_p_app->map_dup_fd[fid] = __fd;
         g_p_app->map_dup_fd[__fd] = __fd;
+        if (snap.valid) {
+            g_p_app->map_dup_listen[fid] = snap;
+        }
     }
 #endif /* DEFINED_ENVOY */
     return fid;

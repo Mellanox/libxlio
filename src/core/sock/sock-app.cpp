@@ -107,6 +107,30 @@ int app_conf::proc_envoy(int __op, int __fd)
             static int total_worker_id = 0;
             int worker_id = -1;
 
+            /* A duplicated listen fd has no sockinfo of its own; init_worker()
+             * clones it from the parent-field snapshot captured by the dup()
+             * intercept (map_dup_listen). When Envoy performs a same-address
+             * listener update under enable_reuse_port=true it dup()s the old
+             * listener's fds, whose parent is an already offloaded reuse_port
+             * listen socket - there is nothing to wait for. A valid snapshot for
+             * this fd marks exactly that case, so use it to skip the
+             * enable_reuse_port=false ordering wait below: that wait never opens
+             * for a dup'd fd under reuse_port=true (p_socket_object stays null and
+             * original_listen_count stays INT_MAX), so it would starve and return
+             * -1 (EINVAL), blackholing the new listener.
+             *
+             * The snapshot is captured while the parent is alive on Envoy's main
+             * thread, so both the skip decision here and the clone in init_worker()
+             * are race-free: neither dereferences the draining old listener, which
+             * may already be freed by the time this worker thread runs. */
+            bool dup_parent_offloaded = false;
+            {
+                std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+                auto snap_itr = g_p_app->map_dup_listen.find(__fd);
+                dup_parent_offloaded =
+                    (snap_itr != g_p_app->map_dup_listen.end()) && snap_itr->second.valid;
+            }
+
             /* This check is `enable_reuse_port = false` specific
              *
              * original listen sockets should be created first
@@ -116,7 +140,7 @@ int app_conf::proc_envoy(int __op, int __fd)
              * all sockets related worker 0.
              */
             int sleep_count = 1000;
-            while (!p_socket_object && (original_listen_count > 0)) {
+            while (!p_socket_object && !dup_parent_offloaded && (original_listen_count > 0)) {
                 if (!sleep_count--) {
                     return -1;
                 }
@@ -173,11 +197,15 @@ int app_conf::proc_envoy(int __op, int __fd)
                 std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
                 g_p_app->map_listen_fd.erase(__fd);
                 g_p_app->map_thread_id.erase(gettid());
+                g_p_app->map_dup_listen.erase(__fd);
                 return rc;
             }
         } else if (__op == EPOLL_CTL_DEL) {
             std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
             g_p_app->map_listen_fd.erase(__fd);
+            /* Drop the dup snapshot for this child fd so it does not persist
+             * across listener updates that recycle the same fd number. */
+            g_p_app->map_dup_listen.erase(__fd);
         }
     }
 
@@ -211,19 +239,68 @@ static int init_worker(int worker_id, int listen_fd)
         p_fd_collection = g_p_fd_collection;
         if (!p_fd_collection->get_sockfd(listen_fd)) {
             parent_fd = -1;
-            /* map_dup_fd is written by the dup() intercept under m_lock.
-             * init_worker() no longer runs with m_lock held (it is a leaf
-             * lock, see sock-app.h), so take it for the lookup.
+            /* map_dup_fd and map_dup_listen are written by the dup() intercept
+             * under m_lock. init_worker() runs without m_lock held (it is a leaf
+             * lock, see sock-app.h), so take it for the lookup and copy the
+             * snapshot out while holding it.
              */
+            dup_listen_snapshot snap;
             {
                 std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
                 const auto itr = g_p_app->map_dup_fd.find(listen_fd);
                 if (itr != g_p_app->map_dup_fd.end()) {
                     parent_fd = itr->second;
                 }
+                const auto snap_itr = g_p_app->map_dup_listen.find(listen_fd);
+                if (snap_itr != g_p_app->map_dup_listen.end()) {
+                    snap = snap_itr->second;
+                }
             }
             if (parent_fd < 0) {
                 return -1;
+            }
+            /* Clone the child listener from the snapshot captured at dup() time.
+             * This never dereferences the parent sockinfo (the draining old
+             * listener), so the clone is race-free even if the parent has already
+             * been freed by the time this worker thread runs. The snapshot is only
+             * populated for a TCP reuse_port listener (the Envoy same-address
+             * update path); the parent-lookup path below serves as a safety
+             * fallback if the snapshot is somehow absent. */
+            if (snap.valid) {
+                int block_type = snap.is_blocking ? 0 : SOCK_NONBLOCK;
+                app_logdbg("cloning listen fd %d from dup snapshot", listen_fd);
+                g_p_fd_collection->addsocket(listen_fd, snap.family, SOCK_STREAM | block_type);
+                child_sock_fd_api = g_p_fd_collection->get_sockfd(listen_fd);
+                if (child_sock_fd_api) {
+                    child_sock_fd_api->copy_sockopt_fork_values(snap.is_ipv6only, snap.back_log);
+
+                    ret = bind_internal(child_sock_fd_api, snap.sa.get_p_sa(), snap.sa_len);
+                    if (ret < 0) {
+                        app_logerr("bind() error");
+                    }
+
+                    // is the socket really offloaded
+                    ret = child_sock_fd_api->prepareListen();
+                    if (ret < 0) {
+                        app_logerr("prepareListen error");
+                        child_sock_fd_api = nullptr;
+                    } else if (ret > 0) { // Pass-through
+                        handle_close(child_sock_fd_api->get_fd(), false, true);
+                        child_sock_fd_api = nullptr;
+                    } else {
+                        app_logdbg("Prepare listen successfully offloaded");
+                    }
+
+                    if (child_sock_fd_api) {
+                        ret = child_sock_fd_api->listen(child_sock_fd_api->get_back_log());
+                        if (ret < 0) {
+                            app_logerr("Listen error");
+                        } else {
+                            app_logdbg("Listen success");
+                        }
+                    }
+                }
+                return ret;
             }
         } else {
             ret = -1;
