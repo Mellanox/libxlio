@@ -618,6 +618,7 @@ struct ibv_pd *xlio_socket_get_pd(xlio_socket_t sock);
  * @par Error Codes:
  * - EINVAL: Socket is not connected or already detached
  * - ENOTSUP: Not supported with listen sockets
+ * - EBUSY: Socket has pending express zero-copy TX descriptors
  *
  * @note During the 2-step socket migration (detach -> attach), there is a time window
  * during which RX packets are dropped until the socket is completely attached to
@@ -641,6 +642,7 @@ int xlio_socket_detach_group(xlio_socket_t sock);
  * - ENOMEM: No memory to complete the operation
  * - ENOTCONN: Failed to attach TX flow
  * - ECONNABORTED: Failed to attach RX flow
+ * - EBUSY: Socket has pending express zero-copy TX descriptors
  */
 int xlio_socket_attach_group(xlio_socket_t sock, xlio_poll_group_t group);
 
