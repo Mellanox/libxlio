@@ -12,6 +12,7 @@
 #include "common/def.h"
 #include "common/log.h"
 #include "common/sys.h"
+#include "common/base.h"
 
 static int _set_config(int argc, char **argv);
 static int _def_config(void);
@@ -38,6 +39,9 @@ int main(int argc, char **argv)
 
     _def_config();
     _set_config(argc, argv);
+
+    /* Must be the last appended listener, see fork_guard_init(). */
+    fork_guard_init();
 
     return RUN_ALL_TESTS();
 }
