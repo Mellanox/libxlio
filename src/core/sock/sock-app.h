@@ -28,10 +28,11 @@ extern map_udp_reuse_port_t g_map_udp_resue_port;
 class sockinfo;
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-/* Snapshot of the parent listen socket's properties, captured by the dup()
- * intercept on Envoy's main thread while the parent is still alive. init_worker()
- * clones the child listener from this snapshot on the worker thread, so the clone
- * never dereferences the (possibly already freed) draining parent sockinfo. */
+/* Source state for cloning a listener's per-worker socket. Captured by the
+ * dup() intercept while the parent is still alive (the Envoy same-address
+ * update path), or materialized by init_worker_tcp() from the live parent
+ * (enable_reuse_port=false) or the fork-inherited parent (nginx), so the clone
+ * never dereferences a draining parent sockinfo. */
 struct dup_listen_snapshot {
     sock_addr sa;
     socklen_t sa_len = 0;

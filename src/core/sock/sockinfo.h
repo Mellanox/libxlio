@@ -363,9 +363,9 @@ public:
     // see is_inherited_option mechanism of sockinfo_tcp for an example.
     void copy_sockopt_fork(const sockinfo *copy_from);
     // Apply the subset of socket properties copied by copy_sockopt_fork() from
-    // plain values. Used by the Envoy listener-update clone path, which captures
-    // the parent's values in a snapshot at dup() time and never holds a parent
-    // sockinfo pointer at clone time.
+    // plain values. Used by every TCP listener clone (clone_offloaded_listener),
+    // whose source state is a by-value snapshot - captured at dup() time or
+    // materialized from the parent - so the clone never needs a parent pointer.
     void copy_sockopt_fork_values(bool is_ipv6only, int back_log);
 #if defined(DEFINED_NGINX)
     virtual void prepare_to_close_socket_pool(bool _push_pop) { NOT_IN_USE(_push_pop); }
