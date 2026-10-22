@@ -1,11 +1,28 @@
+/*
+ * Original work:
+ *
+ * Copyright (c) 2009-2012 Hewlett-Packard Development Company, L.P.
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the MIT license. See COPYING for details.
+ *
+ * Modified Work:
+ *
+ * Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES, ALL RIGHTS RESERVED.
+ *
+ * This software product is a proprietary product of NVIDIA CORPORATION &
+ * AFFILIATES (the "Company") and all right, title, and interest in and to the
+ * software product, including all associated intellectual property rights, are
+ * and shall remain exclusively with the Company.
+ *
+ * This software product is governed by the End User License Agreement
+ * provided with the software product.
+ *
+ */
+
 /**
 *******************************************************************************
 * @file json_object_iterator.h
-*
-* Copyright (c) 2009-2012 Hewlett-Packard Development Company, L.P.
-*
-* This library is free software; you can redistribute it and/or modify
-* it under the terms of the MIT license. See COPYING for details.
 *
 * @brief  An API for iterating over json_type_object objects,
 *         styled to be familiar to C++ programmers.
@@ -20,10 +37,10 @@
 *******************************************************************************
 */
 
-
 #ifndef JSON_OBJECT_ITERATOR_H
 #define JSON_OBJECT_ITERATOR_H
 
+#include "json_types.h"
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -39,16 +56,15 @@ struct json_object_iter_info_;
  * The opaque iterator that references a name/value pair within
  * a JSON Object instance or the "end" iterator value.
  */
-struct json_object_iterator {
-    const void* opaque_;
+struct json_object_iterator
+{
+	const void *opaque_;
 };
-
 
 /**
  * forward declaration of json-c's JSON value instance structure
  */
 struct json_object;
-
 
 /**
  * Initializes an iterator structure to a "default" value that
@@ -72,8 +88,7 @@ struct json_object;
  *
  * @return json_object_iterator
  */
-struct json_object_iterator
-json_object_iter_init_default(void);
+JSON_EXPORT struct json_object_iterator doca_third_party_json_object_iter_init_default(void);
 
 /** Retrieves an iterator to the first pair of the JSON Object.
  *
@@ -106,8 +121,7 @@ json_object_iter_init_default(void);
  *
  * @endcode
  */
-struct json_object_iterator
-json_object_iter_begin(struct json_object* obj);
+JSON_EXPORT struct json_object_iterator doca_third_party_json_object_iter_begin(struct json_object *obj);
 
 /** Retrieves the iterator that represents the position beyond the
  *  last pair of the given JSON Object instance.
@@ -137,8 +151,7 @@ json_object_iter_begin(struct json_object* obj);
  *              (i.e., NOT the last pair, but "beyond the last
  *              pair" value)
  */
-struct json_object_iterator
-json_object_iter_end(const struct json_object* obj);
+JSON_EXPORT struct json_object_iterator doca_third_party_json_object_iter_end(const struct json_object *obj);
 
 /** Returns an iterator to the next pair, if any
  *
@@ -155,9 +168,7 @@ json_object_iter_end(const struct json_object* obj);
  *         of json_object_iter_end() for the same JSON Object
  *         instance.
  */
-void
-json_object_iter_next(struct json_object_iterator* iter);
-
+JSON_EXPORT void doca_third_party_json_object_iter_next(struct json_object_iterator *iter);
 
 /** Returns a const pointer to the name of the pair referenced
  *  by the given iterator.
@@ -174,9 +185,7 @@ json_object_iter_next(struct json_object_iterator* iter);
  *         deleted or modified, and MUST NOT be modified or
  *         freed by the user.
  */
-const char*
-json_object_iter_peek_name(const struct json_object_iterator* iter);
-
+JSON_EXPORT const char *doca_third_party_json_object_iter_peek_name(const struct json_object_iterator *iter);
 
 /** Returns a pointer to the json-c instance representing the
  *  value of the referenced name/value pair, without altering
@@ -197,9 +206,8 @@ json_object_iter_peek_name(const struct json_object_iterator* iter);
  *         the JSON Null value as a NULL json_object instance
  *         pointer.
  */
-struct json_object*
-json_object_iter_peek_value(const struct json_object_iterator* iter);
-
+JSON_EXPORT struct json_object *
+doca_third_party_json_object_iter_peek_value(const struct json_object_iterator *iter);
 
 /** Tests two iterators for equality.  Typically used to test
  *  for end of iteration by comparing an iterator to the
@@ -227,14 +235,11 @@ json_object_iter_peek_value(const struct json_object_iterator* iter);
  *         reference the same name/value pair or are both at
  *         "end"); zero if they are not equal.
  */
-json_bool
-json_object_iter_equal(const struct json_object_iterator* iter1,
-                       const struct json_object_iterator* iter2);
-
+JSON_EXPORT json_bool doca_third_party_json_object_iter_equal(const struct json_object_iterator *iter1,
+                                             const struct json_object_iterator *iter2);
 
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif /* JSON_OBJECT_ITERATOR_H */

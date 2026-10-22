@@ -1,6 +1,28 @@
+/*
+ * Original work:
+ *
+ * json-c (copyright was originally missing from this file)
+ *
+ * Modified Work:
+ *
+ * Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES, ALL RIGHTS RESERVED.
+ *
+ * This software product is a proprietary product of NVIDIA CORPORATION &
+ * AFFILIATES (the "Company") and all right, title, and interest in and to the
+ * software product, including all associated intellectual property rights, are
+ * and shall remain exclusively with the Company.
+ *
+ * This software product is governed by the End User License Agreement
+ * provided with the software product.
+ *
+ */
+
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
 #include <string.h>
 
 #include "json.h"
@@ -13,21 +35,21 @@ int main(int argc, char **argv)
 	 * Check that replacing an existing object keeps the key valid,
 	 * and that it keeps the order the same.
 	 */
-	json_object *my_object = json_object_new_object();
-	json_object_object_add(my_object, "foo1", json_object_new_string("bar1"));
-	json_object_object_add(my_object, "foo2", json_object_new_string("bar2"));
-	json_object_object_add(my_object, "deleteme", json_object_new_string("bar2"));
-	json_object_object_add(my_object, "foo3", json_object_new_string("bar3"));
+	json_object *my_object = doca_third_party_json_object_new_object();
+	doca_third_party_json_object_object_add(my_object, "foo1", doca_third_party_json_object_new_string("bar1"));
+	doca_third_party_json_object_object_add(my_object, "foo2", doca_third_party_json_object_new_string("bar2"));
+	doca_third_party_json_object_object_add(my_object, "deleteme", doca_third_party_json_object_new_string("bar2"));
+	doca_third_party_json_object_object_add(my_object, "foo3", doca_third_party_json_object_new_string("bar3"));
 
 	printf("==== delete-in-loop test starting ====\n");
 
 	int orig_count = 0;
-	json_object_object_foreach(my_object, key0, val0)
+	doca_third_party_json_object_object_foreach(my_object, key0, val0)
 	{
 		printf("Key at index %d is [%s] %d", orig_count, key0, (val0 == NULL));
 		if (strcmp(key0, "deleteme") == 0)
 		{
-			json_object_object_del(my_object, key0);
+			doca_third_party_json_object_object_del(my_object, key0);
 			printf(" (deleted)\n");
 		}
 		else
@@ -39,7 +61,7 @@ int main(int argc, char **argv)
 
 	const char *original_key = NULL;
 	orig_count = 0;
-	json_object_object_foreach(my_object, key, val)
+	doca_third_party_json_object_object_foreach(my_object, key, val)
 	{
 		printf("Key at index %d is [%s] %d\n", orig_count, key, (val == NULL));
 		orig_count++;
@@ -47,14 +69,14 @@ int main(int argc, char **argv)
 			continue;
 		printf("replacing value for key [%s]\n", key);
 		original_key = key;
-		json_object_object_add(my_object, key, json_object_new_string("zzz"));
+		doca_third_party_json_object_object_add(my_object, key, doca_third_party_json_object_new_string("zzz"));
 	}
 
 	printf("==== second loop starting ====\n");
 
 	int new_count = 0;
 	int retval = 0;
-	json_object_object_foreach(my_object, key2, val2)
+	doca_third_party_json_object_object_foreach(my_object, key2, val2)
 	{
 		printf("Key at index %d is [%s] %d\n", new_count, key2, (val2 == NULL));
 		new_count++;
@@ -67,12 +89,12 @@ int main(int argc, char **argv)
 	}
 	if (new_count != orig_count)
 	{
-		printf("mismatch between original count (%d) and new count (%d)\n",
-		       orig_count, new_count);
+		printf("mismatch between original count (%d) and new count (%d)\n", orig_count,
+		       new_count);
 		retval = 1;
 	}
 
-	json_object_put( my_object );
+	doca_third_party_json_object_put(my_object);
 
 	return retval;
 }
