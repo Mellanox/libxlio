@@ -878,6 +878,12 @@ void mce_sys_var::get_env_params()
     nginx_udp_socket_pool_size = MCE_DEFAULT_NGINX_UDP_POOL_SIZE;
     nginx_udp_socket_pool_rx_num_buffs_reuse = MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE;
 #endif
+#if defined(DEFINED_NGINX)
+    nginx_workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
+#endif
+#if defined(DEFINED_ENVOY)
+    envoy_workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
+#endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     app.type = APP_NONE;
     app.workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
@@ -944,8 +950,21 @@ void mce_sys_var::get_env_params()
 #endif // DEFINED_NGINX
 #if defined(DEFINED_ENVOY)
     if ((env_ptr = getenv(SYS_VAR_ENVOY_WORKERS_NUM)) != NULL) {
-        app.workers_num = (uint32_t)atoi(env_ptr);
-        if (app.workers_num > 0) {
+        // Commit the value only when it selects Envoy: a non-positive value must not clobber a
+        // worker count configured by XLIO_NGINX_WORKERS_NUM above, and Nginx takes precedence
+        // when both applications are configured.
+        int env_workers_num = atoi(env_ptr);
+        bool nginx_takes_precedence = false;
+#if defined(DEFINED_NGINX)
+        if (env_workers_num > 0 && app.type == APP_NGINX) {
+            nginx_takes_precedence = true;
+            vlog_printf(VLOG_WARNING, "Both %s and %s are set; %s takes precedence\n",
+                        SYS_VAR_ENVOY_WORKERS_NUM, SYS_VAR_NGINX_WORKERS_NUM,
+                        SYS_VAR_NGINX_WORKERS_NUM);
+        }
+#endif
+        if (env_workers_num > 0 && !nginx_takes_precedence) {
+            app.workers_num = env_workers_num;
             app.type = APP_ENVOY;
         }
     }

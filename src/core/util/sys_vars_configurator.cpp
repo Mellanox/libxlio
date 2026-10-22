@@ -195,9 +195,9 @@ const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_SIZE {
     "applications.nginx.udp_pool_size"};
 const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE {
     "applications.nginx.udp_socket_pool_reuse"};
-#endif
 const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_WORKERS_NUM {
     "applications.nginx.workers_num"};
+#endif
 #if defined(DEFINED_ENVOY)
 const config_var_info_t<int, int64_t> CONFIG_VAR_ENVOY_WORKERS_NUM {
     "applications.envoy.workers_num"};
@@ -628,16 +628,19 @@ void sys_var_configurator::initialize_base_variables()
         CONFIG_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE);
 #endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    m_sys_vars.app.type = APP_NONE; // not a config key
-    // Nginx and Envoy share the single app.workers_num field, but a runtime pointer maps to
-    // exactly one config key. An Envoy-enabled build (--enable-envoy) is Envoy-first, so bind the
-    // shared field to the Envoy key there; otherwise bind it to the Nginx key.
-#if defined(DEFINED_ENVOY)
-    m_runtime_registry.register_and_set_default_value(&m_sys_vars.app.workers_num,
-                                                      CONFIG_VAR_ENVOY_WORKERS_NUM);
-#else
-    m_runtime_registry.register_and_set_default_value(&m_sys_vars.app.workers_num,
+    // app.type and app.workers_num are derived by detect_application_profile(), not config keys.
+    // Each application's worker-count key is staged in its own field, so that
+    // set_all_configured_values() re-applies user values to the staging fields only and cannot
+    // overwrite the derived app.workers_num.
+    m_sys_vars.app.type = APP_NONE;
+    m_sys_vars.app.workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
+#if defined(DEFINED_NGINX)
+    m_runtime_registry.register_and_set_default_value(&m_sys_vars.nginx_workers_num,
                                                       CONFIG_VAR_NGINX_WORKERS_NUM);
+#endif
+#if defined(DEFINED_ENVOY)
+    m_runtime_registry.register_and_set_default_value(&m_sys_vars.envoy_workers_num,
+                                                      CONFIG_VAR_ENVOY_WORKERS_NUM);
 #endif
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.app.distribute_cq_interrupts,
                                                       CONFIG_VAR_DISTRIBUTE_CQ);
@@ -715,23 +718,32 @@ void sys_var_configurator::detect_application_profile()
      * Check for specific application configuration first. We can make decisions
      * based on number of workers or application type further.
      */
-    // Nginx and Envoy share app.workers_num; an --enable-envoy build is Envoy-first (the Envoy key
-    // is bound to the shared field in initialize_base_variables()), so detect Envoy here and skip
-    // Nginx. Matches the environment-variable path in get_env_params(): Envoy sets only the
-    // application type, while Nginx additionally auto-applies the Nginx spec profile.
+    // Nginx and Envoy coexist in one binary; each has its own worker-count key and the application
+    // type is selected at runtime. Nginx takes precedence when both keys are set, so an existing
+    // Nginx deployment can never be re-typed by a stray Envoy key in a shared configuration; the
+    // contradictory configuration degrades the newer application and emits a warning. Envoy sets
+    // only the application type, while Nginx additionally auto-applies the Nginx spec profile.
 #if defined(DEFINED_ENVOY)
-    // Read user-set value from registry into app.workers_num now, so that it will be used in the
-    // next line.
+    // Read user-set value from registry into envoy_workers_num now, so that it will be used in
+    // the next lines.
     m_runtime_registry.set_value_if_exists(CONFIG_VAR_ENVOY_WORKERS_NUM.name);
-    if (m_sys_vars.app.workers_num > 0) {
-        m_sys_vars.app.type = APP_ENVOY;
-    }
-#elif defined(DEFINED_NGINX)
-    // Read user-set value from registry into app.workers_num now, so that it will be used in the
-    // next line.
+#endif
+#if defined(DEFINED_NGINX)
+    // Read user-set value from registry into nginx_workers_num now, so that it will be used in
+    // the next lines.
     m_runtime_registry.set_value_if_exists(CONFIG_VAR_NGINX_WORKERS_NUM.name);
-    if (m_sys_vars.app.workers_num > 0) {
+#endif
+#if defined(DEFINED_ENVOY) && defined(DEFINED_NGINX)
+    if (m_sys_vars.envoy_workers_num > 0 && m_sys_vars.nginx_workers_num > 0) {
+        vlog_printf(VLOG_WARNING, "Both %s and %s are set; %s takes precedence\n",
+                    CONFIG_VAR_ENVOY_WORKERS_NUM.name, CONFIG_VAR_NGINX_WORKERS_NUM.name,
+                    CONFIG_VAR_NGINX_WORKERS_NUM.name);
+    }
+#endif
+#if defined(DEFINED_NGINX)
+    if (m_sys_vars.nginx_workers_num > 0) {
         m_sys_vars.app.type = APP_NGINX;
+        m_sys_vars.app.workers_num = m_sys_vars.nginx_workers_num;
         // In order to ease the usage of Nginx cases, we apply Nginx profile when
         // user will choose to use Nginx workers environment variable.
         if (m_sys_vars.mce_spec == MCE_SPEC_NONE) {
@@ -739,6 +751,12 @@ void sys_var_configurator::detect_application_profile()
                                          change_reason::Profile,
                                          std::string(CONFIG_VAR_NGINX_WORKERS_NUM.name) + " > 0");
         }
+    }
+#endif
+#if defined(DEFINED_ENVOY)
+    if (m_sys_vars.app.type == APP_NONE && m_sys_vars.envoy_workers_num > 0) {
+        m_sys_vars.app.type = APP_ENVOY;
+        m_sys_vars.app.workers_num = m_sys_vars.envoy_workers_num;
     }
 #endif
 }

@@ -861,15 +861,16 @@ bool sockinfo::attach_receiver(flow_tuple_with_local_if &flow_key)
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     if (g_p_app->type != APP_NONE && g_p_app->get_worker_id() >= 0) {
-#if defined(DEFINED_ENVOY)
-        if (flow_key.get_protocol() != PROTO_UDP)
-#else
-        if (flow_key.get_protocol() != PROTO_UDP ||
-            (flow_key.get_protocol() == PROTO_UDP &&
-             g_map_udp_resue_port.count(((uint32_t)flow_key.get_family() << 16) |
-                                        ntohs(flow_key.get_dst_port()))))
+        // Per-worker UDP steering applies to Nginx only: the UDP reuse-port map exists in Nginx
+        // builds and is populated by the Nginx socket flow; Envoy UDP listeners are not steered
+        // per worker.
+        bool nginx_udp_reuse_port_steering = false;
+#if defined(DEFINED_NGINX)
+        nginx_udp_reuse_port_steering = g_p_app->type == APP_NGINX &&
+            g_map_udp_resue_port.count(((uint32_t)flow_key.get_family() << 16) |
+                                       ntohs(flow_key.get_dst_port())) != 0;
 #endif
-        {
+        if (flow_key.get_protocol() != PROTO_UDP || nginx_udp_reuse_port_steering) {
             if ((g_p_app->workers_num != g_p_app->workers_pow2) && flow_key.is_3_tuple()) {
                 if (g_p_app->get_worker_id() < (g_p_app->workers_pow2 % g_p_app->workers_num)) {
                     g_p_app->add_second_4t_rule = true;

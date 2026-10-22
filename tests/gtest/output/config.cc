@@ -553,18 +553,74 @@ TEST_F(output, config_periodic_drain_max_cqes_zero)
  */
 TEST_F(output, config_envoy_workers_num)
 {
-    check_file(
-        "config-envoy-workers.json",
-        {
-            // clang-format off
-            "Number of Envoy workers",
+    check_file("config-envoy-workers.json",
+               {
+                   // clang-format off
+            "Number of Envoy workers        4",
             "[applications.envoy.workers_num, Reason: User-configured]"
-            // clang-format on
-        },
-        {// Envoy must not inherit the Nginx spec profile
-         "Nginx profile"});
+                   // clang-format on
+               },
+               {// Envoy must not inherit the Nginx spec profile
+                "Nginx profile"});
 }
 #endif /* DEFINED_ENVOY */
+
+#if defined(DEFINED_NGINX)
+/**
+ * @test output.config_nginx_workers_num
+ * @brief
+ *    Tests that applications.nginx.workers_num selects the Nginx application type
+ *    and auto-applies the Nginx spec profile through the new configuration system.
+ *
+ * @details
+ *    Nginx and Envoy coexist in one binary, each with its own worker-count key.
+ *    print_nginx_workers_num emits the worker count, at INFO level, only when the
+ *    application type is APP_NGINX and the value is non-default. So the banner line
+ *    appears iff detect_application_profile() read applications.nginx.workers_num and
+ *    set APP_NGINX; the spec reason line confirms the Nginx profile was auto-applied.
+ */
+TEST_F(output, config_nginx_workers_num)
+{
+    check_file("config-nginx-workers.json",
+               {
+                   // clang-format off
+            "Number of Nginx workers        4",
+            "[applications.nginx.workers_num, Reason: User-configured]",
+            "Reason: Profile (applications.nginx.workers_num > 0)"
+                   // clang-format on
+               });
+}
+#endif /* DEFINED_NGINX */
+
+#if defined(DEFINED_ENVOY) && defined(DEFINED_NGINX)
+/**
+ * @test output.config_envoy_and_nginx_workers_num_both_set
+ * @brief
+ *    Tests that Nginx takes precedence, with a warning, when both worker-count keys are
+ *    set in one configuration.
+ *
+ * @details
+ *    Nginx precedence protects an existing Nginx deployment from being re-typed by a
+ *    stray Envoy key in a shared configuration; the contradictory configuration degrades
+ *    the newer application and emits a warning.
+ */
+TEST_F(output, config_envoy_and_nginx_workers_num_both_set)
+{
+    check_file(
+        "config-envoy-nginx-workers.json",
+        {
+            // clang-format off
+            "Both applications.envoy.workers_num and applications.nginx.workers_num are set; "
+            "applications.nginx.workers_num takes precedence",
+            // The Nginx worker count (2) must win over the Envoy one (4)
+            "Number of Nginx workers        2",
+            "Reason: Profile (applications.nginx.workers_num > 0)"
+            // clang-format on
+        },
+        {// The Envoy worker count must not be selected when Nginx wins
+         "Number of Envoy workers        4"});
+}
+#endif /* DEFINED_ENVOY && DEFINED_NGINX */
 
 /**
  * @test output.config_ring_elements_count_warning
