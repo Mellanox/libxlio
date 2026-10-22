@@ -929,6 +929,7 @@ void sockinfo_tcp::clean_socket_obj()
     lock_tcp_con();
 
     if (is_cleaned()) {
+        unlock_tcp_con();
         return;
     }
     m_is_cleaned = true;
