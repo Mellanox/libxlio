@@ -391,6 +391,10 @@ static int init_worker(int worker_id, int listen_fd)
             if (ret < 0) {
                 /* Do not listen() on a mis-bound socket; drop it and let the fd
                  * serve on the kernel path (it is already OS-bound/listening). */
+                if (g_p_app->type == APP_ENVOY) {
+                    envoy_degrade_listen_to_kernel(listen_fd, "bind failed");
+                    return 0;
+                }
                 app_logerr("bind() error on listen fd %d; serving on the kernel path", listen_fd);
                 handle_close(child_sock_fd_api->get_fd(), false, true);
                 child_sock_fd_api = nullptr;
@@ -438,6 +442,11 @@ static int init_worker(int worker_id, int listen_fd)
                     app_logdbg("Listen success");
                 }
             }
+        } else if (g_p_app->type == APP_ENVOY) {
+            /* No sockinfo was created; the fd is still OS-listening. */
+            envoy_degrade_listen_to_kernel(listen_fd, "addsocket failed");
+        } else {
+            app_logerr("addsocket() error on listen fd %d; serving on the kernel path", listen_fd);
         }
     }
     if (PROTO_UDP == si->get_protocol()) {
