@@ -1,3 +1,12 @@
+Version 3.71.3-1:
+Date + Time 2026-10-22
+=============================================================
+Added:
+	- RM #5094361 Add optional relaxed ordering for XLIO memory registrations
+
+Fixed:
+	- RM #5328892 Avoid identifying VRF interfaces as bonds
+
 Version 3.71.2-1:
 Date + Time 2026-08-21
 =============================================================
