@@ -44,6 +44,7 @@ config_mapping = {
     "network.timing.hw_ts_conversion": "XLIO_HW_TS_CONVERSION",
     
     # hardware_features section
+    "hardware_features.memory_registration.relaxed_ordering": "XLIO_RELAXED_ORDERING",
     "hardware_features.striding_rq.enable": "XLIO_STRQ",
     "hardware_features.striding_rq.stride_size": "XLIO_STRQ_STRIDE_SIZE_BYTES",
     "hardware_features.striding_rq.strides_num": "XLIO_STRQ_NUM_STRIDES",
