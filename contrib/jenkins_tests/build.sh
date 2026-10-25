@@ -21,13 +21,14 @@ werror_cflags="-g -Werror -Werror=implicit-function-declaration -Werror-implicit
 # Ordered list of builds. 'default' must stay first, so that it is built with
 # test_id=0 and matches the ${build_dir}/0/install symbolic link above.
 # The first build is executed by further stages, such as gtest.sh and test.sh
-build_names=('default' 'debug' 'nginx-off' 'envoy-on' 'static-on' 'werror')
+build_names=('default' 'debug' 'nginx-off' 'envoy-off' 'apps-off' 'static-on' 'werror')
 
 declare -A build_list
 build_list['default']=""
 build_list['debug']="--enable-opt-log=no --enable-debug"
 build_list['nginx-off']="--enable-nginx=no"
-build_list['envoy-on']="--enable-nginx=yes"
+build_list['envoy-off']="--enable-envoy=no"
+build_list['apps-off']="--enable-nginx=no --enable-envoy=no"
 build_list['static-on']="--enable-static --disable-shared"
 build_list['werror']="CFLAGS=\"${werror_cflags}\""
 
