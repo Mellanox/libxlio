@@ -130,8 +130,8 @@ extern const config_var_info_t<uint32_t, int64_t> CONFIG_VAR_MTU;
 #if defined(DEFINED_NGINX)
 extern const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_SIZE;
 extern const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE;
-#endif
 extern const config_var_info_t<int, int64_t> CONFIG_VAR_NGINX_WORKERS_NUM;
+#endif
 #if defined(DEFINED_ENVOY)
 extern const config_var_info_t<int, int64_t> CONFIG_VAR_ENVOY_WORKERS_NUM;
 #endif
