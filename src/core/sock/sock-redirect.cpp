@@ -37,6 +37,7 @@
 #include <sock/sockinfo_tcp.h>
 #include <sock/sockinfo_udp.h>
 
+#include "api_guard.h"
 #include "fd_collection.h"
 #include "util/instrumentation.h"
 
@@ -815,16 +816,27 @@ extern "C" {
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(socket)(int __domain, int __type, int __protocol)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(socket, __domain, __type, __protocol);
+    }
+
     return socket_internal(__domain, __type, __protocol, true, true);
 }
 
 EXPORT_SYMBOL int XLIO_SYMBOL(close)(int __fd)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(close, __fd);
+    }
+
     PROFILE_FUNC
 
     srdr_logdbg_entry("fd=%d", __fd);
 
     bool toclose = handle_close(__fd);
+    guard.release();
     int rc = toclose ? SYSCALL(close, __fd) : 0;
 
     return rc;
@@ -836,6 +848,12 @@ extern void __res_iclose(res_state statp, bool free_addr);
 
 EXPORT_SYMBOL void XLIO_SYMBOL(__res_iclose)(res_state statp, bool free_addr)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        SYSCALL(__res_iclose, statp, free_addr);
+        return;
+    }
+
     PROFILE_FUNC
 
     /* Current implementation doesn't handle XLIO sockets without a shadow socket or from a socket
@@ -861,6 +879,11 @@ EXPORT_SYMBOL void XLIO_SYMBOL(__res_iclose)(res_state statp, bool free_addr)
    Returns 0 on success, -1 for errors.  */
 EXPORT_SYMBOL int XLIO_SYMBOL(shutdown)(int __fd, int __how)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(shutdown, __fd, __how);
+    }
+
     PROFILE_FUNC
 
     srdr_logdbg_entry("fd=%d, how=%d", __fd, __how);
@@ -886,6 +909,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(shutdown)(int __fd, int __how)
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(listen, __fd, backlog);
+    }
+
     PROFILE_FUNC
 
     srdr_logdbg_entry("fd=%d, backlog=%d", __fd, backlog);
@@ -960,6 +988,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
 
 EXPORT_SYMBOL int XLIO_SYMBOL(accept)(int __fd, struct sockaddr *__addr, socklen_t *__addrlen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(accept, __fd, __addr, __addrlen);
+    }
+
     PROFILE_FUNC
 
     sockinfo *p_socket_object = nullptr;
@@ -968,12 +1001,18 @@ EXPORT_SYMBOL int XLIO_SYMBOL(accept)(int __fd, struct sockaddr *__addr, socklen
         return p_socket_object->accept(__addr, __addrlen);
     }
 
+    guard.release();
     return SYSCALL(accept, __fd, __addr, __addrlen);
 }
 
 EXPORT_SYMBOL int XLIO_SYMBOL(accept4)(int __fd, struct sockaddr *__addr, socklen_t *__addrlen,
                                        int __flags)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(accept4, __fd, __addr, __addrlen, __flags);
+    }
+
     PROFILE_FUNC
 
     sockinfo *p_socket_object = nullptr;
@@ -982,6 +1021,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(accept4)(int __fd, struct sockaddr *__addr, sockle
         return p_socket_object->accept4(__addr, __addrlen, __flags);
     }
 
+    guard.release();
     return SYSCALL(accept4, __fd, __addr, __addrlen, __flags);
 }
 
@@ -998,6 +1038,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(accept4)(int __fd, struct sockaddr *__addr, sockle
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(bind)(int __fd, const struct sockaddr *__addr, socklen_t __addrlen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(bind, __fd, __addr, __addrlen);
+    }
+
     int errno_tmp = errno;
 
     PROFILE_FUNC
@@ -1035,6 +1080,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(bind)(int __fd, const struct sockaddr *__addr, soc
    __THROW.  */
 EXPORT_SYMBOL int XLIO_SYMBOL(connect)(int __fd, const struct sockaddr *__to, socklen_t __tolen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(connect, __fd, __to, __tolen);
+    }
+
     int errno_tmp = errno;
 
     PROFILE_FUNC
@@ -1047,15 +1097,18 @@ EXPORT_SYMBOL int XLIO_SYMBOL(connect)(int __fd, const struct sockaddr *__to, so
     sockinfo *p_socket_object = fd_collection_get_sockfd(__fd);
     if (!p_socket_object) {
         srdr_logdbg_exit("Unable to get sock_fd_api");
+        guard.release();
         ret = SYSCALL(connect, __fd, __to, __tolen);
     } else if (!__to || (get_sa_family(__to) != AF_INET && (get_sa_family(__to) != AF_INET6))) {
         p_socket_object->setPassthrough();
+        guard.release();
         ret = SYSCALL(connect, __fd, __to, __tolen);
     } else {
         ret = p_socket_object->connect(__to, __tolen);
         if (p_socket_object->isPassthrough()) {
             handle_close(__fd, false, true);
             if (ret) {
+                guard.release();
                 ret = SYSCALL(connect, __fd, __to, __tolen);
             }
         }
@@ -1087,6 +1140,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(connect)(int __fd, const struct sockaddr *__to, so
 EXPORT_SYMBOL int XLIO_SYMBOL(setsockopt)(int __fd, int __level, int __optname,
                                           __const void *__optval, socklen_t __optlen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(setsockopt, __fd, __level, __optname, __optval, __optlen);
+    }
+
     srdr_logdbg_entry("fd=%d, level=%d, optname=%d", __fd, __level, __optname);
 
     if (!__optval) {
@@ -1131,6 +1189,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(setsockopt)(int __fd, int __level, int __optname,
 EXPORT_SYMBOL int XLIO_SYMBOL(getsockopt)(int __fd, int __level, int __optname, void *__optval,
                                           socklen_t *__optlen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(getsockopt, __fd, __level, __optname, __optval, __optlen);
+    }
+
     PROFILE_FUNC
 
     srdr_logdbg_entry("fd=%d, level=%d, optname=%d", __fd, __level, __optname);
@@ -1174,6 +1237,8 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getsockopt)(int __fd, int __level, int __optname, 
    */
 EXPORT_SYMBOL int XLIO_SYMBOL(fcntl)(int __fd, int __cmd, ...)
 {
+    api_guard guard;
+
     PROFILE_FUNC
 
     srdr_logfunc_entry("fd=%d, cmd=%d", __fd, __cmd);
@@ -1183,6 +1248,10 @@ EXPORT_SYMBOL int XLIO_SYMBOL(fcntl)(int __fd, int __cmd, ...)
     va_start(va, __cmd);
     unsigned long int arg = va_arg(va, unsigned long int);
     va_end(va);
+
+    if (guard.teardown()) {
+        return SYSCALL(fcntl, __fd, __cmd, arg);
+    }
 
     int ret = 0;
     sockinfo *p_socket_object = nullptr;
@@ -1218,6 +1287,8 @@ EXPORT_SYMBOL int XLIO_SYMBOL(fcntl)(int __fd, int __cmd, ...)
 
 EXPORT_SYMBOL int XLIO_SYMBOL(fcntl64)(int __fd, int __cmd, ...)
 {
+    api_guard guard;
+
     PROFILE_FUNC
 
     srdr_logfunc_entry("fd=%d, cmd=%d", __fd, __cmd);
@@ -1227,6 +1298,10 @@ EXPORT_SYMBOL int XLIO_SYMBOL(fcntl64)(int __fd, int __cmd, ...)
     va_start(va, __cmd);
     unsigned long int arg = va_arg(va, unsigned long int);
     va_end(va);
+
+    if (guard.teardown()) {
+        return SYSCALL_ERRNO_UNSUPPORTED(fcntl64, __fd, __cmd, arg);
+    }
 
     int ret = 0;
     sockinfo *p_socket_object = nullptr;
@@ -1262,6 +1337,8 @@ EXPORT_SYMBOL int XLIO_SYMBOL(fcntl64)(int __fd, int __cmd, ...)
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(ioctl)(int __fd, unsigned long int __request, ...)
 {
+    api_guard guard;
+
     PROFILE_FUNC
 
     srdr_logfunc_entry("fd=%d, request=%d", __fd, __request);
@@ -1271,6 +1348,10 @@ EXPORT_SYMBOL int XLIO_SYMBOL(ioctl)(int __fd, unsigned long int __request, ...)
     va_start(va, __request);
     unsigned long int arg = va_arg(va, unsigned long int);
     va_end(va);
+
+    if (guard.teardown()) {
+        return SYSCALL(ioctl, __fd, __request, arg);
+    }
 
     int ret = 0;
 
@@ -1303,6 +1384,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(ioctl)(int __fd, unsigned long int __request, ...)
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(getsockname)(int __fd, struct sockaddr *__name, socklen_t *__namelen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(getsockname, __fd, __name, __namelen);
+    }
+
     PROFILE_FUNC
 
     srdr_logdbg_entry("fd=%d", __fd);
@@ -1317,6 +1403,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getsockname)(int __fd, struct sockaddr *__name, so
 
 EXPORT_SYMBOL int XLIO_SYMBOL(getpeername)(int __fd, struct sockaddr *__name, socklen_t *__namelen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(getpeername, __fd, __name, __namelen);
+    }
+
     PROFILE_FUNC
 
     srdr_logdbg_entry("fd=%d", __fd);
@@ -1345,6 +1436,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(getpeername)(int __fd, struct sockaddr *__name, so
    __THROW.  */
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(read)(int __fd, void *__buf, size_t __nbytes)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(read, __fd, __buf, __nbytes);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d", __fd);
@@ -1359,6 +1455,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(read)(int __fd, void *__buf, size_t __nbytes)
         return p_socket_object->rx(RX_READ, piov, 1, &dummy_flags);
     }
 
+    guard.release();
     return SYSCALL(read, __fd, __buf, __nbytes);
 }
 
@@ -1373,6 +1470,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(read)(int __fd, void *__buf, size_t __nbytes)
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__read_chk)(int __fd, void *__buf, size_t __nbytes,
                                               size_t __buflen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(__read_chk, __fd, __buf, __nbytes, __buflen);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d", __fd);
@@ -1393,6 +1495,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__read_chk)(int __fd, void *__buf, size_t __nb
         return p_socket_object->rx(RX_READ, piov, 1, &dummy_flags);
     }
 
+    guard.release();
     return SYSCALL(__read_chk, __fd, __buf, __nbytes, __buflen);
 }
 #endif
@@ -1405,6 +1508,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__read_chk)(int __fd, void *__buf, size_t __nb
 
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(readv)(int __fd, const struct iovec *iov, int iovcnt)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(readv, __fd, iov, iovcnt);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d", __fd);
@@ -1417,6 +1525,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(readv)(int __fd, const struct iovec *iov, int 
         return p_socket_object->rx(RX_READV, piov, iovcnt, &dummy_flags);
     }
 
+    guard.release();
     return SYSCALL(readv, __fd, iov, iovcnt);
 }
 
@@ -1427,6 +1536,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(readv)(int __fd, const struct iovec *iov, int 
    __THROW.  */
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recv)(int __fd, void *__buf, size_t __nbytes, int __flags)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(recv, __fd, __buf, __nbytes, __flags);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d", __fd);
@@ -1440,6 +1554,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recv)(int __fd, void *__buf, size_t __nbytes, 
         return p_socket_object->rx(RX_RECV, piov, 1, &__flags);
     }
 
+    guard.release();
     return SYSCALL(recv, __fd, __buf, __nbytes, __flags);
 }
 
@@ -1454,6 +1569,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recv)(int __fd, void *__buf, size_t __nbytes, 
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recv_chk)(int __fd, void *__buf, size_t __nbytes,
                                               size_t __buflen, int __flags)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(__recv_chk, __fd, __buf, __nbytes, __buflen, __flags);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d", __fd);
@@ -1473,6 +1593,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recv_chk)(int __fd, void *__buf, size_t __nb
         return p_socket_object->rx(RX_RECV, piov, 1, &__flags);
     }
 
+    guard.release();
     return SYSCALL(__recv_chk, __fd, __buf, __nbytes, __buflen, __flags);
 }
 #endif
@@ -1484,6 +1605,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recv_chk)(int __fd, void *__buf, size_t __nb
    __THROW.  */
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvmsg)(int __fd, struct msghdr *__msg, int __flags)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(recvmsg, __fd, __msg, __flags);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d", __fd);
@@ -1503,6 +1629,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvmsg)(int __fd, struct msghdr *__msg, int _
                                    (socklen_t *)&__msg->msg_namelen, __msg);
     }
 
+    guard.release();
     return SYSCALL(recvmsg, __fd, __msg, __flags);
 }
 
@@ -1534,6 +1661,15 @@ EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
                                         int __flags, struct timespec *__timeout)
 #endif
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        struct timespec timeout = TIMESPEC_INITIALIZER;
+        if (__timeout) {
+            memcpy(&timeout, __timeout, sizeof(timeout));
+        }
+        return SYSCALL(recvmmsg, __fd, __mmsghdr, __vlen, __flags, &timeout);
+    }
+
     PROFILE_FUNC
 
     int num_of_msg = 0;
@@ -1592,6 +1728,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
     if (__timeout) {
         memcpy(&timeout, __timeout, sizeof(timeout));
     }
+    guard.release();
     return SYSCALL(recvmmsg, __fd, __mmsghdr, __vlen, __flags, &timeout);
 }
 
@@ -1605,6 +1742,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(recvmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvfrom)(int __fd, void *__buf, size_t __nbytes, int __flags,
                                             struct sockaddr *__from, socklen_t *__fromlen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(recvfrom, __fd, __buf, __nbytes, __flags, __from, __fromlen);
+    }
+
     ssize_t ret_val = 0;
 
     PROFILE_FUNC
@@ -1619,6 +1761,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(recvfrom)(int __fd, void *__buf, size_t __nbyt
         piov[0].iov_len = __nbytes;
         ret_val = p_socket_object->rx(RX_RECVFROM, piov, 1, &__flags, __from, __fromlen);
     } else {
+        guard.release();
         ret_val = SYSCALL(recvfrom, __fd, __buf, __nbytes, __flags, __from, __fromlen);
     }
     return ret_val;
@@ -1638,6 +1781,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recvfrom_chk)(int __fd, void *__buf, size_t 
                                                   size_t __buflen, int __flags,
                                                   struct sockaddr *__from, socklen_t *__fromlen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(__recvfrom_chk, __fd, __buf, __nbytes, __buflen, __flags, __from, __fromlen);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d", __fd);
@@ -1657,6 +1805,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recvfrom_chk)(int __fd, void *__buf, size_t 
         return p_socket_object->rx(RX_RECVFROM, piov, 1, &__flags, __from, __fromlen);
     }
 
+    guard.release();
     return SYSCALL(__recvfrom_chk, __fd, __buf, __nbytes, __buflen, __flags, __from, __fromlen);
 }
 #endif
@@ -1667,6 +1816,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(__recvfrom_chk)(int __fd, void *__buf, size_t 
    __THROW.  */
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(write)(int __fd, __const void *__buf, size_t __nbytes)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(write, __fd, __buf, __nbytes);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
@@ -1684,6 +1838,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(write)(int __fd, __const void *__buf, size_t _
         return p_socket_object->tx(tx_arg);
     }
 
+    guard.release();
     return SYSCALL(write, __fd, __buf, __nbytes);
 }
 
@@ -1693,6 +1848,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(write)(int __fd, __const void *__buf, size_t _
    __THROW.  */
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(writev)(int __fd, const struct iovec *iov, int iovcnt)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(writev, __fd, iov, iovcnt);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d, %d iov blocks", __fd, iovcnt);
@@ -1709,6 +1869,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(writev)(int __fd, const struct iovec *iov, int
         return p_socket_object->tx(tx_arg);
     }
 
+    guard.release();
     return SYSCALL(writev, __fd, iov, iovcnt);
 }
 
@@ -1718,6 +1879,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(writev)(int __fd, const struct iovec *iov, int
    __THROW.  */
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(send)(int __fd, __const void *__buf, size_t __nbytes, int __flags)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(send, __fd, __buf, __nbytes, __flags);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
@@ -1736,6 +1902,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(send)(int __fd, __const void *__buf, size_t __
         return p_socket_object->tx(tx_arg);
     }
 
+    guard.release();
     return SYSCALL(send, __fd, __buf, __nbytes, __flags);
 }
 
@@ -1746,6 +1913,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(send)(int __fd, __const void *__buf, size_t __
    __THROW.  */
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendmsg)(int __fd, __const struct msghdr *__msg, int __flags)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(sendmsg, __fd, __msg, __flags);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d", __fd);
@@ -1756,6 +1928,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendmsg)(int __fd, __const struct msghdr *__ms
         return sendmsg_internal(p_socket_object, __msg, __flags);
     }
 
+    guard.release();
     return SYSCALL(sendmsg, __fd, __msg, __flags);
 }
 
@@ -1767,6 +1940,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendmsg)(int __fd, __const struct msghdr *__ms
 EXPORT_SYMBOL int XLIO_SYMBOL(sendmmsg)(int __fd, struct mmsghdr *__mmsghdr, unsigned int __vlen,
                                         int __flags)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(sendmmsg, __fd, __mmsghdr, __vlen, __flags);
+    }
+
     int num_of_msg = 0;
 
     PROFILE_FUNC
@@ -1807,6 +1985,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(sendmmsg)(int __fd, struct mmsghdr *__mmsghdr, uns
         return num_of_msg;
     }
 
+    guard.release();
     return SYSCALL(sendmmsg, __fd, __mmsghdr, __vlen, __flags);
 }
 
@@ -1819,6 +1998,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendto)(int __fd, __const void *__buf, size_t 
                                           int __flags, const struct sockaddr *__to,
                                           socklen_t __tolen)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(sendto, __fd, __buf, __nbytes, __flags, __to, __tolen);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("fd=%d, nbytes=%d", __fd, __nbytes);
@@ -1839,11 +2023,17 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendto)(int __fd, __const void *__buf, size_t 
         return p_socket_object->tx(tx_arg);
     }
 
+    guard.release();
     return SYSCALL(sendto, __fd, __buf, __nbytes, __flags, __to, __tolen);
 }
 
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile)(int out_fd, int in_fd, off_t *offset, size_t count)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(sendfile, out_fd, in_fd, offset, count);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
@@ -1851,6 +2041,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile)(int out_fd, int in_fd, off_t *offset
 
     sockinfo *p_socket_object = fd_collection_get_sockfd(out_fd);
     if (!p_socket_object) {
+        guard.release();
         return SYSCALL(sendfile, out_fd, in_fd, offset, count);
     }
 
@@ -1860,6 +2051,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile)(int out_fd, int in_fd, off_t *offset
 EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile64)(int out_fd, int in_fd, __off64_t *offset,
                                               size_t count)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(sendfile64, out_fd, in_fd, offset, count);
+    }
+
     PROFILE_FUNC
 
     srdr_logfuncall_entry("out_fd=%d, in_fd=%d, offset=%p, *offset=%zu, count=%d", out_fd, in_fd,
@@ -1867,6 +2063,7 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile64)(int out_fd, int in_fd, __off64_t *
 
     sockinfo *p_socket_object = fd_collection_get_sockfd(out_fd);
     if (!p_socket_object) {
+        guard.release();
         return SYSCALL(sendfile64, out_fd, in_fd, offset, count);
     }
 
@@ -1876,9 +2073,11 @@ EXPORT_SYMBOL ssize_t XLIO_SYMBOL(sendfile64)(int out_fd, int in_fd, __off64_t *
 EXPORT_SYMBOL int XLIO_SYMBOL(select)(int __nfds, fd_set *__readfds, fd_set *__writefds,
                                       fd_set *__exceptfds, struct timeval *__timeout)
 {
+    api_guard guard;
+
     PROFILE_FUNC
 
-    if (!g_p_fd_collection) {
+    if (guard.teardown() || !g_p_fd_collection) {
         return SYSCALL(select, __nfds, __readfds, __writefds, __exceptfds, __timeout);
     }
 
@@ -1896,9 +2095,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(pselect)(int __nfds, fd_set *__readfds, fd_set *__
                                        fd_set *__errorfds, const struct timespec *__timeout,
                                        const sigset_t *__sigmask)
 {
+    api_guard guard;
+
     PROFILE_FUNC
 
-    if (!g_p_fd_collection) {
+    if (guard.teardown() || !g_p_fd_collection) {
         return SYSCALL(pselect, __nfds, __readfds, __writefds, __errorfds, __timeout, __sigmask);
     }
 
@@ -1918,9 +2119,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(pselect)(int __nfds, fd_set *__readfds, fd_set *__
 
 EXPORT_SYMBOL int XLIO_SYMBOL(poll)(struct pollfd *__fds, nfds_t __nfds, int __timeout)
 {
+    api_guard guard;
+
     PROFILE_FUNC
 
-    if (!g_p_fd_collection) {
+    if (guard.teardown() || !g_p_fd_collection) {
         return SYSCALL(poll, __fds, __nfds, __timeout);
     }
 
@@ -1933,9 +2136,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(poll)(struct pollfd *__fds, nfds_t __nfds, int __t
 EXPORT_SYMBOL int XLIO_SYMBOL(__poll_chk)(struct pollfd *__fds, nfds_t __nfds, int __timeout,
                                           size_t __fdslen)
 {
+    api_guard guard;
+
     PROFILE_FUNC
 
-    if (!g_p_fd_collection) {
+    if (guard.teardown() || !g_p_fd_collection) {
         return SYSCALL(__poll_chk, __fds, __nfds, __timeout, __fdslen);
     }
 
@@ -1954,9 +2159,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(__poll_chk)(struct pollfd *__fds, nfds_t __nfds, i
 EXPORT_SYMBOL int XLIO_SYMBOL(ppoll)(struct pollfd *__fds, nfds_t __nfds,
                                      const struct timespec *__timeout, const sigset_t *__sigmask)
 {
+    api_guard guard;
+
     PROFILE_FUNC
 
-    if (!g_p_fd_collection) {
+    if (guard.teardown() || !g_p_fd_collection) {
         return SYSCALL(ppoll, __fds, __nfds, __timeout, __sigmask);
     }
 
@@ -1972,9 +2179,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(__ppoll_chk)(struct pollfd *__fds, nfds_t __nfds,
                                            const struct timespec *__timeout,
                                            const sigset_t *__sigmask, size_t __fdslen)
 {
+    api_guard guard;
+
     PROFILE_FUNC
 
-    if (!g_p_fd_collection) {
+    if (guard.teardown() || !g_p_fd_collection) {
         return SYSCALL(__ppoll_chk, __fds, __nfds, __timeout, __sigmask, __fdslen);
     }
 
@@ -2006,6 +2215,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(__ppoll_chk)(struct pollfd *__fds, nfds_t __nfds,
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(epoll_create)(int __size)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(epoll_create, __size);
+    }
+
     DO_GLOBAL_CTORS();
 
     PROFILE_FUNC
@@ -2040,6 +2254,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_create)(int __size)
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(epoll_create1)(int __flags)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(epoll_create1, __flags);
+    }
+
     DO_GLOBAL_CTORS();
 
     PROFILE_FUNC
@@ -2071,6 +2290,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_create1)(int __flags)
 EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
                                          struct epoll_event *__event)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(epoll_ctl, __epfd, __op, __fd, __event);
+    }
+
     PROFILE_FUNC
     const static char *op_names[] = {"<null>", "ADD", "DEL", "MOD"};
     NOT_IN_USE(op_names); /* to suppress warning in case MAX_DEFINED_LOG_LEVEL */
@@ -2107,6 +2331,13 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
 EXPORT_SYMBOL int XLIO_SYMBOL(epoll_wait)(int __epfd, struct epoll_event *__events, int __maxevents,
                                           int __timeout)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        // No OS fallback: the kernel epfd holds XLIO-internal registrations and event data.
+        errno = EINTR;
+        return -1;
+    }
+
     PROFILE_FUNC
 
     srdr_logfunc_entry("epfd=%d, maxevents=%d, timeout=(%d milli-sec)", __epfd, __maxevents,
@@ -2119,6 +2350,13 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_pwait)(int __epfd, struct epoll_event *__eve
                                            int __maxevents, int __timeout,
                                            const sigset_t *__sigmask)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        // No OS fallback: the kernel epfd holds XLIO-internal registrations and event data.
+        errno = EINTR;
+        return -1;
+    }
+
     PROFILE_FUNC
 
     srdr_logfunc_entry("epfd=%d, maxevents=%d, timeout=(%d milli-sec)", __epfd, __maxevents,
@@ -2141,6 +2379,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_pwait)(int __epfd, struct epoll_event *__eve
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(socketpair)(int __domain, int __type, int __protocol, int __sv[2])
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(socketpair, __domain, __type, __protocol, __sv);
+    }
+
     PROFILE_FUNC
 
     int ret = SYSCALL(socketpair, __domain, __type, __protocol, __sv);
@@ -2169,6 +2412,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(socketpair)(int __domain, int __type, int __protoc
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(pipe)(int __filedes[2])
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(pipe, __filedes);
+    }
+
     PROFILE_FUNC
 
     int ret = SYSCALL(pipe, __filedes);
@@ -2187,9 +2435,16 @@ EXPORT_SYMBOL int XLIO_SYMBOL(pipe)(int __filedes[2])
 
 EXPORT_SYMBOL int XLIO_SYMBOL(open)(__const char *__file, int __oflag, ...)
 {
+    api_guard guard;
+
     va_list va;
     va_start(va, __oflag);
     mode_t mode = va_arg(va, mode_t);
+
+    if (guard.teardown()) {
+        va_end(va);
+        return SYSCALL(open, __file, __oflag, mode);
+    }
 
     PROFILE_FUNC
 
@@ -2206,6 +2461,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(open)(__const char *__file, int __oflag, ...)
 
 EXPORT_SYMBOL int XLIO_SYMBOL(creat)(const char *__pathname, mode_t __mode)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(creat, __pathname, __mode);
+    }
+
     PROFILE_FUNC
 
     int fd = SYSCALL(creat, __pathname, __mode);
@@ -2229,6 +2489,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(creat)(const char *__pathname, mode_t __mode)
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(dup)(int __fd)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(dup, __fd);
+    }
+
     PROFILE_FUNC
 
     int fid = SYSCALL(dup, __fd);
@@ -2259,6 +2524,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(dup)(int __fd)
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(dup2)(int __fd, int __fd2)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(dup2, __fd, __fd2);
+    }
+
     PROFILE_FUNC
 
     if (safe_mce_sys().close_on_dup2 && __fd != __fd2) {
@@ -2286,6 +2556,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(dup2)(int __fd, int __fd2)
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(fork);
+    }
+
     PROFILE_FUNC
 
     srdr_logdbg("ENTER: **********");
@@ -2390,6 +2665,11 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
 /* Redirect vfork to fork  */
 EXPORT_SYMBOL pid_t XLIO_SYMBOL(vfork)(void)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(fork);
+    }
+
     PROFILE_FUNC
 
     return XLIO_CALL(fork);
@@ -2407,6 +2687,11 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(vfork)(void)
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(daemon)(int __nochdir, int __noclose)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(daemon, __nochdir, __noclose);
+    }
+
     PROFILE_FUNC
 
     srdr_logdbg("ENTER: ***** (%d, %d) *****", __nochdir, __noclose);
@@ -2459,6 +2744,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(daemon)(int __nochdir, int __noclose)
 EXPORT_SYMBOL int XLIO_SYMBOL(sigaction)(int signum, const struct sigaction *act,
                                          struct sigaction *oldact)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(sigaction, signum, act, oldact);
+    }
+
     return sigaction_internal(signum, act, oldact);
 }
 
@@ -2474,6 +2764,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(sigaction)(int signum, const struct sigaction *act
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL sighandler_t XLIO_SYMBOL(signal)(int signum, sighandler_t handler)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(signal, signum, handler);
+    }
+
     PROFILE_FUNC
 
     if (signum == SIGINT && safe_mce_sys().handle_sigintr) {
@@ -2509,6 +2804,11 @@ EXPORT_SYMBOL sighandler_t XLIO_SYMBOL(signal)(int signum, sighandler_t handler)
 // coverity[UNCAUGHT_EXCEPT]
 EXPORT_SYMBOL int XLIO_SYMBOL(setuid)(uid_t uid)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(setuid, uid);
+    }
+
     PROFILE_FUNC
 
     uid_t previous_uid = geteuid();
@@ -2527,6 +2827,11 @@ EXPORT_SYMBOL int XLIO_SYMBOL(setuid)(uid_t uid)
 
 EXPORT_SYMBOL pid_t XLIO_SYMBOL(waitpid)(pid_t pid, int *wstatus, int options)
 {
+    api_guard guard;
+    if (guard.teardown()) {
+        return SYSCALL(waitpid, pid, wstatus, options);
+    }
+
     PROFILE_FUNC
 
     pid_t child_pid = SYSCALL(waitpid, pid, wstatus, options);
