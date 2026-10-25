@@ -553,18 +553,141 @@ TEST_F(output, config_periodic_drain_max_cqes_zero)
  */
 TEST_F(output, config_envoy_workers_num)
 {
-    check_file(
-        "config-envoy-workers.json",
-        {
-            // clang-format off
-            "Number of Envoy workers",
+    check_file("config-envoy-workers.json",
+               {
+                   // clang-format off
+            "Number of Envoy workers        4",
             "[applications.envoy.workers_num, Reason: User-configured]"
-            // clang-format on
-        },
-        {// Envoy must not inherit the Nginx spec profile
-         "Nginx profile"});
+                   // clang-format on
+               },
+               {// Envoy must not inherit the Nginx spec profile
+                "Nginx profile"});
+}
+
+/**
+ * @test output.config_envoy_workers_env
+ * @brief
+ *    Tests that XLIO_ENVOY_WORKERS_NUM selects the Envoy application type on the
+ *    environment path.
+ *
+ * @details
+ *    Same selection contract as config_envoy_workers_num on the environment path: the
+ *    parse commits the value only when it is positive, and a positive value selects
+ *    APP_ENVOY, so the banner reports the worker count against the environment key.
+ */
+TEST_F(output, config_envoy_workers_env)
+{
+    std::string cmd = "XLIO_USE_NEW_CONFIG=0 XLIO_ENVOY_WORKERS_NUM=4 ls";
+    exec_cmd_to_file(cmd, m_output_file);
+    std::string text = read_file(m_output_file);
+
+    ASSERT_NE(std::string::npos, text.find("Number of Envoy workers        4")) << text;
+    ASSERT_NE(std::string::npos, text.find("[XLIO_ENVOY_WORKERS_NUM]")) << text;
+    ASSERT_EQ(std::string::npos, text.find("mutually exclusive")) << text;
 }
 #endif /* DEFINED_ENVOY */
+
+#if defined(DEFINED_NGINX)
+/**
+ * @test output.config_nginx_workers_num
+ * @brief
+ *    Tests that applications.nginx.workers_num selects the Nginx application type
+ *    and auto-applies the Nginx spec profile through the new configuration system.
+ *
+ * @details
+ *    Nginx and Envoy coexist in one binary, each with its own worker-count key.
+ *    print_nginx_workers_num emits the worker count, at INFO level, only when the
+ *    application type is APP_NGINX and the value is non-default. So the banner line
+ *    appears iff detect_application_profile() read applications.nginx.workers_num and
+ *    set APP_NGINX; the spec reason line confirms the Nginx profile was auto-applied.
+ */
+TEST_F(output, config_nginx_workers_num)
+{
+    check_file("config-nginx-workers.json",
+               {
+                   // clang-format off
+            "Number of Nginx workers        4",
+            "[applications.nginx.workers_num, Reason: User-configured]",
+            "Reason: Profile (applications.nginx.workers_num > 0)"
+                   // clang-format on
+               });
+}
+#endif /* DEFINED_NGINX */
+
+#if defined(DEFINED_ENVOY) && defined(DEFINED_NGINX)
+/**
+ * @test output.config_envoy_and_nginx_workers_num_both_set
+ * @brief
+ *    Tests that XLIO exits when both worker-count keys are set in one configuration.
+ *
+ * @details
+ *    Nginx and Envoy are mutually exclusive application types in one binary, so supplying
+ *    both worker-count keys is a contradictory configuration. detect_application_profile()
+ *    emits an error and exits the process before selecting an application, so neither the
+ *    Nginx nor the Envoy worker count is applied. This test runs the command directly
+ *    (not through check_file) because a non-zero exit is the expected outcome.
+ */
+TEST_F(output, config_envoy_and_nginx_workers_num_both_set)
+{
+    std::string full_filename = m_prefix + "/config-envoy-nginx-workers.json";
+    // Run through system() (not exec_cmd_to_file, which raises on a non-zero exit) and keep the
+    // raw status, because a non-zero exit is this test's expected outcome. The conflicting config
+    // must be scoped to an inner shell: LD_PRELOAD carries libxlio into the outer redirecting
+    // shell too, and if that shell saw the conflict it would exit before opening the output file
+    // (bash execs a lone command in place), losing the captured error.
+    std::string cmd = "sh -c \"XLIO_USE_NEW_CONFIG=1 XLIO_CONFIG_FILE=" + full_filename +
+        " ls\" > " + m_output_file + " 2>&1";
+    int rc = system(cmd.c_str());
+    std::string text = read_file(m_output_file);
+
+    // XLIO must reject the contradictory configuration with a non-zero exit.
+    ASSERT_NE(0, rc) << "Expected a non-zero exit when both worker-count keys are set:" << std::endl
+                     << text;
+    ASSERT_NE(std::string::npos,
+              text.find("applications.nginx.workers_num and applications.envoy.workers_num are "
+                        "mutually exclusive"))
+        << text;
+    // Neither application may be selected: the process exits before any worker count is applied.
+    ASSERT_EQ(std::string::npos, text.find("Number of Nginx workers")) << text;
+    ASSERT_EQ(std::string::npos, text.find("Number of Envoy workers")) << text;
+}
+
+/**
+ * @test output.config_envoy_and_nginx_workers_env_both_set
+ * @brief
+ *    Tests that XLIO exits when both worker-count environment variables are set.
+ *
+ * @details
+ *    Same contract as config_envoy_and_nginx_workers_num_both_set on the environment path:
+ *    XLIO_NGINX_WORKERS_NUM and XLIO_ENVOY_WORKERS_NUM select mutually exclusive application
+ *    types, so get_env_params() emits an error and exits the process before an application is
+ *    selected.
+ */
+TEST_F(output, config_envoy_and_nginx_workers_env_both_set)
+{
+    // Same system()-with-raw-status and inner-shell scoping as
+    // config_envoy_and_nginx_workers_num_both_set: the conflicting variables must stay off the
+    // outer redirecting shell, which also has libxlio preloaded, so it opens the output file
+    // before any conflict exit.
+    std::string cmd = "sh -c \"XLIO_USE_NEW_CONFIG=0 XLIO_NGINX_WORKERS_NUM=2 "
+                      "XLIO_ENVOY_WORKERS_NUM=4 ls\" > " +
+        m_output_file + " 2>&1";
+    int rc = system(cmd.c_str());
+    std::string text = read_file(m_output_file);
+
+    // XLIO must reject the contradictory configuration with a non-zero exit.
+    ASSERT_NE(0, rc) << "Expected a non-zero exit when both worker-count variables are set:"
+                     << std::endl
+                     << text;
+    ASSERT_NE(std::string::npos,
+              text.find("XLIO_NGINX_WORKERS_NUM and XLIO_ENVOY_WORKERS_NUM are mutually "
+                        "exclusive"))
+        << text;
+    // Neither application may be selected: the process exits before any worker count is applied.
+    ASSERT_EQ(std::string::npos, text.find("Number of Nginx workers")) << text;
+    ASSERT_EQ(std::string::npos, text.find("Number of Envoy workers")) << text;
+}
+#endif /* DEFINED_ENVOY && DEFINED_NGINX */
 
 /**
  * @test output.config_ring_elements_count_warning

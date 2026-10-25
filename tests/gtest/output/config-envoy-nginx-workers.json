@@ -1,0 +1,10 @@
+{
+  "applications": {
+    "nginx": {
+      "workers_num": 2
+    },
+    "envoy": {
+      "workers_num": 4
+    }
+  }
+}
