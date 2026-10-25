@@ -380,6 +380,15 @@ libxlio_la_DEPENDENCIES = \
 	$(LIBJSON_LIBS) \
 	$(DPCP_LIB_DEPENDENCY)
 
+# Internal tests need hidden C++ symbols, but must not interpose libc calls or
+# initialize XLIO before main(). Build this archive only when unit_tests asks.
+EXTRA_LTLIBRARIES = libxlio_unit_tests.la
+libxlio_unit_tests_la_SOURCES = $(libxlio_la_SOURCES)
+libxlio_unit_tests_la_CFLAGS = -DXLIO_STATIC_BUILD
+libxlio_unit_tests_la_CXXFLAGS = -DXLIO_STATIC_BUILD
+libxlio_unit_tests_la_LIBADD = $(libxlio_la_LIBADD)
+libxlio_unit_tests_la_DEPENDENCIES = $(libxlio_la_DEPENDENCIES)
+
 if XLIO_AND_DPCP_ARE_STATIC
 
 # Adding libdpcp.a into libxlio.so is easy - ar does this automatically.

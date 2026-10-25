@@ -6,7 +6,6 @@
 
 #include "sockinfo.h"
 
-#include <atomic>
 #include <sys/epoll.h>
 #include <netdb.h>
 #include <linux/sockios.h>
@@ -263,19 +262,22 @@ int sockinfo::fcntl64(int __cmd, unsigned long int __arg)
 
 int sockinfo::get_epoll_context_fd()
 {
-    return (has_epoll_context() ? m_econtext->get_epoll_fd() : 0);
+    epfd_info *epfd = m_econtext.load(std::memory_order_acquire);
+    return epfd ? epfd->get_epoll_fd() : 0;
 }
 
 void sockinfo::insert_epoll_event(uint64_t events)
 {
-    if (m_entity_context) {
-        // Worker threads notify without the epfd lock. Pairs with the fence in
-        // epfd_info::add_fd()/mod_fd(): either this thread sees the new registration, or the
-        // registering thread sees the state published before this call and reports it.
+    if (safe_mce_sys().is_threads_mode()) {
+        // Includes RSS-parent notifications: the parent has no entity owner.
+        // With the fence after registration in add_fd()/mod_fd(), both sides
+        // cannot miss the other's atomic store. Queue writers are serialized
+        // by the socket lock, so readiness stores themselves can be relaxed.
         std::atomic_thread_fence(std::memory_order_seq_cst);
     }
-    if (has_epoll_context()) {
-        m_econtext->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
+    epfd_info *epfd = m_econtext.load(std::memory_order_acquire);
+    if (epfd) {
+        epfd->insert_epoll_event_cb(this, static_cast<uint32_t>(events));
     }
 }
 
@@ -1247,7 +1249,7 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
 
     if (!m_econtext) {
         // This socket is not registered to any epfd
-        m_econtext = epfd;
+        m_econtext.store(epfd, std::memory_order_release);
         set_epoll_event_flags_thread(0);
     } else {
         // Currently XLIO does not support more then 1 epfd listed
@@ -1266,7 +1268,7 @@ int sockinfo::add_epoll_context(epfd_info *epfd)
     sock_ring_map_iter = m_rx_ring_map.begin();
     while (sock_ring_map_iter != m_rx_ring_map.end()) {
         if (has_epoll_context()) {
-            m_econtext->increase_ring_ref_count(sock_ring_map_iter->first);
+            m_econtext.load()->increase_ring_ref_count(sock_ring_map_iter->first);
         }
         sock_ring_map_iter++;
     }
@@ -1292,12 +1294,12 @@ void sockinfo::remove_epoll_context(epfd_info *epfd)
 
     rx_ring_map_t::const_iterator sock_ring_map_iter = m_rx_ring_map.begin();
     while (sock_ring_map_iter != m_rx_ring_map.end()) {
-        m_econtext->decrease_ring_ref_count(sock_ring_map_iter->first);
+        m_econtext.load()->decrease_ring_ref_count(sock_ring_map_iter->first);
         sock_ring_map_iter++;
     }
 
     if (m_econtext == epfd) {
-        m_econtext = NULL;
+        m_econtext.store(nullptr, std::memory_order_release);
     }
 
     if (safe_mce_sys().skip_poll_in_rx == SKIP_POLL_IN_RX_EPOLL_ONLY) {
@@ -1332,7 +1334,7 @@ void sockinfo::statistics_print(vlog_levels_t log_level /* = VLOG_DEBUG */)
     vlog_printf(log_level, "Fd number : %d\n", m_fd);
     if (epoll_fd) {
         vlog_printf(log_level, "Socket epoll Fd : %d\n", epoll_fd);
-        vlog_printf(log_level, "Socket epoll flags : 0x%x\n", m_fd_rec.events);
+        vlog_printf(log_level, "Socket epoll flags : 0x%x\n", m_fd_rec.events.load());
     }
 
     vlog_printf(log_level, "Bind info : %s\n", m_bound.to_str_ip_port(true).c_str());
@@ -1571,7 +1573,7 @@ void sockinfo::rx_add_ring_cb(ring *p_ring)
         // close) and here. need to add a third-side lock (fd_collection?) to sync between epoll and
         // socket.
         if (has_epoll_context()) {
-            m_econtext->increase_ring_ref_count(p_ring);
+            m_econtext.load()->increase_ring_ref_count(p_ring);
         }
     }
 
@@ -1647,7 +1649,7 @@ void sockinfo::rx_del_ring_cb(ring *p_ring)
         // close) and here. need to add a third-side lock (fd_collection?) to sync between epoll and
         // socket.
         if (has_epoll_context()) {
-            m_econtext->decrease_ring_ref_count(base_ring);
+            m_econtext.load()->decrease_ring_ref_count(base_ring);
         }
     }
 
@@ -1694,7 +1696,7 @@ void sockinfo::pop_descs_rx_ready(descq_t *cache, ring *p_ring)
             push_back_m_rx_pkt_ready_list(temp);
             continue;
         }
-        m_n_rx_pkt_ready_list_count--;
+        add_rx_ready_count(-1);
         m_rx_ready_byte_count -= temp->rx.sz_payload;
         if (m_p_socket_stats) {
             m_p_socket_stats->n_rx_ready_pkt_count--;
@@ -1715,7 +1717,7 @@ void sockinfo::push_descs_rx_ready(descq_t *cache)
         /* coverity[returned_null] */
         temp = cache->front();
         cache->pop_front();
-        m_n_rx_pkt_ready_list_count++;
+        add_rx_ready_count(1);
         /* coverity[nonnull] */
         m_rx_ready_byte_count += temp->rx.sz_payload;
         if (m_p_socket_stats) {

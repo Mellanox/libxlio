@@ -328,7 +328,8 @@ bool epoll_wait_call::handle_epoll_event(bool is_ready, uint32_t events, sockinf
 
         if (fd_rec.events & EPOLLONESHOT) {
             // Clear events for this fd
-            fd_rec.events &= ~events;
+            fd_rec.events.store(fd_rec.events.load(std::memory_order_relaxed) & ~events,
+                                std::memory_order_relaxed);
         }
         if (fd_rec.events & EPOLLET) {
             m_epfd_info->remove_epoll_event(socket_object, events);

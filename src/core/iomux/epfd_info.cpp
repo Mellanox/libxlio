@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
-#include <atomic>
 #include <sock/fd_collection.h>
 #include <iomux/epfd_info.h>
 #include "event/entity_context.h"
@@ -214,7 +213,7 @@ int epfd_info::add_fd(int fd, epoll_event *event)
         BULLSEYE_EXCLUDE_BLOCK_END
     }
 
-    fd_rec.events = event->events;
+    fd_rec.events.store(event->events, std::memory_order_relaxed);
     fd_rec.epdata = event->data;
 
     if (is_offloaded) { // TODO: do we need to handle offloading only for one of read/write?
@@ -258,9 +257,12 @@ int epfd_info::add_fd(int fd, epoll_event *event)
         m_fd_offloaded_list.push_back(temp_sock_fd_api);
         fd_rec.offloaded_index = m_n_offloaded_fds;
         temp_sock_fd_api->m_fd_rec = fd_rec;
-        // Pairs with the fence in sockinfo::insert_epoll_event(): a worker thread that missed
-        // this registration has published its state, so the checks below see it.
-        std::atomic_thread_fence(std::memory_order_seq_cst);
+        if (safe_mce_sys().is_threads_mode()) {
+            // Pairs with the worker's fence in sockinfo::insert_epoll_event().
+            // Atomic accesses on both sides keep the store/load handshake
+            // defined in C++; either registration or readiness is observed.
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        }
 
         // if the socket is ready, add it to ready events
         uint32_t events = 0;
@@ -528,11 +530,14 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
 
     // modify fd data in local table
     fd_rec->epdata = event->data;
-    fd_rec->events = event->events;
-    // Pairs with the fence in sockinfo::insert_epoll_event(), see add_fd().
-    std::atomic_thread_fence(std::memory_order_seq_cst);
+    fd_rec->events.store(event->events, std::memory_order_relaxed);
 
     bool is_offloaded = temp_sock_fd_api && temp_sock_fd_api->get_type() == FD_TYPE_SOCKET;
+
+    if (is_offloaded && safe_mce_sys().is_threads_mode()) {
+        // See add_fd(). R2C callbacks instead serialize on the epfd lock.
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+    }
 
     uint32_t events = 0;
     if (is_offloaded) {
@@ -552,7 +557,13 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
     }
 
     if (event->events == 0 || events == 0) {
-        remove_socket_from_ready_list(temp_sock_fd_api);
+        if (temp_sock_fd_api) {
+            // Only discard application-side hints. A worker may have queued
+            // new readiness after the probe above; leave its context-list entry
+            // for epoll_wait(), which filters it against the current mask and
+            // readiness. DEL still removes entries from both lists.
+            remove_epoll_event(temp_sock_fd_api, temp_sock_fd_api->get_epoll_event_flags());
+        }
     }
 
     __log_func("fd %d modified in epfd %d with events=%#x and data=%#x", fd, m_epfd, event->events,
@@ -592,7 +603,8 @@ void epfd_info::insert_epoll_event_cb(sockinfo *sock_fd, uint32_t event_flags)
 {
     if (sock_fd->get_entity_context()) {
         // EPOLLHUP | EPOLLERR are reported without user request
-        if (event_flags & (sock_fd->m_fd_rec.events | EPOLLHUP | EPOLLERR)) {
+        if (event_flags &
+            (sock_fd->m_fd_rec.events.load(std::memory_order_relaxed) | EPOLLHUP | EPOLLERR)) {
             size_t vecindex =
                 sock_fd->get_entity_context()->get_index() % m_entity_context_events.size();
             // The wakeup decision is taken under the per-context lock that the
@@ -876,10 +888,19 @@ void epfd_info_entity_context_events::move_epoll_ready_events(ep_ready_fd_list_t
 
     sockinfo *si = m_epoll_ready_sockets.front();
     while (si) {
-        si->set_epoll_event_flags(si->get_epoll_event_flags() | si->get_epoll_event_flags_thread());
+        // MOD can change the mask after a worker queues a hint. Drop disabled
+        // events here, under the epfd and context locks, rather than erasing a
+        // concurrently arriving notification during MOD's readiness probe.
+        uint32_t events = (si->get_epoll_event_flags() | si->get_epoll_event_flags_thread()) &
+            (si->m_fd_rec.events.load() | EPOLLERR | EPOLLHUP);
+        si->set_epoll_event_flags(events);
         si->set_epoll_event_flags_thread(0);
-        if (!out.is_member(si)) {
-            out.push_back(si);
+        if (events) {
+            if (!out.is_member(si)) {
+                out.push_back(si);
+            }
+        } else if (out.is_member(si)) {
+            out.erase(si);
         }
 
         si = m_epoll_ready_sockets.next(si);
