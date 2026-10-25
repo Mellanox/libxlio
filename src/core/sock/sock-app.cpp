@@ -108,8 +108,6 @@ int app_conf::proc_envoy(int __op, int __fd)
             }
             g_p_app->workers.erase_listen_fd(__fd);
         } else if (__op == EPOLL_CTL_ADD) {
-            int worker_id = -1;
-
             /* This check is `enable_reuse_port = false` specific
              *
              * original listen sockets should be created first
@@ -130,7 +128,7 @@ int app_conf::proc_envoy(int __op, int __fd)
             /* Serialize the whole init path; acquired only here, with no
              * other XLIO locks held (contract in sock-app.h) */
             std::lock_guard<decltype(g_p_app->m_init_lock)> init_guard(g_p_app->m_init_lock);
-            worker_id =
+            int worker_id =
                 g_p_app->assign_worker_and_publish(__fd, dynamic_cast<sockinfo *>(p_socket_object));
 
             /* init_worker() can take device-layer locks: no registry lock here */

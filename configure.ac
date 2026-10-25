@@ -287,7 +287,7 @@ fi
 #
 AC_ARG_ENABLE([envoy],
     AS_HELP_STRING([--enable-envoy],
-        [Enable Envoy availability (default=no)]), [], [enable_envoy=no])
+        [Enable Envoy availability (default=yes)]), [], [enable_envoy=yes])
 AC_MSG_CHECKING(
     [for envoy support])
 if test "x$enable_envoy" = xyes; then
