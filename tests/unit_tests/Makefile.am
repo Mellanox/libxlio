@@ -67,6 +67,12 @@ libgtest_la_SOURCES = \
 # unit_tests
 unit_tests_LDADD = libgtest.la $(top_builddir)/src/core/libxlio_unit_tests.la $(DPCP_LIBS)
 
+if XLIO_AND_DPCP_ARE_STATIC
+# DPCP_LIBS is empty here: only libxlio.a receives the merged DPCP objects.
+# The private unit-test archive needs DPCP linked into the executable directly.
+unit_tests_LDADD += $(DPCP_STATIC_LIB)
+endif
+
 unit_tests_CPPFLAGS = \
 	-DXLIO_STATIC_BUILD \
 	-I$(top_srcdir)/ \

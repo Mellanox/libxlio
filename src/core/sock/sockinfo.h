@@ -169,7 +169,9 @@ struct epoll_fd_rec {
     void reset()
     {
         this->events.store(0, std::memory_order_relaxed);
-        memset(&this->epdata, 0, sizeof(this->epdata));
+        // GCC with _FORTIFY_SOURCE=2 reports a false-positive array-bounds warning here:
+        // memset(&this->epdata, 0, sizeof(this->epdata));
+        this->epdata.u64 = 0;
         this->offloaded_index = 0;
     }
 };
