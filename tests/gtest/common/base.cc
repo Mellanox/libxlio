@@ -13,6 +13,56 @@ uint16_t test_base::m_port = 0;
 int test_base::m_family = PF_INET;
 int test_base::m_break_signal = 0;
 
+/* Pid of the process that runs the test binary. Set by fork_guard_init(). */
+static pid_t g_main_pid;
+
+/*
+ * Terminates a forked child that escaped its test body. Doesn't touch the gtest state and
+ * doesn't use stdio, both belong to the parent process.
+ */
+static void fork_escape_exit(const char *test_case_name, const char *test_name)
+{
+    char buf[256];
+    int len = snprintf(buf, sizeof(buf),
+                       "[  FORK  ] pid %d escaped its test body and reached %s.%s, terminating\n",
+                       static_cast<int>(getpid()), test_case_name, test_name);
+
+    if (len > 0) {
+        size_t n =
+            (static_cast<size_t>(len) < sizeof(buf) ? static_cast<size_t>(len) : sizeof(buf) - 1);
+        ssize_t ret = write(STDERR_FILENO, buf, n);
+        UNREFERENCED_PARAMETER(ret);
+    }
+    _exit(GTEST_FORK_ESCAPE_STATUS);
+}
+
+class fork_escape_guard : public testing::EmptyTestEventListener {
+    virtual void OnTestStart(const testing::TestInfo &test_info)
+    {
+        if (getpid() == g_main_pid) {
+            return;
+        }
+        /* The event is delivered before the fixture of the next test is constructed, so the
+         * child is stopped before it touches a socket, a port or a counter. */
+        fork_escape_exit(test_info.test_case_name(), test_info.name());
+    }
+    virtual void OnTestProgramEnd(const testing::UnitTest &unit_test)
+    {
+        UNREFERENCED_PARAMETER(unit_test);
+        if (getpid() != g_main_pid) {
+            /* A child that escaped on the last test of the run. Terminate it before the
+             * reporting listeners overwrite the TAP and XML output files of the parent. */
+            fork_escape_exit("", "end of the test program");
+        }
+    }
+};
+
+void fork_guard_init(void)
+{
+    g_main_pid = getpid();
+    testing::UnitTest::GetInstance()->listeners().Append(new fork_escape_guard());
+}
+
 static void convert_and_copy_address(const sockaddr_store_t &source, sockaddr_store_t &dest,
                                      sa_family_t target_family)
 {
@@ -59,7 +109,8 @@ test_base::test_base()
     }
 
     m_efd_signal = 0;
-    m_efd = eventfd(m_efd_signal, 0);
+    /* Every read is guarded by poll(), and the drain of barrier_fork_wait() must not block. */
+    m_efd = eventfd(m_efd_signal, EFD_NONBLOCK);
 
     m_break_signal = 0;
 }
@@ -258,7 +309,11 @@ int test_base::wait_fork(int pid)
     }
     if (WIFEXITED(status)) {
         const int exit_status = WEXITSTATUS(status);
-        if (exit_status != 0) {
+        if (exit_status == GTEST_FORK_ESCAPE_STATUS) {
+            log_error("child process %d escaped its test body, likely a fatal assertion "
+                      "returned from the test body and skipped the exit() call\n",
+                      pid);
+        } else if (exit_status != 0) {
             log_trace("non-zero exit status: %d from waitpid() errno: %s\n", exit_status,
                       strerror(errno));
         }
@@ -272,29 +327,154 @@ int test_base::wait_fork(int pid)
     }
 }
 
-void test_base::barrier_fork(int pid, bool sync_parent)
+/* Monotonic milliseconds, immune to the wall clock steps of the test machine. */
+static uint64_t barrier_time_msec(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+
+    return static_cast<uint64_t>(ts.tv_sec) * 1000U + ts.tv_nsec / 1000000U;
+}
+
+int test_base::kill_fork(int pid)
+{
+    int status = 0;
+
+    if (0 >= pid) {
+        return (-1);
+    }
+    if (0 > kill(pid, SIGKILL) && ESRCH != errno) {
+        log_error("failed kill() errno: %s\n", strerror(errno));
+        return (-1);
+    }
+    while (0 > waitpid(pid, &status, 0)) {
+        if (EINTR == errno) {
+            continue;
+        }
+        /* The child was already reaped, it is gone all the same. */
+        if (ECHILD != errno) {
+            log_error("failed waitpid() errno: %s\n", strerror(errno));
+            return (-1);
+        }
+        break;
+    }
+
+    return 0;
+}
+
+bool test_base::peer_alive(pid_t pid)
+{
+    siginfo_t si;
+
+    memset(&si, 0, sizeof(si));
+    /* WNOWAIT leaves the child in a waitable state, so a later wait_fork() still reports its
+     * real exit status. kill(pid, 0) is not usable here, a zombie still answers it. */
+    if (0 > waitid(P_PID, pid, &si, WEXITED | WNOWAIT | WNOHANG)) {
+        /* ECHILD means the process is not our child anymore, i.e. it is gone. Treat any other
+         * error as alive and let the deadline bound the wait. */
+        return (ECHILD != errno);
+    }
+
+    return (0 == si.si_pid);
+}
+
+bool test_base::barrier_read()
+{
+    ssize_t ret = read(m_efd, &m_efd_signal, sizeof(m_efd_signal));
+
+    if (0 > ret) {
+        if (EAGAIN != errno && EINTR != errno) {
+            log_error("failed read() errno: %s\n", strerror(errno));
+        }
+        return false;
+    }
+    if (0 == m_efd_signal) {
+        return false;
+    }
+    m_efd_signal = 0;
+
+    return true;
+}
+
+bool test_base::barrier_fork_wait(int pid)
+{
+    /* The peer of a waiting parent is the child <pid>, the peer of a waiting child is the
+     * process which forked it. */
+    const bool is_child = (0 == pid);
+    const uint64_t deadline = barrier_time_msec() + TEST_BARRIER_TIMEOUT_SEC * 1000ULL;
+    pid_t peer = pid;
+    bool peer_lost = false;
+
+    if (is_child) {
+        peer = getppid();
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
+        /* Close the window where the parent dies before PDEATHSIG is armed. */
+        peer_lost = (getppid() != peer);
+    }
+
+    while (!peer_lost) {
+        struct pollfd pfd;
+
+        pfd.fd = m_efd;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+
+        int rc = poll(&pfd, 1, TEST_BARRIER_TICK_MSEC);
+        if (0 > rc && EINTR != errno) {
+            log_error("failed poll() errno: %s\n", strerror(errno));
+            ADD_FAILURE() << "barrier_fork(): poll() failed, errno " << errno;
+            m_break_signal++;
+            return false;
+        }
+        if (0 < rc && barrier_read()) {
+            return true;
+        }
+
+        peer_lost = (is_child ? (getppid() != peer) : !peer_alive(peer));
+        if (!peer_lost && barrier_time_msec() >= deadline) {
+            ADD_FAILURE() << "barrier_fork(): " << (is_child ? "child" : "parent")
+                          << " gave up after " << TEST_BARRIER_TIMEOUT_SEC << "s, peer " << peer
+                          << " is alive but didn't signal the barrier";
+            if (!is_child) {
+                /* Unwedge the child without reaping it, so that the wait_fork() of the test
+                 * still completes and reports the SIGKILL. */
+                kill(peer, SIGKILL);
+            }
+            m_break_signal++;
+            return false;
+        }
+    }
+
+    /* The peer may have signalled the barrier just before it exited. */
+    if (barrier_read()) {
+        return true;
+    }
+    ADD_FAILURE() << "barrier_fork(): " << (is_child ? "child" : "parent") << " lost peer " << peer
+                  << ", it exited without signalling the barrier";
+    m_break_signal++;
+
+    return false;
+}
+
+bool test_base::barrier_fork(int pid, bool sync_parent)
 {
     ssize_t ret;
 
     m_break_signal = 0;
     if ((0 == pid && !sync_parent) || (0 != pid && sync_parent)) {
-        prctl(PR_SET_PDEATHSIG, SIGTERM);
-        do {
-            ret = read(m_efd, &m_efd_signal, sizeof(m_efd_signal));
-            if (ret == -1 && errno == EINTR) {
-                continue;
-            }
-        } while (0 == m_efd_signal);
-        m_efd_signal = 0;
-        ret = write(m_efd, &m_efd_signal, sizeof(m_efd_signal));
-    } else {
-        signal(SIGCHLD, handle_signal);
-        m_efd_signal++;
-        ret = write(m_efd, &m_efd_signal, sizeof(m_efd_signal));
+        return barrier_fork_wait(pid);
     }
-    if (ret != sizeof(m_efd_signal)) {
+
+    signal(SIGCHLD, handle_signal);
+    m_efd_signal++;
+    ret = write(m_efd, &m_efd_signal, sizeof(m_efd_signal));
+    if (ret != static_cast<ssize_t>(sizeof(m_efd_signal))) {
         log_error("write() failed\n");
+        return false;
     }
+
+    return true;
 }
 
 void test_base::handle_signal(int signo)
