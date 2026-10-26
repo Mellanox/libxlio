@@ -1,7 +1,29 @@
+/*
+ * Original work:
+ *
+ * json-c (copyright was originally missing from this file)
+ *
+ * Modified Work:
+ *
+ * Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES, ALL RIGHTS RESERVED.
+ *
+ * This software product is a proprietary product of NVIDIA CORPORATION &
+ * AFFILIATES (the "Company") and all right, title, and interest in and to the
+ * software product, including all associated intellectual property rights, are
+ * and shall remain exclusively with the Company.
+ *
+ * This software product is governed by the End User License Agreement
+ * provided with the software product.
+ *
+ */
+
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
 #include <string.h>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <assert.h>
 #include <errno.h>
 #include <time.h>
@@ -11,97 +33,101 @@
 
 static void do_benchmark(json_object *src1);
 
-static const char *json_str1 = 
-"{"
-"    \"glossary\": {"
-"        \"title\": \"example glossary\","
-"        \"GlossDiv\": {"
-"            \"title\": \"S\","
-"            \"null_obj\": null, "
-"            \"GlossList\": {"
-"                \"GlossEntry\": {"
-"                    \"ID\": \"SGML\","
-"                    \"SortAs\": \"SGML\","
-"                    \"GlossTerm\": \"Standard Generalized Markup Language\","
-"                    \"Acronym\": \"SGML\","
-"                    \"Abbrev\": \"ISO 8879:1986\","
-"                    \"GlossDef\": {"
-"                        \"para\": \"A meta-markup language, used to create markup languages such as DocBook.\","
-"                        \"GlossSeeAlso\": [\"GML\", \"XML\"]"
-"                    },"
-"                    \"GlossSee\": \"markup\""
-"                }"
-"            }"
-"        }"
-"    }"
-"}";
+static const char *json_str1 =
+    "{"
+    "    \"glossary\": {"
+    "        \"title\": \"example glossary\","
+    "        \"GlossDiv\": {"
+    "            \"number\": 16446744073709551615,"
+    "            \"title\": \"S\","
+    "            \"null_obj\": null, "
+    "            \"exist\": false,"
+    "            \"quantity\":20,"
+    "            \"univalent\":19.8,"
+    "            \"GlossList\": {"
+    "                \"GlossEntry\": {"
+    "                    \"ID\": \"SGML\","
+    "                    \"SortAs\": \"SGML\","
+    "                    \"GlossTerm\": \"Standard Generalized Markup Language\","
+    "                    \"Acronym\": \"SGML\","
+    "                    \"Abbrev\": \"ISO 8879:1986\","
+    "                    \"GlossDef\": {"
+    "                        \"para\": \"A meta-markup language, used to create markup languages "
+    "such as DocBook.\","
+    "                        \"GlossSeeAlso\": [\"GML\", \"XML\"]"
+    "                    },"
+    "                    \"GlossSee\": \"markup\""
+    "                }"
+    "            }"
+    "        }"
+    "    }"
+    "}";
 
 static const char *json_str2 =
-"{\"menu\": {"
-"    \"header\": \"SVG Viewer\","
-"    \"items\": ["
-"        {\"id\": \"Open\"},"
-"        {\"id\": \"OpenNew\", \"label\": \"Open New\"},"
-"        null,"
-"        {\"id\": \"ZoomIn\", \"label\": \"Zoom In\"},"
-"        {\"id\": \"ZoomOut\", \"label\": \"Zoom Out\"},"
-"        {\"id\": \"OriginalView\", \"label\": \"Original View\"},"
-"        null,"
-"        {\"id\": \"Quality\", \"another_null\": null},"
-"        {\"id\": \"Pause\"},"
-"        {\"id\": \"Mute\"},"
-"        null,"
-"        {\"id\": \"Find\", \"label\": \"Find...\"},"
-"        {\"id\": \"FindAgain\", \"label\": \"Find Again\"},"
-"        {\"id\": \"Copy\"},"
-"        {\"id\": \"CopyAgain\", \"label\": \"Copy Again\"},"
-"        {\"id\": \"CopySVG\", \"label\": \"Copy SVG\"},"
-"        {\"id\": \"ViewSVG\", \"label\": \"View SVG\"},"
-"        {\"id\": \"ViewSource\", \"label\": \"View Source\"},"
-"        {\"id\": \"SaveAs\", \"label\": \"Save As\"},"
-"        null,"
-"        {\"id\": \"Help\"},"
-"        {\"id\": \"About\", \"label\": \"About Adobe CVG Viewer...\"}"
-"    ]"
-"}}";
+    "{\"menu\": {"
+    "    \"header\": \"SVG Viewer\","
+    "    \"items\": ["
+    "        {\"id\": \"Open\"},"
+    "        {\"id\": \"OpenNew\", \"label\": \"Open New\"},"
+    "        null,"
+    "        {\"id\": \"ZoomIn\", \"label\": \"Zoom In\"},"
+    "        {\"id\": \"ZoomOut\", \"label\": \"Zoom Out\"},"
+    "        {\"id\": \"OriginalView\", \"label\": \"Original View\"},"
+    "        null,"
+    "        {\"id\": \"Quality\", \"another_null\": null},"
+    "        {\"id\": \"Pause\"},"
+    "        {\"id\": \"Mute\"},"
+    "        null,"
+    "        {\"id\": \"Find\", \"label\": \"Find...\"},"
+    "        {\"id\": \"FindAgain\", \"label\": \"Find Again\"},"
+    "        {\"id\": \"Copy\"},"
+    "        {\"id\": \"CopyAgain\", \"label\": \"Copy Again\"},"
+    "        {\"id\": \"CopySVG\", \"label\": \"Copy SVG\"},"
+    "        {\"id\": \"ViewSVG\", \"label\": \"View SVG\"},"
+    "        {\"id\": \"ViewSource\", \"label\": \"View Source\"},"
+    "        {\"id\": \"SaveAs\", \"label\": \"Save As\"},"
+    "        null,"
+    "        {\"id\": \"Help\"},"
+    "        {\"id\": \"About\", \"label\": \"About Adobe CVG Viewer...\"}"
+    "    ]"
+    "}}";
 
-static const char *json_str3 =
-"{\"menu\": {"
-"  \"id\": \"file\","
-"  \"value\": \"File\","
-"  \"popup\": {"
-"    \"menuitem\": ["
-"      {\"value\": \"New\", \"onclick\": \"CreateNewDoc()\"},"
-"      {\"value\": \"Open\", \"onclick\": \"OpenDoc()\"},"
-"      {\"value\": \"Close\", \"onclick\": \"CloseDoc()\"}"
-"    ]"
-"  }"
-"}}";
+static const char *json_str3 = "{\"menu\": {"
+                               "  \"id\": \"file\","
+                               "  \"value\": \"File\","
+                               "  \"popup\": {"
+                               "    \"menuitem\": ["
+                               "      {\"value\": \"New\", \"onclick\": \"CreateNewDoc()\"},"
+                               "      {\"value\": \"Open\", \"onclick\": \"OpenDoc()\"},"
+                               "      {\"value\": \"Close\", \"onclick\": \"CloseDoc()\"}"
+                               "    ]"
+                               "  }"
+                               "}}";
 
 json_object_to_json_string_fn my_custom_serializer;
 int my_custom_serializer(struct json_object *jso, struct printbuf *pb, int level, int flags)
 {
-	sprintbuf(pb, "OTHER");
+	doca_third_party_sprintbuf(pb, "OTHER");
 	return 0;
 }
 
 json_c_shallow_copy_fn my_shallow_copy;
-int my_shallow_copy(json_object *src, json_object *parent, const char *key, size_t index, json_object **dst)
+int my_shallow_copy(json_object *src, json_object *parent, const char *key, size_t index,
+                    json_object **dst)
 {
 	int rc;
-	rc = json_c_shallow_copy_default(src, parent, key, index, dst);
+	rc = doca_third_party_json_c_shallow_copy_default(src, parent, key, index, dst);
 	if (rc < 0)
 		return rc;
 	if (key != NULL && strcmp(key, "with_serializer") == 0)
 	{
 		printf("CALLED: my_shallow_copy on with_serializer object\n");
-		void *userdata = json_object_get_userdata(src);
-		json_object_set_serializer(*dst, my_custom_serializer, userdata, NULL);
+		void *userdata = doca_third_party_json_object_get_userdata(src);
+		doca_third_party_json_object_set_serializer(*dst, my_custom_serializer, userdata, NULL);
 		return 2;
 	}
 	return rc;
 }
-
 
 int main(int argc, char **argv)
 {
@@ -114,103 +140,104 @@ int main(int argc, char **argv)
 		benchmark = 1;
 	}
 
-	src1 = json_tokener_parse(json_str1);
-	src2 = json_tokener_parse(json_str2);
-	src3 = json_tokener_parse(json_str3);
+	src1 = doca_third_party_json_tokener_parse(json_str1);
+	src2 = doca_third_party_json_tokener_parse(json_str2);
+	src3 = doca_third_party_json_tokener_parse(json_str3);
 
 	assert(src1 != NULL);
-	assert(src1 != NULL);
+	assert(src2 != NULL);
 	assert(src3 != NULL);
 
 	printf("PASSED - loaded input data\n");
 
 	/* do this 3 times to make sure overwriting it works */
-	assert(0 == json_object_deep_copy(src1, &dst1, NULL));
-	assert(0 == json_object_deep_copy(src2, &dst2, NULL));
-	assert(0 == json_object_deep_copy(src3, &dst3, NULL));
+	assert(0 == doca_third_party_json_object_deep_copy(src1, &dst1, NULL));
+	assert(0 == doca_third_party_json_object_deep_copy(src2, &dst2, NULL));
+	assert(0 == doca_third_party_json_object_deep_copy(src3, &dst3, NULL));
 
-	printf("PASSED - all json_object_deep_copy() returned succesful\n");
+	printf("PASSED - all json_object_deep_copy() returned successful\n");
 
-	assert(-1 == json_object_deep_copy(src1, &dst1, NULL));
+	assert(-1 == doca_third_party_json_object_deep_copy(src1, &dst1, NULL));
 	assert(errno == EINVAL);
-	assert(-1 == json_object_deep_copy(src2, &dst2, NULL));
+	assert(-1 == doca_third_party_json_object_deep_copy(src2, &dst2, NULL));
 	assert(errno == EINVAL);
-	assert(-1 == json_object_deep_copy(src3, &dst3, NULL));
+	assert(-1 == doca_third_party_json_object_deep_copy(src3, &dst3, NULL));
 	assert(errno == EINVAL);
 
 	printf("PASSED - all json_object_deep_copy() returned EINVAL for non-null pointer\n");
 
-	assert(1 == json_object_equal(src1, dst1));
-	assert(1 == json_object_equal(src2, dst2));
-	assert(1 == json_object_equal(src3, dst3));
+	assert(1 == doca_third_party_json_object_equal(src1, dst1));
+	assert(1 == doca_third_party_json_object_equal(src2, dst2));
+	assert(1 == doca_third_party_json_object_equal(src3, dst3));
 
-	printf("PASSED - all json_object_equal() tests returned succesful\n");
+	printf("PASSED - all json_object_equal() tests returned successful\n");
 
-	assert(0 == strcmp(json_object_to_json_string_ext(src1, JSON_C_TO_STRING_PRETTY),
-	                   json_object_to_json_string_ext(dst1, JSON_C_TO_STRING_PRETTY)));
-	assert(0 == strcmp(json_object_to_json_string_ext(src2, JSON_C_TO_STRING_PRETTY),
-	                   json_object_to_json_string_ext(dst2, JSON_C_TO_STRING_PRETTY)));
-	assert(0 == strcmp(json_object_to_json_string_ext(src3, JSON_C_TO_STRING_PRETTY),
-	                   json_object_to_json_string_ext(dst3, JSON_C_TO_STRING_PRETTY)));
+	assert(0 == strcmp(doca_third_party_json_object_to_json_string_ext(src1, JSON_C_TO_STRING_PRETTY),
+	                   doca_third_party_json_object_to_json_string_ext(dst1, JSON_C_TO_STRING_PRETTY)));
+	assert(0 == strcmp(doca_third_party_json_object_to_json_string_ext(src2, JSON_C_TO_STRING_PRETTY),
+	                   doca_third_party_json_object_to_json_string_ext(dst2, JSON_C_TO_STRING_PRETTY)));
+	assert(0 == strcmp(doca_third_party_json_object_to_json_string_ext(src3, JSON_C_TO_STRING_PRETTY),
+	                   doca_third_party_json_object_to_json_string_ext(dst3, JSON_C_TO_STRING_PRETTY)));
 
 	printf("PASSED - comparison of string output\n");
 
-	json_object_get(dst1);
-	assert(-1 == json_object_deep_copy(src1, &dst1, NULL));
+	doca_third_party_json_object_get(dst1);
+	assert(-1 == doca_third_party_json_object_deep_copy(src1, &dst1, NULL));
 	assert(errno == EINVAL);
-	json_object_put(dst1);
+	doca_third_party_json_object_put(dst1);
 
 	printf("PASSED - trying to overrwrite an object that has refcount > 1");
 
 	printf("\nPrinting JSON objects for visual inspection\n");
 	printf("------------------------------------------------\n");
 	printf(" JSON1\n");
-	printf("%s\n", json_object_to_json_string_ext(dst1, JSON_C_TO_STRING_PRETTY));
+	printf("%s\n", doca_third_party_json_object_to_json_string_ext(dst1, JSON_C_TO_STRING_PRETTY));
 	printf("------------------------------------------------\n");
 
 	printf("------------------------------------------------\n");
 	printf(" JSON2\n");
-	printf("%s\n", json_object_to_json_string_ext(dst2, JSON_C_TO_STRING_PRETTY));
+	printf("%s\n", doca_third_party_json_object_to_json_string_ext(dst2, JSON_C_TO_STRING_PRETTY));
 	printf("------------------------------------------------\n");
 
 	printf("------------------------------------------------\n");
 	printf(" JSON3\n");
 	printf("------------------------------------------------\n");
-	printf("%s\n", json_object_to_json_string_ext(dst3, JSON_C_TO_STRING_PRETTY));
+	printf("%s\n", doca_third_party_json_object_to_json_string_ext(dst3, JSON_C_TO_STRING_PRETTY));
 	printf("------------------------------------------------\n");
 
-	json_object_put(dst1);
-	json_object_put(dst2);
-	json_object_put(dst3);
+	doca_third_party_json_object_put(dst1);
+	doca_third_party_json_object_put(dst2);
+	doca_third_party_json_object_put(dst3);
 
 	printf("\nTesting deep_copy with a custom serializer set\n");
-	json_object *with_serializer = json_object_new_string("notemitted");
+	json_object *with_serializer = doca_third_party_json_object_new_string("notemitted");
 
-	json_object_set_serializer(with_serializer, my_custom_serializer, "dummy userdata", NULL);
-	json_object_object_add(src1, "with_serializer", with_serializer);
+	char udata[] = "dummy userdata";
+	doca_third_party_json_object_set_serializer(with_serializer, my_custom_serializer, udata, NULL);
+	doca_third_party_json_object_object_add(src1, "with_serializer", with_serializer);
 	dst1 = NULL;
 	/* With a custom serializer in use, a custom shallow_copy function must also be used */
-	assert(-1 == json_object_deep_copy(src1, &dst1, NULL));
-	assert(0 == json_object_deep_copy(src1, &dst1, my_shallow_copy));
+	assert(-1 == doca_third_party_json_object_deep_copy(src1, &dst1, NULL));
+	assert(0 == doca_third_party_json_object_deep_copy(src1, &dst1, my_shallow_copy));
 
-	json_object *dest_with_serializer = json_object_object_get(dst1, "with_serializer");
+	json_object *dest_with_serializer = doca_third_party_json_object_object_get(dst1, "with_serializer");
 	assert(dest_with_serializer != NULL);
-	char *dst_userdata = json_object_get_userdata(dest_with_serializer);
+	char *dst_userdata = doca_third_party_json_object_get_userdata(dest_with_serializer);
 	assert(strcmp(dst_userdata, "dummy userdata") == 0);
 
-	const char *special_output = json_object_to_json_string(dest_with_serializer);
+	const char *special_output = doca_third_party_json_object_to_json_string(dest_with_serializer);
 	assert(strcmp(special_output, "OTHER") == 0);
 	printf("\ndeep_copy with custom serializer worked OK.\n");
-	json_object_put(dst1);
+	doca_third_party_json_object_put(dst1);
 
 	if (benchmark)
 	{
 		do_benchmark(src2);
 	}
 
-	json_object_put(src1);
-	json_object_put(src2);
-	json_object_put(src3);
+	doca_third_party_json_object_put(src1);
+	doca_third_party_json_object_put(src2);
+	doca_third_party_json_object_put(src3);
 
 	return 0;
 }
@@ -230,19 +257,24 @@ static void do_benchmark(json_object *src2)
 	time_t start = time(NULL);
 
 	start = time(NULL);
-	for (ii = 0; ii < iterations; ii++) {
-		dst2 = json_tokener_parse(json_object_get_string(src2));
-		json_object_put(dst2);
+	for (ii = 0; ii < iterations; ii++)
+	{
+		dst2 = doca_third_party_json_tokener_parse(doca_third_party_json_object_get_string(src2));
+		doca_third_party_json_object_put(dst2);
 	}
-	printf("BENCHMARK - %d iterations of 'dst2 = json_tokener_parse(json_object_get_string(src2))' took %d seconds\n", iterations, (int)(time(NULL) - start));
+	printf("BENCHMARK - %d iterations of 'dst2 = "
+	       "json_tokener_parse(json_object_get_string(src2))' took %d seconds\n",
+	       iterations, (int)(time(NULL) - start));
 
 	start = time(NULL);
 	dst2 = NULL;
-	for (ii = 0; ii < iterations; ii++) {
-		json_object_deep_copy(src2, &dst2, NULL);
-		json_object_put(dst2);
+	for (ii = 0; ii < iterations; ii++)
+	{
+		doca_third_party_json_object_deep_copy(src2, &dst2, NULL);
+		doca_third_party_json_object_put(dst2);
 		dst2 = NULL;
 	}
-	printf("BENCHMARK - %d iterations of 'json_object_deep_copy(src2, &dst2, NULL)' took %d seconds\n", iterations, (int)(time(NULL) - start));
+	printf("BENCHMARK - %d iterations of 'json_object_deep_copy(src2, &dst2, NULL)' took %d "
+	       "seconds\n",
+	       iterations, (int)(time(NULL) - start));
 }
-
