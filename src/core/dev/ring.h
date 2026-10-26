@@ -197,7 +197,7 @@ public:
         NOT_IN_USE(info);
         NOT_IN_USE(hw_resync_tcp_sn);
     }
-    virtual void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
+    virtual void tls_get_progress_params_rx(xlio_tir *tir, mem_buf_desc_t *buf, uint32_t lkey)
     {
         NOT_IN_USE(tir);
         NOT_IN_USE(buf);

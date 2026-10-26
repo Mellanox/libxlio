@@ -171,7 +171,7 @@ public:
         m_hqtx->tls_resync_rx(tir, info, hw_resync_tcp_sn);
         ++(m_p_ring_stat->n_rx_tls_resyncs);
     }
-    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey) override
+    void tls_get_progress_params_rx(xlio_tir *tir, mem_buf_desc_t *buf, uint32_t lkey) override
     {
         std::lock_guard<decltype(m_lock_ring_tx)> lock(m_lock_ring_tx);
         if (lkey == LKEY_TX_DEFAULT) {

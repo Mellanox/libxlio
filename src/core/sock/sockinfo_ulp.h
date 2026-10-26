@@ -11,6 +11,7 @@
 #include "proto/dst_entry.h" /* xlio_send_attr */
 #include "proto/tls.h" /* xlio_tls_info */
 #include "lwip/err.h" /* err_t */
+#include <atomic>
 #include <utility>
 #include <deque>
 #include <stdint.h>
@@ -103,7 +104,8 @@ private:
     bool find_recno(uint32_t seqno, uint64_t &recno);
 
     static err_t rx_lwip_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
-    static void rx_comp_callback(void *arg);
+    static void rx_comp_callback(void *arg, mem_buf_desc_t *buf);
+    void rx_comp_handle();
 
     enum tls_rx_state {
         TLS_RX_SM_UNKNOWN = 0,
@@ -189,6 +191,10 @@ private:
     uint16_t m_tls_rx_need_resync = 0U;
     /* HW TCP resync seqno for pending parsing */
     bool m_pending_resync_seqno = false;
+    /* A TX completion found the socket locked and left rx_comp_handle() to the next recv(). */
+    std::atomic<bool> m_rx_comp_deferred {false};
+    /* Only the GET_PSV WQE's callback publishes that its result can be consumed. */
+    std::atomic<bool> m_rx_psv_completed {false};
     /* Whether offload is configured. */
     bool m_is_tls_tx;
     bool m_is_tls_rx;
