@@ -708,7 +708,18 @@ private:
     /* pending connections */
     sock_list_t m_accepted_conns;
 
-    uint32_t m_ready_conn_cnt;
+    // Parent listeners inspect RSS-child readiness without taking the child
+    // lock. SC/acquire child loads observe the parent update published by
+    // harvest's release reset; notification/registration fences cover ADD/MOD.
+    std::atomic<uint32_t> m_ready_conn_cnt {0};
+
+    // Caller holds this listener's TCP lock; no atomic RMW is needed. Unsigned
+    // arithmetic preserves the counter's increment/decrement wrap semantics.
+    void add_ready_conn_count(uint32_t delta)
+    {
+        m_ready_conn_cnt.store(m_ready_conn_cnt.load(std::memory_order_relaxed) + delta,
+                               std::memory_order_relaxed);
+    }
     int m_backlog;
 
     multilock m_tcp_con_lock;

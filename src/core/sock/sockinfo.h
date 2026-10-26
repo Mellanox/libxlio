@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+#include <atomic>
 #include <unordered_map>
 #include <deque>
 #include <memory>
@@ -143,16 +144,34 @@ struct buff_info_t {
 };
 
 struct epoll_fd_rec {
-    uint32_t events;
+    // Workers read the interest mask without the epfd lock.
+    std::atomic<uint32_t> events;
     epoll_data epdata;
     int offloaded_index; // offloaded fd index + 1
 
     epoll_fd_rec() { reset(); }
 
+    epoll_fd_rec(const epoll_fd_rec &other)
+        : events(other.events.load(std::memory_order_relaxed))
+        , epdata(other.epdata)
+        , offloaded_index(other.offloaded_index)
+    {
+    }
+
+    epoll_fd_rec &operator=(const epoll_fd_rec &other)
+    {
+        epdata = other.epdata;
+        offloaded_index = other.offloaded_index;
+        events.store(other.events.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        return *this;
+    }
+
     void reset()
     {
-        this->events = 0;
-        memset(&this->epdata, 0, sizeof(this->epdata));
+        this->events.store(0, std::memory_order_relaxed);
+        // GCC with _FORTIFY_SOURCE=2 reports a false-positive array-bounds warning here:
+        // memset(&this->epdata, 0, sizeof(this->epdata));
+        this->epdata.u64 = 0;
         this->offloaded_index = 0;
     }
 };
@@ -320,7 +339,7 @@ public:
     uint32_t get_epoll_event_flags_thread() const { return m_epoll_event_flags_thread; }
     void set_epoll_event_flags(uint32_t events) { m_epoll_event_flags = events; }
     void set_epoll_event_flags_thread(uint32_t events) { m_epoll_event_flags_thread = events; }
-    bool has_epoll_context() { return (!!m_econtext); }
+    bool has_epoll_context() { return m_econtext.load(std::memory_order_acquire) != nullptr; }
     bool get_rx_pkt_ready_list_count() const { return m_n_rx_pkt_ready_list_count; }
     int get_fd() const { return m_fd; };
     const sock_addr &get_peername() const { return m_connected; }
@@ -482,14 +501,27 @@ protected:
     rfs *m_rfs_ptr = nullptr;
     socket_stats_t *m_p_socket_stats = nullptr;
     ring *m_p_rx_ring = nullptr; // used in TCP/UDP
-    epfd_info *m_econtext = nullptr;
+    // Release/acquire publishes the epfd object to a notifying worker. Paired
+    // SC fences in insert_epoll_event() and add_fd()/mod_fd() order registration
+    // against the atomic readiness counters, including parent listeners.
+    std::atomic<epfd_info *> m_econtext {nullptr};
     entity_context *m_entity_context = nullptr;
 
     // End of first cache line
 
     uint32_t m_epoll_event_flags = 0U;
     uint32_t m_epoll_event_flags_thread = 0U;
-    int m_n_rx_pkt_ready_list_count = 0;
+    std::atomic<int> m_n_rx_pkt_ready_list_count {0};
+
+    // Caller holds the RX queue lock. Writers are already serialized with the
+    // queue mutation; only unlocked readiness probes require atomic access.
+    // Avoid a locked RMW for every buffer. Notification supplies the SC fence.
+    void add_rx_ready_count(int delta)
+    {
+        m_n_rx_pkt_ready_list_count.store(
+            m_n_rx_pkt_ready_list_count.load(std::memory_order_relaxed) + delta,
+            std::memory_order_relaxed);
+    }
     size_t m_rx_pkt_ready_offset = 0U;
     size_t m_rx_ready_byte_count = 0U;
     multilock m_app_lock;
@@ -596,7 +628,7 @@ void sockinfo::sock_pop_descs_rx_ready(descq_t *cache)
         pop_front_m_rx_pkt_ready_list();
         cache->push_back(temp);
     }
-    m_n_rx_pkt_ready_list_count = 0;
+    m_n_rx_pkt_ready_list_count.store(0, std::memory_order_relaxed);
     m_rx_ready_byte_count = 0;
     m_rx_pkt_ready_offset = 0;
     if (m_p_socket_stats) {

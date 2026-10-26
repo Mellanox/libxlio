@@ -411,8 +411,8 @@ sockinfo_udp::~sockinfo_udp()
     }
 
     // Remove all RX ready queue buffers (Push into reuse queue per ring)
-    si_udp_logdbg("Releasing %d ready rx packets (total of %lu bytes)", m_n_rx_pkt_ready_list_count,
-                  m_rx_ready_byte_count);
+    si_udp_logdbg("Releasing %d ready rx packets (total of %lu bytes)",
+                  m_n_rx_pkt_ready_list_count.load(), m_rx_ready_byte_count);
     rx_ready_byte_count_limit_update(0);
 
     // Clear the dst_entry map
@@ -447,7 +447,7 @@ sockinfo_udp::~sockinfo_udp()
         si_udp_logerr("not all buffers were freed. protocol=UDP. m_n_rx_pkt_ready_list_count=%d, "
                       "m_rx_ready_byte_count=%lu, m_rx_pkt_ready_list.size()=%d, "
                       "m_rx_ring_map.size()=%d, m_rx_reuse_buff.n_buff_num=%d",
-                      m_n_rx_pkt_ready_list_count, m_rx_ready_byte_count,
+                      m_n_rx_pkt_ready_list_count.load(), m_rx_ready_byte_count,
                       (int)m_rx_pkt_ready_list.size(), (int)m_rx_ring_map.size(),
                       m_rx_reuse_buff.n_buff_num);
     }
@@ -1711,7 +1711,7 @@ void sockinfo_udp::drop_rx_ready_byte_count(size_t n_rx_bytes_limit)
         mem_buf_desc_t *p_rx_pkt_desc = m_rx_pkt_ready_list.front();
         if (m_rx_ready_byte_count > n_rx_bytes_limit || p_rx_pkt_desc->rx.sz_payload == 0U) {
             m_rx_pkt_ready_list.pop_front();
-            m_n_rx_pkt_ready_list_count--;
+            add_rx_ready_count(-1);
             m_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
             if (m_p_socket_stats) {
                 m_p_socket_stats->n_rx_ready_pkt_count--;
@@ -1918,14 +1918,14 @@ bool sockinfo_udp::is_readable(bool do_poll, fd_array_t *p_fd_ready_array)
 
         if (m_n_sysvar_rx_cq_drain_rate_nsec == MCE_RX_CQ_DRAIN_RATE_DISABLED) {
             si_udp_logfunc("=> true (ready count = %d packets / %d bytes)",
-                           m_n_rx_pkt_ready_list_count, m_rx_ready_byte_count);
+                           m_n_rx_pkt_ready_list_count.load(), m_rx_ready_byte_count);
             return true;
         } else {
             tscval_t tsc_now = TSCVAL_INITIALIZER;
             gettimeoftsc(&tsc_now);
             if (tsc_now - g_si_tscv_last_poll < m_n_sysvar_rx_delta_tsc_between_cq_polls) {
                 si_udp_logfunc("=> true (ready count = %d packets / %d bytes)",
-                               m_n_rx_pkt_ready_list_count, m_rx_ready_byte_count);
+                               m_n_rx_pkt_ready_list_count.load(), m_rx_ready_byte_count);
                 return true;
             }
 
@@ -1956,7 +1956,7 @@ bool sockinfo_udp::is_readable(bool do_poll, fd_array_t *p_fd_ready_array)
                 if (m_n_rx_pkt_ready_list_count) {
                     // Get out of the CQ polling loop
                     si_udp_logfunc("=> polled true (ready count = %d packets / %d bytes)",
-                                   m_n_rx_pkt_ready_list_count, m_rx_ready_byte_count);
+                                   m_n_rx_pkt_ready_list_count.load(), m_rx_ready_byte_count);
                     m_rx_ring_map_lock.unlock();
                     return true;
                 } else if (was_drained) {
@@ -1973,14 +1973,14 @@ bool sockinfo_udp::is_readable(bool do_poll, fd_array_t *p_fd_ready_array)
     // TODO: handle the scenario of 2 thread accessing the same socket - might need to lock
     // m_n_rx_pkt_ready_list_count
     if (m_n_rx_pkt_ready_list_count) {
-        si_udp_logfunc("=> true (ready count = %d packets / %d bytes)", m_n_rx_pkt_ready_list_count,
-                       m_rx_ready_byte_count);
+        si_udp_logfunc("=> true (ready count = %d packets / %d bytes)",
+                       m_n_rx_pkt_ready_list_count.load(), m_rx_ready_byte_count);
         return true;
     }
 
     // Not ready packets in ready queue, return false
-    si_udp_logfuncall("=> false (ready count = %d packets / %d bytes)", m_n_rx_pkt_ready_list_count,
-                      m_rx_ready_byte_count);
+    si_udp_logfuncall("=> false (ready count = %d packets / %d bytes)",
+                      m_n_rx_pkt_ready_list_count.load(), m_rx_ready_byte_count);
     return false;
 }
 
@@ -2277,13 +2277,14 @@ inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready
     m_lock_rcv.lock();
     // Save rx packet info in our ready list
     m_rx_pkt_ready_list.push_back(p_desc);
-    m_n_rx_pkt_ready_list_count++;
+    add_rx_ready_count(1);
     m_rx_ready_byte_count += p_desc->rx.sz_payload;
     if (unlikely(m_p_socket_stats)) {
         m_p_socket_stats->n_rx_ready_byte_count += p_desc->rx.sz_payload;
         m_p_socket_stats->n_rx_ready_pkt_count++;
-        m_p_socket_stats->counters.n_rx_ready_pkt_max = std::max(
-            (uint32_t)m_n_rx_pkt_ready_list_count, m_p_socket_stats->counters.n_rx_ready_pkt_max);
+        m_p_socket_stats->counters.n_rx_ready_pkt_max =
+            std::max((uint32_t)m_n_rx_pkt_ready_list_count.load(),
+                     m_p_socket_stats->counters.n_rx_ready_pkt_max);
         m_p_socket_stats->counters.n_rx_ready_byte_max = std::max(
             (uint32_t)m_rx_ready_byte_count, m_p_socket_stats->counters.n_rx_ready_byte_max);
     }
@@ -2295,7 +2296,7 @@ inline void sockinfo_udp::update_ready(mem_buf_desc_t *p_desc, void *pv_fd_ready
     // Add this fd to the ready fd list
     io_mux_call::update_fd_array((fd_array_t *)pv_fd_ready_array, m_fd);
 
-    si_udp_logfunc("rx ready count = %d packets / %d bytes", m_n_rx_pkt_ready_list_count,
+    si_udp_logfunc("rx ready count = %d packets / %d bytes", m_n_rx_pkt_ready_list_count.load(),
                    m_rx_ready_byte_count);
 }
 
@@ -3054,7 +3055,7 @@ void sockinfo_udp::post_dequeue()
 {
     mem_buf_desc_t *to_resue = m_rx_pkt_ready_list.get_and_pop_front();
     IF_STATS(m_p_socket_stats->n_rx_ready_pkt_count--);
-    m_n_rx_pkt_ready_list_count--;
+    add_rx_ready_count(-1);
     reuse_buffer(to_resue);
     m_rx_pkt_ready_offset = 0;
 }
@@ -3100,7 +3101,7 @@ bool sockinfo_udp::prepare_to_close(bool process_shutdown)
     m_sock_wakeup_pipe.do_wakeup();
 
     if (has_epoll_context()) {
-        m_econtext->fd_closed(m_fd);
+        m_econtext.load()->fd_closed(m_fd);
     }
 
     m_lock_rcv.unlock();

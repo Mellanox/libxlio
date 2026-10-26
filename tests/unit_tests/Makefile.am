@@ -65,7 +65,13 @@ libgtest_la_SOURCES = \
 	$(top_srcdir)/tests/gtest/googletest/src/gtest_main.cc
 
 # unit_tests
-unit_tests_LDADD = libgtest.la $(LIBJSON_LIBS)
+unit_tests_LDADD = libgtest.la $(top_builddir)/src/core/libxlio_unit_tests.la $(DPCP_LIBS)
+
+if XLIO_AND_DPCP_ARE_STATIC
+# DPCP_LIBS is empty here: only libxlio.a receives the merged DPCP objects.
+# The private unit-test archive needs DPCP linked into the executable directly.
+unit_tests_LDADD += $(DPCP_STATIC_LIB)
+endif
 
 unit_tests_CPPFLAGS = \
 	-DXLIO_STATIC_BUILD \
@@ -79,15 +85,19 @@ unit_tests_CPPFLAGS = \
 	-I$(top_srcdir)/tests/gtest/googletest/include \
 	-DXLIO_TIME_DEBUG_COUNTERS=1 \
 	$(AM_CPPFLAGS) \
-	$(LIBJSON_CFLAGS)
+	$(LIBJSON_CFLAGS) $(LIBNL_CFLAGS)
 
-unit_tests_LDFLAGS = -no-install
+# Only mapping-cache tests bypass registration; all other callers use XLIO's
+# real allocator. See the scoped wrapper in proto/mapping_test.cpp.
+unit_tests_LDFLAGS = -no-install \
+	-Wl,--wrap=_ZN16xlio_registrator15register_memoryEPvmP14ib_ctx_handler
 unit_tests_CXXFLAGS = \
 	$(AM_CXXFLAGS)
 
 # Tests
 unit_tests_SOURCES = \
 	main.cpp \
+	xlio_test_init.h \
 	config/config_registry.cpp \
 	config/config_descriptor.cpp \
 	config/inline_loader.cpp \
@@ -102,6 +112,7 @@ unit_tests_SOURCES = \
 	tcp/tcp_in.cpp \
 	tcp/tcp_output.cpp \
 	tcp/tcp_rto.cpp \
+	iomux/epoll_registration_test.cpp \
 	$(top_builddir)/src/core/lwip/cc.c \
 	$(top_builddir)/src/core/lwip/cc_lwip.c \
 	$(top_builddir)/src/core/lwip/cc_none.c \
@@ -127,5 +138,13 @@ unit_tests_SOURCES = \
 
 
 unit_tests_DEPENDENCIES = \
-	libgtest.la
+	libgtest.la \
+	$(top_builddir)/src/core/libxlio_unit_tests.la
+
+# Recheck the core's dependencies even when this directory is built directly.
+.PHONY: xlio-unit-tests-core
+xlio-unit-tests-core:
+
+$(top_builddir)/src/core/libxlio_unit_tests.la: xlio-unit-tests-core
+	$(MAKE) -C $(top_builddir)/src/core libxlio_unit_tests.la
 
