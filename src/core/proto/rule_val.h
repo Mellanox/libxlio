@@ -27,6 +27,8 @@ public:
     inline void set_iif_name(const char *iif_name) { memcpy(m_iif_name, iif_name, IFNAMSIZ); };
     inline void set_oif_name(const char *oif_name) { memcpy(m_oif_name, oif_name, IFNAMSIZ); };
     inline void set_priority(uint32_t priority) { m_priority = priority; };
+    inline void set_fwmark(uint32_t fwmark) { m_fwmark = fwmark; };
+    inline void set_fwmask(uint32_t fwmask) { m_fwmask = fwmask; };
 
     inline const ip_address &get_dst_addr() const { return m_dst_addr; };
     inline const ip_address &get_src_addr() const { return m_src_addr; };
@@ -36,6 +38,8 @@ public:
     inline const char *get_iif_name() const { return m_iif_name; };
     inline const char *get_oif_name() const { return m_oif_name; };
     inline uint32_t get_priority() const { return m_priority; };
+    inline uint32_t get_fwmark() const { return m_fwmark; };
+    inline uint32_t get_fwmask() const { return m_fwmask; };
 
     inline void set_state(bool state) { m_is_valid = state; };
     inline bool is_valid() const { return m_is_valid; };
@@ -52,6 +56,9 @@ private:
 
     uint32_t m_priority;
     uint32_t m_table_id;
+
+    uint32_t m_fwmark;
+    uint32_t m_fwmask;
 
     ip_address m_dst_addr;
     ip_address m_src_addr;
