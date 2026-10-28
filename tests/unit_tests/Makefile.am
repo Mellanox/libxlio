@@ -65,7 +65,7 @@ libgtest_la_SOURCES = \
 	$(top_srcdir)/tests/gtest/googletest/src/gtest_main.cc
 
 # unit_tests
-unit_tests_LDADD = libgtest.la $(LIBJSON_LIBS)
+unit_tests_LDADD = libgtest.la $(LIBJSON_LIBS) $(LIBNL_LIBS)
 
 unit_tests_CPPFLAGS = \
 	-DXLIO_STATIC_BUILD \
@@ -79,7 +79,8 @@ unit_tests_CPPFLAGS = \
 	-I$(top_srcdir)/tests/gtest/googletest/include \
 	-DXLIO_TIME_DEBUG_COUNTERS=1 \
 	$(AM_CPPFLAGS) \
-	$(LIBJSON_CFLAGS)
+	$(LIBJSON_CFLAGS) \
+	$(LIBNL_CFLAGS)
 
 unit_tests_LDFLAGS = -no-install
 unit_tests_CXXFLAGS = \
@@ -98,6 +99,7 @@ unit_tests_SOURCES = \
 	config/schema_analyzer.cpp \
 	job_queue/job_queue_test.cpp \
 	proto/mapping_test.cpp \
+	proto/rule_table_test.cpp \
 	worker_thread/worker_thread_test.cpp \
 	tcp/tcp_in.cpp \
 	tcp/tcp_output.cpp \
@@ -112,6 +114,11 @@ unit_tests_SOURCES = \
 	$(top_builddir)/src/core/lwip/tcp_rto.c \
 	$(top_builddir)/src/core/proto/xlio_time.cpp \
 	$(top_builddir)/src/core/proto/mapping.cpp \
+	$(top_builddir)/src/core/proto/rule_table_mgr.cpp \
+	$(top_builddir)/src/core/proto/rule_val.cpp \
+	$(top_builddir)/src/core/proto/rule_entry.cpp \
+	$(top_builddir)/src/core/proto/netlink_socket_mgr.cpp \
+	$(top_builddir)/src/core/infra/subject_observer.cpp \
 	$(top_builddir)/src/core/config/loaders/inline_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/json_loader.cpp \
 	$(top_builddir)/src/core/config/loaders/key_resolver.cpp \
