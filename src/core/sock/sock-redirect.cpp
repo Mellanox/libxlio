@@ -249,6 +249,16 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 #endif
     }
 
+#if defined(DEFINED_ENVOY)
+    /* Envoy tears down a drained listener's per-worker fds with close(), not
+     * EPOLL_CTL_DEL, so this is the authoritative point to drop dup-tracking
+     * state: without it the entries grow unbounded across LDS updates and a
+     * recycled fd number could clone from a stale snapshot. */
+    if (g_p_app && g_p_app->type == APP_ENVOY) {
+        g_p_app->forget_fd(fd);
+    }
+#endif /* DEFINED_ENVOY */
+
     return to_close_now;
 }
 
@@ -913,7 +923,10 @@ EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
          * listen() call for duplicated fds are ignored.
          * Original listen socket is not ignored by listen() function.
          * - reuse_port(true) :
-         * dup() is not used. Unique socket is created for every worker.
+         * Initial add: a unique socket is created for every worker (no dup).
+         * Same-address listener update: Envoy dup()s the old listener's fds;
+         * those have no socket object either and are offloaded by cloning from
+         * the snapshot captured at dup() time (see dup() and proc_envoy()).
          *
          * Store all duplicated fd in map_dup_fd with reference to original fd
          * Store all listen fd in map_listen_fd with tid
@@ -926,7 +939,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
          * Set worker id in map_thread_id basing on tid(pid). Nginx has single thread per process so
          * tid and pid should be equal.
          */
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
         g_p_app->map_listen_fd[__fd] = gettid();
     }
 #endif /* DEFINED_ENVOY */
@@ -2090,8 +2103,16 @@ EXPORT_SYMBOL int XLIO_SYMBOL(epoll_ctl)(int __epfd, int __op, int __fd,
         if (g_p_app && g_p_app->type == APP_ENVOY) {
             rc = g_p_app->proc_envoy(__op, __fd);
             if (rc != 0) {
-                errno = EINVAL;
-                return -1;
+                /* proc_envoy() could not prepare this tracked listen fd for
+                 * offload. Never fail the ADD (a silent EINVAL black-holes the
+                 * listener): fall through so the fd registers on the kernel
+                 * epoll and serves unaccelerated, loudly. */
+                if (__op == EPOLL_CTL_ADD) {
+                    app_account_listen_passthrough(__fd, "worker init failed");
+                } else {
+                    errno = EINVAL;
+                    return -1;
+                }
             }
         }
 #endif /* DEFINED_ENVOY */
@@ -2238,10 +2259,28 @@ EXPORT_SYMBOL int XLIO_SYMBOL(dup)(int __fd)
     // Sanity check to remove any old sockinfo object using the same fd!!
     handle_close(fid, true);
 #if defined(DEFINED_ENVOY)
-    if (g_p_app && g_p_app->type == APP_ENVOY) {
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-        g_p_app->map_dup_fd[fid] = __fd;
-        g_p_app->map_dup_fd[__fd] = __fd;
+    if (g_p_app && g_p_app->type == APP_ENVOY && fid >= 0) {
+        /* Snapshot the parent listen socket's properties NOW, on the (Envoy
+         * main) thread where the parent is still alive: init_worker() clones
+         * the child listener from this snapshot later on a worker thread, by
+         * which time the parent - the draining old listener of a same-address
+         * update - may already be freed. getsockname() on a bound listener and
+         * the other getters are plain reads that take no device-layer locks,
+         * so they run outside the leaf m_map_lock. */
+        dup_listen_snapshot snap;
+        bool captured = false;
+        sockinfo *parent = fd_collection_get_sockfd(__fd);
+        if (parent && parent->get_reuseport() && parent->get_protocol() == PROTO_TCP) {
+            socklen_t sa_len = snap.sa.get_socklen();
+            parent->getsockname(snap.sa.get_p_sa(), &sa_len);
+            snap.sa_len = sa_len;
+            snap.family = parent->get_family();
+            snap.is_ipv6only = parent->is_ipv6only();
+            snap.is_blocking = parent->is_blocking();
+            snap.back_log = parent->get_back_log();
+            captured = true;
+        }
+        g_p_app->register_dup(fid, __fd, captured ? &snap : nullptr);
     }
 #endif /* DEFINED_ENVOY */
     return fid;
@@ -2304,7 +2343,7 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(fork)(void)
     static int worker_index = -1;
     if (g_p_app && g_p_app->type == APP_NGINX && (g_p_app->get_worker_id() == -1)) {
         /* This section is actual for parent process only */
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
         if (!g_p_app->unused_worker_id.empty()) {
             auto itr = g_p_app->unused_worker_id.begin();
             worker_index = *itr;
@@ -2539,7 +2578,7 @@ EXPORT_SYMBOL pid_t XLIO_SYMBOL(waitpid)(pid_t pid, int *wstatus, int options)
      * process tally.
      */
     if (g_p_app && g_p_app->type == APP_NGINX && child_pid > 0 && !WIFCONTINUED(*wstatus)) {
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
+        std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
         g_p_app->unused_worker_id.insert(g_p_app->get_worker_id());
         g_p_app->map_thread_id.erase(getpid());
     }
