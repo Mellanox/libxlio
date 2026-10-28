@@ -24,6 +24,8 @@ rule_val::rule_val()
     m_is_valid = false;
     m_priority = 0;
     m_table_id = 0;
+    m_fwmark = 0;
+    m_fwmask = 0;
     memset(m_oif_name, 0, IFNAMSIZ * sizeof(char));
     memset(m_iif_name, 0, IFNAMSIZ * sizeof(char));
 }
@@ -41,6 +43,11 @@ const std::string rule_val::to_str() const
     }
     if (m_tos != 0) {
         rc += " tos: " + std::to_string(m_tos);
+    }
+    if (m_fwmark != 0) {
+        char fwmark_str[32];
+        snprintf(fwmark_str, sizeof(fwmark_str), " fwmark: 0x%x/0x%x", m_fwmark, m_fwmask);
+        rc += fwmark_str;
     }
     if (m_iif_name[0] != '\0') {
         rc += " iff: " + std::string(m_iif_name);

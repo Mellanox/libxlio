@@ -140,6 +140,12 @@ void rule_table_mgr::parse_attr(struct rtnl_rule *rule, rule_val &val)
     if (oif_name) {
         val.set_oif_name(oif_name);
     }
+
+    // FRA_FWMARK / FRA_FWMASK: firewall mark selector (libnl returns 0 when the
+    // attribute is absent). A mark-selector rule must not be treated as an
+    // unconditional match; see is_matching_rule().
+    val.set_fwmark(rtnl_rule_get_mark(rule));
+    val.set_fwmask(rtnl_rule_get_mask(rule));
 }
 
 void rule_table_mgr::print_tbl()
@@ -237,6 +243,11 @@ static inline bool is_matching_rule(const route_rule_table_key &key, const rule_
         ((rule_src_ip.is_anyaddr()) || (rule_src_ip == m_src_ip)) &&
         // Check match in TOS value
         ((rule_tos == 0) || (rule_tos == m_tos)) &&
+        // Kernel fwmark matching is ((flow_mark ^ mark) & mask) == 0. XLIO
+        // resolves routes for unmarked flows (SO_MARK is not applied on the
+        // offloaded path), so a rule matches iff (mark & mask) == 0;
+        // unconditional rules read 0/0 (libnl reports absent attributes as 0).
+        ((val.get_fwmark() & val.get_fwmask()) == 0) &&
         // Check that rule doesn't contain IIF since we can't check match with
         (strcmp(rule_iif_name, "") == 0) &&
         // Check that rule doesn't contain OIF since we can't check match with
