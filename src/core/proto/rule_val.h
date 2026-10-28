@@ -29,6 +29,8 @@ public:
     inline void set_priority(uint32_t priority) { m_priority = priority; };
     inline void set_fwmark(uint32_t fwmark) { m_fwmark = fwmark; };
     inline void set_fwmask(uint32_t fwmask) { m_fwmask = fwmask; };
+    inline void set_dst_pref_len(uint8_t len) { m_dst_pref_len = len; };
+    inline void set_src_pref_len(uint8_t len) { m_src_pref_len = len; };
 
     inline const ip_address &get_dst_addr() const { return m_dst_addr; };
     inline const ip_address &get_src_addr() const { return m_src_addr; };
@@ -40,6 +42,8 @@ public:
     inline uint32_t get_priority() const { return m_priority; };
     inline uint32_t get_fwmark() const { return m_fwmark; };
     inline uint32_t get_fwmask() const { return m_fwmask; };
+    inline uint8_t get_dst_pref_len() const { return m_dst_pref_len; };
+    inline uint8_t get_src_pref_len() const { return m_src_pref_len; };
 
     inline void set_state(bool state) { m_is_valid = state; };
     inline bool is_valid() const { return m_is_valid; };
@@ -51,6 +55,9 @@ private:
     unsigned char m_protocol;
     unsigned char m_tos;
     unsigned char m_family;
+
+    uint8_t m_dst_pref_len;
+    uint8_t m_src_pref_len;
 
     bool m_is_valid;
 
