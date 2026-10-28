@@ -111,16 +111,19 @@ void rule_table_mgr::parse_attr(struct rtnl_rule *rule, rule_val &val)
     uint32_t priority = rtnl_rule_get_prio(rule);
     val.set_priority(priority);
 
-    // FRA_DST: Destination Address
+    // FRA_DST: Destination Address (the prefix length arrives in the fib rule
+    // header; an exact address is a full-length prefix)
     struct nl_addr *dst = rtnl_rule_get_dst(rule);
     if (dst && is_valid_addr(dst)) {
         val.set_dst_addr(ip_address(nl_addr_get_binary_addr(dst), nl_addr_get_family(dst)));
+        val.set_dst_pref_len(nl_addr_get_prefixlen(dst));
     }
 
     // FRA_SRC: Source Address
     struct nl_addr *src = rtnl_rule_get_src(rule);
     if (src && is_valid_addr(src)) {
         val.set_src_addr(ip_address(nl_addr_get_binary_addr(src), nl_addr_get_family(src)));
+        val.set_src_pref_len(nl_addr_get_prefixlen(src));
     }
 
     // FRA_IFNAME: Input Interface Name
@@ -237,10 +240,13 @@ static inline bool is_matching_rule(const route_rule_table_key &key, const rule_
     return val.is_valid() &&
         // Check match in address family
         (val.get_family() == key.get_family()) &&
-        // Check match in destination IP
-        ((rule_dst_ip.is_anyaddr()) || (rule_dst_ip == m_dst_ip)) &&
-        // Check match in source IP
-        ((rule_src_ip.is_anyaddr()) || (rule_src_ip == m_src_ip)) &&
+        // Check match in destination IP by the rule's prefix length
+        // ('to 10.0.0.0/8' matches the whole subnet, not only the network address)
+        ((rule_dst_ip.is_anyaddr()) ||
+         rule_dst_ip.is_equal_with_prefix(m_dst_ip, val.get_dst_pref_len(), val.get_family())) &&
+        // Check match in source IP by the rule's prefix length
+        ((rule_src_ip.is_anyaddr()) ||
+         rule_src_ip.is_equal_with_prefix(m_src_ip, val.get_src_pref_len(), val.get_family())) &&
         // Check match in TOS value
         ((rule_tos == 0) || (rule_tos == m_tos)) &&
         // Kernel fwmark matching is ((flow_mark ^ mark) & mask) == 0. XLIO
