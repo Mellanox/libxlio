@@ -24,6 +24,10 @@ rule_val::rule_val()
     m_is_valid = false;
     m_priority = 0;
     m_table_id = 0;
+    m_fwmark = 0;
+    m_fwmask = 0;
+    m_dst_pref_len = 0;
+    m_src_pref_len = 0;
     memset(m_oif_name, 0, IFNAMSIZ * sizeof(char));
     memset(m_iif_name, 0, IFNAMSIZ * sizeof(char));
 }
@@ -32,15 +36,28 @@ const std::string rule_val::to_str() const
 {
     std::string rc;
 
+    const uint8_t full_pref_len = (m_family == AF_INET) ? 32 : 128;
+
     rc = "Priority: " + std::to_string(m_priority);
     if (!m_src_addr.is_anyaddr()) {
         rc += " from: " + m_src_addr.to_str(m_family);
+        if (m_src_pref_len != full_pref_len) {
+            rc += "/" + std::to_string(m_src_pref_len);
+        }
     }
     if (!m_dst_addr.is_anyaddr()) {
         rc += " to: " + m_dst_addr.to_str(m_family);
+        if (m_dst_pref_len != full_pref_len) {
+            rc += "/" + std::to_string(m_dst_pref_len);
+        }
     }
     if (m_tos != 0) {
         rc += " tos: " + std::to_string(m_tos);
+    }
+    if (m_fwmark != 0) {
+        char fwmark_str[32];
+        snprintf(fwmark_str, sizeof(fwmark_str), " fwmark: 0x%x/0x%x", m_fwmark, m_fwmask);
+        rc += fwmark_str;
     }
     if (m_iif_name[0] != '\0') {
         rc += " iff: " + std::string(m_iif_name);

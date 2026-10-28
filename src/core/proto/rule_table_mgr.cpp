@@ -111,16 +111,19 @@ void rule_table_mgr::parse_attr(struct rtnl_rule *rule, rule_val &val)
     uint32_t priority = rtnl_rule_get_prio(rule);
     val.set_priority(priority);
 
-    // FRA_DST: Destination Address
+    // FRA_DST: Destination Address (the prefix length arrives in the fib rule
+    // header; an exact address is a full-length prefix)
     struct nl_addr *dst = rtnl_rule_get_dst(rule);
     if (dst && is_valid_addr(dst)) {
         val.set_dst_addr(ip_address(nl_addr_get_binary_addr(dst), nl_addr_get_family(dst)));
+        val.set_dst_pref_len(nl_addr_get_prefixlen(dst));
     }
 
     // FRA_SRC: Source Address
     struct nl_addr *src = rtnl_rule_get_src(rule);
     if (src && is_valid_addr(src)) {
         val.set_src_addr(ip_address(nl_addr_get_binary_addr(src), nl_addr_get_family(src)));
+        val.set_src_pref_len(nl_addr_get_prefixlen(src));
     }
 
     // FRA_IFNAME: Input Interface Name
@@ -140,6 +143,12 @@ void rule_table_mgr::parse_attr(struct rtnl_rule *rule, rule_val &val)
     if (oif_name) {
         val.set_oif_name(oif_name);
     }
+
+    // FRA_FWMARK / FRA_FWMASK: firewall mark selector (libnl returns 0 when the
+    // attribute is absent). A mark-selector rule must not be treated as an
+    // unconditional match; see is_matching_rule().
+    val.set_fwmark(rtnl_rule_get_mark(rule));
+    val.set_fwmask(rtnl_rule_get_mask(rule));
 }
 
 void rule_table_mgr::print_tbl()
@@ -231,12 +240,20 @@ static inline bool is_matching_rule(const route_rule_table_key &key, const rule_
     return val.is_valid() &&
         // Check match in address family
         (val.get_family() == key.get_family()) &&
-        // Check match in destination IP
-        ((rule_dst_ip.is_anyaddr()) || (rule_dst_ip == m_dst_ip)) &&
-        // Check match in source IP
-        ((rule_src_ip.is_anyaddr()) || (rule_src_ip == m_src_ip)) &&
+        // Check match in destination IP by the rule's prefix length
+        // ('to 10.0.0.0/8' matches the whole subnet, not only the network address)
+        ((rule_dst_ip.is_anyaddr()) ||
+         rule_dst_ip.is_equal_with_prefix(m_dst_ip, val.get_dst_pref_len(), val.get_family())) &&
+        // Check match in source IP by the rule's prefix length
+        ((rule_src_ip.is_anyaddr()) ||
+         rule_src_ip.is_equal_with_prefix(m_src_ip, val.get_src_pref_len(), val.get_family())) &&
         // Check match in TOS value
         ((rule_tos == 0) || (rule_tos == m_tos)) &&
+        // Kernel fwmark matching is ((flow_mark ^ mark) & mask) == 0. XLIO
+        // resolves routes for unmarked flows (SO_MARK is not applied on the
+        // offloaded path), so a rule matches iff (mark & mask) == 0;
+        // unconditional rules read 0/0 (libnl reports absent attributes as 0).
+        ((val.get_fwmark() & val.get_fwmask()) == 0) &&
         // Check that rule doesn't contain IIF since we can't check match with
         (strcmp(rule_iif_name, "") == 0) &&
         // Check that rule doesn't contain OIF since we can't check match with
