@@ -66,14 +66,16 @@ void rfs_uc::prepare_flow_spec()
     }
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     else if (g_p_app->type != APP_NONE && g_p_app->get_worker_id() >= 0) {
-#if defined(DEFINED_ENVOY)
-        if (m_flow_tuple.get_protocol() != PROTO_UDP)
-#else
-        if (m_flow_tuple.get_protocol() != PROTO_UDP ||
-            (g_map_udp_resue_port.count(((uint32_t)m_flow_tuple.get_family() << 16) |
-                                        ntohs(m_flow_tuple.get_dst_port()))))
+        // Per-worker UDP steering applies to Nginx only: the UDP reuse-port map exists in Nginx
+        // builds and is populated by the Nginx socket flow; Envoy UDP listeners are not steered
+        // per worker.
+        bool nginx_udp_reuse_port_steering = false;
+#if defined(DEFINED_NGINX)
+        nginx_udp_reuse_port_steering = g_p_app->type == APP_NGINX &&
+            g_map_udp_resue_port.count(((uint32_t)m_flow_tuple.get_family() << 16) |
+                                       ntohs(m_flow_tuple.get_dst_port())) != 0;
 #endif
-        {
+        if (m_flow_tuple.get_protocol() != PROTO_UDP || nginx_udp_reuse_port_steering) {
             int src_port;
             if (g_p_app->add_second_4t_rule) {
                 src_port = g_p_app->workers_num + g_p_app->get_worker_id();

@@ -1,0 +1,7 @@
+{
+  "applications": {
+    "nginx": {
+      "workers_num": 4
+    }
+  }
+}

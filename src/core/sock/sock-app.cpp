@@ -96,7 +96,6 @@ int app_conf::proc_envoy(int __op, int __fd)
         } else if (__op == EPOLL_CTL_ADD) {
             static int original_listen_count = INT_MAX;
             static int total_worker_id = 0;
-            int worker_id = -1;
 
             /* This check is `enable_reuse_port = false` specific
              *
@@ -119,7 +118,7 @@ int app_conf::proc_envoy(int __op, int __fd)
             /* Logic that assigns worker id for processed listener
              * total_worker_id is unique for all threads
              */
-            worker_id = g_p_app->get_worker_id();
+            int worker_id = g_p_app->get_worker_id();
             if (worker_id < 0) {
                 worker_id = total_worker_id;
                 total_worker_id++;
