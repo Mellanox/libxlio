@@ -312,7 +312,15 @@ void ring_simple::create_resources()
 
     m_flow_tag_enabled = !safe_mce_sys().disable_flow_tag && m_p_ib_ctx->get_flow_tag_capability();
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    if (g_p_app->type != APP_NONE && g_p_app->get_worker_id() >= 0) {
+    /* Disable flow tags for every ring in worker-app mode, keyed on app.type
+     * alone - NOT on the calling thread's worker id. A flow tag is fd+1 with
+     * no ownership identity; under worker-mode connection churn a recycled fd
+     * resolves a stale CQE to a freed sockinfo on the RX fast path
+     * (ring_slave.cpp:701 -> check_rx_packet -> si->rx_input_cb on a dangling
+     * si -> SIGSEGV). Gating on get_worker_id() >= 0 left rings created by the
+     * internal thread (worker id -1) flow-tagged, so the disable was porous
+     * and the crash still fired in Envoy worker mode. */
+    if (g_p_app->type != APP_NONE) {
         m_flow_tag_enabled = false;
     }
 #endif

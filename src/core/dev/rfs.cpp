@@ -115,7 +115,11 @@ rfs::rfs(flow_tuple *flow_spec_5t, ring_slave *p_ring, rfs_rule_filter *rule_fil
     m_sinks_list = new sockinfo *[m_n_sinks_list_max_length];
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-    if (g_p_app->type != APP_NONE && g_p_app->get_worker_id() >= 0) {
+    /* Zero the flow tag for every rfs in worker-app mode, keyed on app.type
+     * alone - NOT the calling thread's worker id (see ring_simple.cpp). A tag
+     * left on an internal-thread-created rfs feeds the porous RX fast path and
+     * a stale CQE derefs a freed sockinfo (ring_slave.cpp:701). */
+    if (g_p_app->type != APP_NONE) {
         m_flow_tag_id = 0;
     }
 #endif
