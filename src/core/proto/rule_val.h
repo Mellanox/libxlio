@@ -31,6 +31,7 @@ public:
     inline void set_fwmask(uint32_t fwmask) { m_fwmask = fwmask; };
     inline void set_dst_pref_len(uint8_t len) { m_dst_pref_len = len; };
     inline void set_src_pref_len(uint8_t len) { m_src_pref_len = len; };
+    inline void set_invert(bool invert) { m_invert = invert; };
 
     inline const ip_address &get_dst_addr() const { return m_dst_addr; };
     inline const ip_address &get_src_addr() const { return m_src_addr; };
@@ -44,6 +45,7 @@ public:
     inline uint32_t get_fwmask() const { return m_fwmask; };
     inline uint8_t get_dst_pref_len() const { return m_dst_pref_len; };
     inline uint8_t get_src_pref_len() const { return m_src_pref_len; };
+    inline bool is_inverted() const { return m_invert; };
 
     inline void set_state(bool state) { m_is_valid = state; };
     inline bool is_valid() const { return m_is_valid; };
@@ -60,6 +62,7 @@ private:
     uint8_t m_src_pref_len;
 
     bool m_is_valid;
+    bool m_invert;
 
     uint32_t m_priority;
     uint32_t m_table_id;
