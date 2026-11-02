@@ -22,6 +22,7 @@ rule_val::rule_val()
     m_tos = 0;
     m_family = 0;
     m_is_valid = false;
+    m_invert = false;
     m_priority = 0;
     m_table_id = 0;
     m_fwmark = 0;
@@ -39,6 +40,9 @@ const std::string rule_val::to_str() const
     const uint8_t full_pref_len = (m_family == AF_INET) ? 32 : 128;
 
     rc = "Priority: " + std::to_string(m_priority);
+    if (m_invert) {
+        rc += " not";
+    }
     if (!m_src_addr.is_anyaddr() || m_src_pref_len != 0) {
         rc += " from: " + m_src_addr.to_str(m_family);
         if (m_src_pref_len != full_pref_len) {

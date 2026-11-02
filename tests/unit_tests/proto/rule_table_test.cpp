@@ -10,7 +10,11 @@
 #include <gtest/gtest.h>
 
 #include <netlink/addr.h>
+#include <netlink/attr.h>
+#include <netlink/msg.h>
 #include <netlink/route/rule.h>
+#include <linux/fib_rules.h>
+#include <linux/rtnetlink.h>
 
 #include <algorithm>
 #include <arpa/inet.h>
@@ -22,7 +26,7 @@
  * so a manager instance may also hold the host's own rules. The tests stay
  * independent of host state: they feed synthetic libnl rule objects through
  * parse_entry(), including their own fallback rules, and assert only on
- * table ids in the 10157-10166 range that no host configuration uses.
+ * table ids in the 10157-10168 range that no host configuration uses.
  *
  * The cache-table garbage collector is never started here; stub the
  * event-handler timer registration it would otherwise need.
@@ -55,6 +59,54 @@ struct rtnl_rule *make_rule(int family, uint32_t table, uint32_t prio)
     rtnl_rule_set_table(rule, table);
     rtnl_rule_set_prio(rule, prio);
     rtnl_rule_set_action(rule, FR_ACT_TO_TBL);
+    return rule;
+}
+
+void capture_rule_cb(struct nl_object *obj, void *arg)
+{
+    struct rtnl_rule **out = static_cast<struct rtnl_rule **>(arg);
+    nl_object_get(obj); // keep it alive after nl_msg_parse drops its reference
+    *out = reinterpret_cast<struct rtnl_rule *>(obj);
+}
+
+// libnl has no setter for FIB_RULE_INVERT, so build an inverted rule the way the
+// kernel delivers it - a raw RTM_NEWRULE message with the flag - and let libnl
+// parse it offline into an rtnl_rule, the same parse the live dump path uses.
+// The caller owns the returned rule (rtnl_rule_put).
+struct rtnl_rule *make_inverted_rule(int family, uint32_t table, uint32_t prio, uint32_t fwmark,
+                                     const char *src_cidr)
+{
+    struct nl_msg *m = nlmsg_alloc_simple(RTM_NEWRULE, NLM_F_REQUEST | NLM_F_CREATE);
+    nlmsg_set_proto(m, NETLINK_ROUTE); // required for nl_msg_parse to find the rule ops
+    struct fib_rule_hdr frh;
+    memset(&frh, 0, sizeof(frh));
+    frh.family = family;
+    frh.action = FR_ACT_TO_TBL;
+    frh.table = (table <= 255) ? table : RT_TABLE_UNSPEC;
+    frh.flags = FIB_RULE_INVERT;
+
+    struct nl_addr *src = nullptr;
+    if (src_cidr) {
+        EXPECT_EQ(0, nl_addr_parse(src_cidr, family, &src));
+        frh.src_len = nl_addr_get_prefixlen(src);
+    }
+    nlmsg_append(m, &frh, sizeof(frh), NLMSG_ALIGNTO);
+    if (table > 255) {
+        nla_put_u32(m, FRA_TABLE, table);
+    }
+    if (fwmark != 0) {
+        nla_put_u32(m, FRA_FWMARK, fwmark);
+        nla_put_u32(m, FRA_FWMASK, 0xFFFFFFFFU); // bare 'fwmark N' carries a full mask
+    }
+    if (src) {
+        nla_put_addr(m, FRA_SRC, src);
+        nl_addr_put(src);
+    }
+    nla_put_u32(m, FRA_PRIORITY, prio);
+
+    struct rtnl_rule *rule = nullptr;
+    nl_msg_parse(m, capture_rule_cb, &rule);
+    nlmsg_free(m);
     return rule;
 }
 
@@ -253,4 +305,39 @@ TEST(rule_table_mgr, src_prefix_rule_matches_ipv6_subnet)
 
     tables = mgr.rule_resolve(make_key(AF_INET6, "2001:db8::1", "fd00:78::1"));
     EXPECT_FALSE(contains(tables, 10162));
+}
+
+TEST(rule_table_mgr, inverted_fwmark_rule_matches_unmarked_lookup)
+{
+    rule_table_mgr_under_test mgr;
+
+    // 'ip rule add not fwmark 1 lookup 10167': inverting the mark selector flips
+    // the plain-fwmark verdict, so an unmarked flow now matches (the kernel
+    // selects the table for every flow that does not carry mark 1).
+    struct rtnl_rule *rule = make_inverted_rule(AF_INET, 10167, 200, 1, nullptr);
+    ASSERT_NE(nullptr, rule);
+    mgr.parse(rule);
+    rtnl_rule_put(rule);
+
+    std::vector<uint32_t> tables = mgr.rule_resolve(make_key(AF_INET, "8.8.8.8", nullptr));
+    EXPECT_TRUE(contains(tables, 10167));
+}
+
+TEST(rule_table_mgr, inverted_src_prefix_rule_inverts_subnet_match)
+{
+    rule_table_mgr_under_test mgr;
+
+    // 'ip rule add not from 10.77.0.0/16 lookup 10168': inversion applies to the
+    // whole selector, so a source inside the /16 is skipped and a source outside
+    // it is selected.
+    struct rtnl_rule *rule = make_inverted_rule(AF_INET, 10168, 201, 0, "10.77.0.0/16");
+    ASSERT_NE(nullptr, rule);
+    mgr.parse(rule);
+    rtnl_rule_put(rule);
+
+    std::vector<uint32_t> tables = mgr.rule_resolve(make_key(AF_INET, "8.8.8.8", "10.77.1.2"));
+    EXPECT_FALSE(contains(tables, 10168));
+
+    tables = mgr.rule_resolve(make_key(AF_INET, "8.8.8.8", "10.78.1.2"));
+    EXPECT_TRUE(contains(tables, 10168));
 }

@@ -20,6 +20,7 @@
 
 #include <netlink/route/rule.h>
 #include <netlink/netlink.h>
+#include <netlink/msg.h>
 
 #include "utils/bullseye.h"
 #include "utils/lock_wrapper.h"
@@ -146,11 +147,22 @@ void rule_table_mgr::parse_attr(struct rtnl_rule *rule, rule_val &val)
 
     // FRA_FWMARK / FRA_FWMASK: firewall mark selector (libnl returns 0 when the
     // attribute is absent). A mark-selector rule must not be treated as an
-    // unconditional match; see is_matching_rule(). Known limitation: libnl does
-    // not expose the rule header flags, so FIB_RULE_INVERT ('not fwmark ...')
-    // is invisible here and an inverted rule is handled as its plain form.
+    // unconditional match; see is_matching_rule().
     val.set_fwmark(rtnl_rule_get_mark(rule));
     val.set_fwmask(rtnl_rule_get_mask(rule));
+
+    // FIB_RULE_INVERT ('ip rule add not ...'): libnl has no getter for the rule
+    // header flags, but the flag survives the serialize roundtrip. Rebuild the
+    // add-request and read the flags off the fib_rule_hdr. is_matching_rule()
+    // negates the whole selector match when the rule is inverted, matching the
+    // kernel (which inverts the combined selector result, not a single term).
+    struct nl_msg *msg = nullptr;
+    if (rtnl_rule_build_add_request(rule, 0, &msg) == 0 && msg != nullptr) {
+        const struct fib_rule_hdr *frh =
+            static_cast<const struct fib_rule_hdr *>(nlmsg_data(nlmsg_hdr(msg)));
+        val.set_invert((frh->flags & FIB_RULE_INVERT) != 0);
+        nlmsg_free(msg);
+    }
 }
 
 void rule_table_mgr::print_tbl()
@@ -237,30 +249,35 @@ static inline bool is_matching_rule(const route_rule_table_key &key, const rule_
     const char *rule_iif_name = val.get_iif_name();
     const char *rule_oif_name = val.get_oif_name();
 
-    // Only destination IP, source IP and TOS are checked with rule, since IIF and OIF is not filled
-    // in dst_entry object.
-    return val.is_valid() &&
-        // Check match in address family
-        (val.get_family() == key.get_family()) &&
-        // Check match in destination and source IP by the rule's prefix length
-        // ('to 10.0.0.0/8' matches the whole subnet, not only the network
-        // address). A rule without an address attribute keeps prefix length 0,
-        // which matches everything; a zero-valued network with a non-zero
-        // prefix ('to 0.0.0.0/8', 'to ::/1') selects only its subnet, like the
-        // kernel, so there is deliberately no any-address shortcut here.
+    if (!val.is_valid() || val.get_family() != key.get_family()) {
+        return false;
+    }
+
+    // IIF and OIF are not filled in the dst_entry object, so XLIO cannot model a
+    // rule that selects on them. Such a rule is left unmatched regardless of
+    // inversion: inverting an unevaluable selector does not make it evaluable.
+    if (strcmp(rule_iif_name, "") != 0 || strcmp(rule_oif_name, "") != 0) {
+        return false;
+    }
+
+    // Match the selectors XLIO can evaluate: destination and source by the
+    // rule's prefix length ('to 10.0.0.0/8' matches the whole subnet, not only
+    // the network address; a rule without an address keeps prefix length 0,
+    // which matches everything; a zero-valued network with a non-zero prefix
+    // 'to 0.0.0.0/8' / 'to ::/1' selects only its subnet, like the kernel, so
+    // there is deliberately no any-address shortcut); TOS; and the fwmark.
+    // Kernel fwmark matching is ((flow_mark ^ mark) & mask) == 0, and XLIO
+    // resolves routes for unmarked flows (SO_MARK is not applied on the
+    // offloaded path), so the mark selector holds iff (mark & mask) == 0
+    // (unconditional rules read 0/0, libnl reports absent attributes as 0).
+    bool selector_match =
         rule_dst_ip.is_equal_with_prefix(m_dst_ip, val.get_dst_pref_len(), val.get_family()) &&
         rule_src_ip.is_equal_with_prefix(m_src_ip, val.get_src_pref_len(), val.get_family()) &&
-        // Check match in TOS value
-        ((rule_tos == 0) || (rule_tos == m_tos)) &&
-        // Kernel fwmark matching is ((flow_mark ^ mark) & mask) == 0. XLIO
-        // resolves routes for unmarked flows (SO_MARK is not applied on the
-        // offloaded path), so a rule matches iff (mark & mask) == 0;
-        // unconditional rules read 0/0 (libnl reports absent attributes as 0).
-        ((val.get_fwmark() & val.get_fwmask()) == 0) &&
-        // Check that rule doesn't contain IIF since we can't check match with
-        (strcmp(rule_iif_name, "") == 0) &&
-        // Check that rule doesn't contain OIF since we can't check match with
-        (strcmp(rule_oif_name, "") == 0);
+        ((rule_tos == 0) || (rule_tos == m_tos)) && ((val.get_fwmark() & val.get_fwmask()) == 0);
+
+    // FIB_RULE_INVERT ('ip rule add not ...') negates the whole selector match,
+    // exactly as the kernel inverts the combined selector result.
+    return val.is_inverted() ? !selector_match : selector_match;
 }
 
 // Find table ID for given destination info.
