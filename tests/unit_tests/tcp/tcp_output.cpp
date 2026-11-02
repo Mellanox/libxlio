@@ -13,11 +13,6 @@
 #include "core/lwip/tcp_rto.h"
 #include "core/proto/xlio_time.h"
 
-extern "C" {
-int32_t enable_wnd_scale = 0;
-u32_t rcv_wnd_scale = 0;
-}
-
 namespace {
 
 struct test_segment_storage {
@@ -543,8 +538,7 @@ TEST(tcp_output, rto_wouldblock_retains_backoff_until_retry_succeeds)
     EXPECT_GT(pcb.rto_deadline_us, first_deadline);
     EXPECT_TRUE(pcb.is_last_seg_dropped);
     EXPECT_EQ(0, pcb.rtime);
-    EXPECT_EQ(1, pcb.ticks_since_data_sent)
-        << "the RTO retry must not reset TCP_USER_TIMEOUT age";
+    EXPECT_EQ(1, pcb.ticks_since_data_sent) << "the RTO retry must not reset TCP_USER_TIMEOUT age";
 
     /* A successful early retry re-arms from its transmit time. */
     pcb.ip_output = succeed_always;
@@ -593,8 +587,7 @@ TEST(tcp_output, permanent_idle_wouldblock_honors_tcp_user_timeout)
         ASSERT_EQ(ESTABLISHED, get_tcp_state(&pcb)) << "closed before TCP_USER_TIMEOUT";
     }
 
-    tcp_slowtmr(&pcb,
-                start_us + (int64_t)(timeout_ticks + 1) * slow_tmr_interval * 1000);
+    tcp_slowtmr(&pcb, start_us + (int64_t)(timeout_ticks + 1) * slow_tmr_interval * 1000);
 
     EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
     EXPECT_EQ(1, g_error_calls);

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+#include "../xlio_test_init.h"
 #include "core/proto/mapping.h"
 #include "vlogger/vlogger.h"
 
@@ -17,38 +18,28 @@
 #include <unistd.h>
 #include <vector>
 
-/*
- * mapping.cpp is linked into this hardware-free unit-test target. Stub only
- * memory registration and logging, which are outside the cache policy under
- * test.
- */
-vlog_levels_t g_vlogger_level = VLOG_NONE;
+// Preserve the cache tests' hardware-free registration boundary without
+// replacing allocator or logger definitions used by the epoll tests.
+static thread_local bool skip_mapping_registration = false;
 
-void vlog_output(vlog_levels_t, const char *, ...)
+extern "C" bool real_register_memory(xlio_registrator *, void *, size_t, ib_ctx_handler *) asm(
+    "__real__ZN16xlio_registrator15register_memoryEPvmP14ib_ctx_handler");
+
+extern "C" bool wrapped_register_memory(xlio_registrator *, void *, size_t, ib_ctx_handler *) asm(
+    "__wrap__ZN16xlio_registrator15register_memoryEPvmP14ib_ctx_handler");
+
+extern "C" bool wrapped_register_memory(xlio_registrator *registrator, void *data, size_t size,
+                                        ib_ctx_handler *ctx)
 {
+    return skip_mapping_registration || real_register_memory(registrator, data, size, ctx);
 }
 
-xlio_registrator::xlio_registrator()
-{
-}
-
-xlio_registrator::~xlio_registrator()
-{
-}
-
-bool xlio_registrator::register_memory(void *, size_t, ib_ctx_handler *)
-{
-    return true;
-}
-
-void xlio_registrator::deregister_memory()
-{
-}
-
-uint32_t xlio_registrator::find_lkey_by_ib_ctx(ib_ctx_handler *) const
-{
-    return 0;
-}
+class mapping_cache_test : public testing::Test {
+protected:
+    static void SetUpTestCase() { ASSERT_EQ(0, initialize_xlio_unit_tests()); }
+    void SetUp() override { skip_mapping_registration = true; }
+    void TearDown() override { skip_mapping_registration = false; }
+};
 
 static FILE *create_mapping_file(size_t size)
 {
@@ -150,7 +141,7 @@ TEST(mapping_hot_ref_test, demotion_waits_for_active_reference)
     EXPECT_EQ(0U, refs.value());
 }
 
-TEST(mapping_cache_test, eviction_scans_past_active_hot_candidate)
+TEST_F(mapping_cache_test, eviction_scans_past_active_hot_candidate)
 {
     const size_t mapping_size = 4096;
     file_ptr active_file(create_mapping_file(mapping_size));
@@ -180,7 +171,7 @@ TEST(mapping_cache_test, eviction_scans_past_active_hot_candidate)
     active->put();
 }
 
-TEST(mapping_cache_test, concurrent_shared_mapping_survives_eviction)
+TEST_F(mapping_cache_test, concurrent_shared_mapping_survives_eviction)
 {
     constexpr size_t mapping_size = 4096;
     constexpr size_t thread_count = 4;
@@ -218,6 +209,7 @@ TEST(mapping_cache_test, concurrent_shared_mapping_survives_eviction)
     threads.reserve(thread_count);
     for (size_t thread_index = 0; thread_index < thread_count; ++thread_index) {
         threads.emplace_back([&, thread_index]() {
+            skip_mapping_registration = true;
             size_t replacement_index = 1;
 
             ready_threads.fetch_add(1, std::memory_order_release);
@@ -279,8 +271,7 @@ TEST(mapping_cache_test, concurrent_shared_mapping_survives_eviction)
     while (failure.load(std::memory_order_relaxed) == 0) {
         const auto now = std::chrono::steady_clock::now();
         if (now >= minimum_deadline &&
-            shared_acquisitions.load(std::memory_order_relaxed) >=
-                required_shared_acquisitions &&
+            shared_acquisitions.load(std::memory_order_relaxed) >= required_shared_acquisitions &&
             get_eviction_count() >= required_evictions) {
             break;
         }
@@ -298,8 +289,7 @@ TEST(mapping_cache_test, concurrent_shared_mapping_survives_eviction)
     const auto elapsed = std::chrono::steady_clock::now() - start_time;
     EXPECT_EQ(0U, failure.load(std::memory_order_relaxed));
     EXPECT_GE(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(), 1000);
-    EXPECT_GE(shared_acquisitions.load(std::memory_order_relaxed),
-              required_shared_acquisitions);
+    EXPECT_GE(shared_acquisitions.load(std::memory_order_relaxed), required_shared_acquisitions);
     EXPECT_GT(eviction_acquisitions.load(std::memory_order_relaxed), 0U);
     EXPECT_GE(get_eviction_count(), required_evictions);
     for (size_t thread_index = 0; thread_index < thread_count; ++thread_index) {

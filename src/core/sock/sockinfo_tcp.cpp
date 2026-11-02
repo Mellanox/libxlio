@@ -332,7 +332,7 @@ sockinfo_tcp::sockinfo_tcp(int fd, int domain)
     m_rcvbuff_max = safe_mce_sys().sysctl_reader.get_tcp_rmem()->default_value;
     m_rcvbuff_current = 0;
     m_rcvbuff_non_tcp_recved = 0;
-    m_ready_conn_cnt = 0;
+    m_ready_conn_cnt.store(0, std::memory_order_relaxed);
     m_backlog = INT_MAX;
     report_connected = false;
     m_error_status = 0;
@@ -519,10 +519,10 @@ inline bool sockinfo_tcp::try_harvest_from_rss_child(size_t rss_child_index)
     assert(rss_child->m_ready_conn_cnt == rss_child->m_accepted_conns.size());
 
     size_t conn_count = rss_child->m_ready_conn_cnt;
-
+    // Publish the parent update to probes that acquire this child's transferred zero.
     m_accepted_conns.splice_tail(rss_child->m_accepted_conns);
-    m_ready_conn_cnt += conn_count;
-    rss_child->m_ready_conn_cnt = 0;
+    add_ready_conn_count(conn_count);
+    rss_child->m_ready_conn_cnt.store(0, std::memory_order_release);
 
     IF_STATS_O(rss_child,
                rss_child->m_p_socket_stats->listen_counters.n_conn_backlog -= conn_count);
@@ -530,7 +530,8 @@ inline bool sockinfo_tcp::try_harvest_from_rss_child(size_t rss_child_index)
                rss_child->m_p_socket_stats->listen_counters.n_conn_accepted += conn_count);
     IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog += conn_count);
 
-    si_tcp_logdbg("Harvested %u connections from rss_child %zu", m_ready_conn_cnt, rss_child_index);
+    si_tcp_logdbg("Harvested %u connections from rss_child %zu", m_ready_conn_cnt.load(),
+                  rss_child_index);
     return true;
 }
 
@@ -758,7 +759,7 @@ err_t sockinfo_tcp::rx_lwip_cb_entity_context(void *arg, struct tcp_pcb *pcb, st
 
         buff->p_next_desc = buff->p_prev_desc = nullptr;
         conn->m_rx_pkt_ready_list.push_back(buff);
-        conn->m_n_rx_pkt_ready_list_count++;
+        conn->add_rx_ready_count(1);
         conn->m_rx_ready_byte_count += ptmp->len;
         buff->rx.sz_payload = ptmp->len; // Must sync rx.sz_payload to pkt size after shrinks.
 
@@ -890,8 +891,9 @@ sockinfo_tcp::~sockinfo_tcp()
             "not all buffers were freed. protocol=TCP. m_n_rx_pkt_ready_list_count=%d, "
             "m_rx_ready_byte_count=%lu, m_rx_pkt_ready_list.size()=%d, m_rx_ring_map.size()=%d, "
             "m_rx_reuse_buff.n_buff_num=%d, m_rx_reuse_buff.rx_reuse.size=%lu",
-            m_n_rx_pkt_ready_list_count, m_rx_ready_byte_count, (int)m_rx_pkt_ready_list.size(),
-            (int)m_rx_ring_map.size(), m_rx_reuse_buff.n_buff_num, m_rx_reuse_buff.rx_reuse.size());
+            m_n_rx_pkt_ready_list_count.load(), m_rx_ready_byte_count,
+            (int)m_rx_pkt_ready_list.size(), (int)m_rx_ring_map.size(), m_rx_reuse_buff.n_buff_num,
+            m_rx_reuse_buff.rx_reuse.size());
     }
 
     si_tcp_logdbg("sock closed");
@@ -912,7 +914,7 @@ void sockinfo_tcp::clear_rx_ready_buffers()
     while (m_n_rx_pkt_ready_list_count) {
         // coverity[returned_null : FALSE]
         mem_buf_desc_t *p_rx_pkt_desc = m_rx_pkt_ready_list.get_and_pop_front();
-        m_n_rx_pkt_ready_list_count--;
+        add_rx_ready_count(-1);
         /* coverity[null_dereference] */
         m_rx_ready_byte_count -= p_rx_pkt_desc->rx.sz_payload;
         if (m_p_socket_stats) {
@@ -962,7 +964,7 @@ bool sockinfo_tcp::prepare_listen_to_close()
             // previously
             remove_received_syn_socket(new_sock);
         }
-        m_ready_conn_cnt--;
+        add_ready_conn_count(static_cast<uint32_t>(-1));
         new_sock->lock_tcp_con();
         new_sock->m_parent = nullptr;
         new_sock->abort_connection();
@@ -1058,7 +1060,7 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
     m_sock_wakeup_pipe.do_wakeup();
 
     if (has_epoll_context()) {
-        m_econtext->fd_closed(m_fd);
+        m_econtext.load()->fd_closed(m_fd);
     }
 
     bool is_closable_state = is_closable();
@@ -1224,7 +1226,7 @@ unsigned sockinfo_tcp::tx_wait_poll(bool blocking)
 {
     unsigned sz = sndbuf_available();
     int poll_count = 0;
-    si_tcp_logfunc("sz = %u rx_count=%d", sz, m_n_rx_pkt_ready_list_count);
+    si_tcp_logfunc("sz = %u rx_count=%d", sz, m_n_rx_pkt_ready_list_count.load());
     int err = 0;
     while (is_rts() && (sz = sndbuf_available()) == 0) {
         err = rx_wait(poll_count, blocking);
@@ -1246,7 +1248,7 @@ unsigned sockinfo_tcp::tx_wait_poll(bool blocking)
             poll_count = 0;
         }
     }
-    si_tcp_logfunc("end sz=%u rx_count=%d", sz, m_n_rx_pkt_ready_list_count);
+    si_tcp_logfunc("end sz=%u rx_count=%d", sz, m_n_rx_pkt_ready_list_count.load());
     return sz;
 }
 
@@ -2340,7 +2342,7 @@ void sockinfo_tcp::update_ready_packets_stats(socket_stats_t *stats, uint64_t by
 inline void sockinfo_tcp::save_packet_info_in_ready_list(pbuf *p)
 {
     m_rx_pkt_ready_list.push_back(reinterpret_cast<mem_buf_desc_t *>(p));
-    m_n_rx_pkt_ready_list_count++;
+    add_rx_ready_count(1);
     m_rx_ready_byte_count += p->tot_len;
     if (unlikely(m_p_socket_stats)) {
         update_ready_packets_stats(m_p_socket_stats, p->tot_len);
@@ -2512,7 +2514,7 @@ ssize_t sockinfo_tcp::rx(const rx_call_t call_type, iovec *p_iov, ssize_t sz_iov
 
     lock_tcp_con();
 
-    si_tcp_logfunc("something in rx queues: %d %p", m_n_rx_pkt_ready_list_count,
+    si_tcp_logfunc("something in rx queues: %d %p", m_n_rx_pkt_ready_list_count.load(),
                    m_rx_pkt_ready_list.front());
 
     bool process_cmsg = true;
@@ -2636,7 +2638,7 @@ size_t sockinfo_tcp::rx_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, stru
         temp_ready_byte_count = m_rx_ready_byte_count;
         temp_rx_ready_list_count = m_n_rx_pkt_ready_list_count;
         m_rx_ready_byte_count = 0U;
-        m_n_rx_pkt_ready_list_count = 0;
+        m_n_rx_pkt_ready_list_count.store(0, std::memory_order_relaxed);
     }
 
     mem_buf_desc_t *free_buf_last = nullptr;
@@ -2715,7 +2717,7 @@ size_t sockinfo_tcp::rx_fetch_ready_buffers(iovec *p_iov, iovec *p_iov_end, stru
         std::lock_guard<decltype(m_tcp_con_lock)> lock(m_tcp_con_lock);
         m_rx_pkt_ready_list.splice_head(temp_list);
         m_rx_ready_byte_count += temp_ready_byte_count;
-        m_n_rx_pkt_ready_list_count += temp_rx_ready_list_count;
+        add_rx_ready_count(temp_rx_ready_list_count);
     }
 
     si_tcp_logfunc("tot_read=%u", tot_read);
@@ -3170,7 +3172,7 @@ bool sockinfo_tcp::connect_bind_any_and_check_rules()
     }
 
     if (has_epoll_context()) {
-        m_econtext->remove_fd_from_epoll_os(m_fd); // remove fd from os epoll
+        m_econtext.load()->remove_fd_from_epoll_os(m_fd); // remove fd from os epoll
     }
 
     if (bound_any_addr) {
@@ -3575,7 +3577,7 @@ int sockinfo_tcp::listen(int backlog)
     }
 
     m_backlog = backlog;
-    m_ready_conn_cnt = 0;
+    m_ready_conn_cnt.store(0, std::memory_order_relaxed);
 
     if (get_tcp_state(&m_pcb) != LISTEN) {
 
@@ -3790,12 +3792,12 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
     ns = m_accepted_conns.get_and_pop_front();
     BULLSEYE_EXCLUDE_BLOCK_START
     if (!ns) {
-        si_tcp_logpanic("no socket in accepted queue!!! ready count = %d", m_ready_conn_cnt);
+        si_tcp_logpanic("no socket in accepted queue!!! ready count = %d", m_ready_conn_cnt.load());
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
     // coverity[overflow_const:FALSE] /*Turn off coverity check for overflow
-    m_ready_conn_cnt--;
+    add_ready_conn_count(static_cast<uint32_t>(-1));
     IF_STATS(m_p_socket_stats->listen_counters.n_conn_backlog--);
 
     should_use_threads_mode() ? assert(m_syn_received.empty()) : remove_received_syn_socket(ns);
@@ -4142,7 +4144,7 @@ err_t sockinfo_tcp::accept_lwip_cb(void *arg, struct tcp_pcb *child_pcb, err_t e
         conn->accept_connection_xlio_socket(new_sock);
     } else {
         conn->m_accepted_conns.push_back(new_sock);
-        conn->m_ready_conn_cnt++;
+        conn->add_ready_conn_count(1);
         if (conn->is_sockinfo_tcp_listen_rss_child()) {
             conn->remove_received_syn_socket(new_sock);
             NOTIFY_ON_EVENTS(conn->m_listen_ctx->get_parent_listen_socket(), EPOLLIN);
@@ -5764,8 +5766,8 @@ int sockinfo_tcp::rx_wait_helper(int &poll_count, bool blocking)
     auto prev_sndbuf = sndbuf_available();
     bool all_drained = false;
     if (has_epoll_context() && !blocking) {
-        all_drained =
-            m_econtext->ring_poll_and_process_element(nullptr, epoll_poll_type_t::POLL_RX_ONLY);
+        all_drained = m_econtext.load()->ring_poll_and_process_element(
+            nullptr, epoll_poll_type_t::POLL_RX_ONLY);
     } else {
         all_drained = poll_and_progress_rx();
     }
@@ -5907,7 +5909,7 @@ bool sockinfo_tcp::check_last_rx_poll_progress(unsigned int prev_sndbuf, bool al
     bool sndbuf_change = (sndbuf_available() != prev_sndbuf);
     if (likely(m_n_rx_pkt_ready_list_count || !all_drained || sndbuf_change)) {
         // Got completions from CQ
-        __log_entry_funcall("Ready %d packets", m_n_rx_pkt_ready_list_count);
+        __log_entry_funcall("Ready %d packets", m_n_rx_pkt_ready_list_count.load());
         IF_STATS(m_p_socket_stats->counters.n_rx_poll_hit++);
         return true;
     }
@@ -5921,7 +5923,7 @@ mem_buf_desc_t *sockinfo_tcp::get_next_desc(mem_buf_desc_t *p_desc)
     m_rx_pkt_ready_list.pop_front();
     IF_STATS(m_p_socket_stats->n_rx_ready_pkt_count--);
 
-    m_n_rx_pkt_ready_list_count--;
+    add_rx_ready_count(-1);
     if (p_desc->p_next_desc) {
         mem_buf_desc_t *prev = p_desc;
         p_desc = p_desc->p_next_desc;
@@ -5931,7 +5933,7 @@ mem_buf_desc_t *sockinfo_tcp::get_next_desc(mem_buf_desc_t *p_desc)
         p_desc->rx.n_frags = --prev->rx.n_frags;
         p_desc->inc_ref_count();
         m_rx_pkt_ready_list.push_front(p_desc);
-        m_n_rx_pkt_ready_list_count++;
+        add_rx_ready_count(1);
         prev->lwip_pbuf.next = nullptr;
         prev->p_next_desc = nullptr;
         prev->rx.n_frags = 1;
