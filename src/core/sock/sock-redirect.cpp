@@ -249,6 +249,14 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 #endif
     }
 
+#if defined(DEFINED_ENVOY)
+    /* close() is the fd's universal teardown (EPOLL_CTL_DEL does not retire
+     * the fd), so drop the fd's dup record here or it outlives the fd. */
+    if (g_p_app && g_p_app->type == APP_ENVOY) {
+        g_p_app->workers.erase_dup_fd(fd);
+    }
+#endif /* DEFINED_ENVOY */
+
     return to_close_now;
 }
 
@@ -915,7 +923,7 @@ EXPORT_SYMBOL int XLIO_SYMBOL(listen)(int __fd, int backlog)
          * - reuse_port(true) :
          * dup() is not used. Unique socket is created for every worker.
          *
-         * Store all duplicated fd in map_dup_fd with reference to original fd
+         * Store parent-resolvable duplicated fd in map_dup_fd with reference to original fd
          * Store all listen fd in map_listen_fd with tid
          * Identify correct listen fd during epoll_ctl(ADD) call by tid. It should be different.
          * Set worker id in map_thread_id basing on tid
@@ -2240,7 +2248,9 @@ EXPORT_SYMBOL int XLIO_SYMBOL(dup)(int __fd)
     handle_close(fid, true);
 #if defined(DEFINED_ENVOY)
     if (g_p_app && g_p_app->type == APP_ENVOY) {
-        g_p_app->workers.record_dup(fid, __fd);
+        /* a clone parent is sockinfo-backed and not reuse_port */
+        sockinfo *src = fd_collection_get_sockfd(__fd);
+        g_p_app->workers.record_dup(fid, __fd, src && !src->get_reuseport());
     }
 #endif /* DEFINED_ENVOY */
     return fid;
