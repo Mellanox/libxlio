@@ -17,6 +17,7 @@
 #include <vlogger/vlogger.h>
 
 #include "sock/sock-app.h"
+#include "tuning_report_printer.h"
 
 using namespace std;
 
@@ -35,6 +36,8 @@ map_udp_reuse_port_t g_map_udp_resue_port;
 #endif
 
 static int init_worker(int worker_id, int listen_fd);
+static void app_degrade_listen_to_kernel(int listen_fd, const char *reason);
+static void count_listen_passthrough(void);
 
 struct app_conf *g_p_app = nullptr;
 
@@ -94,6 +97,37 @@ int app_conf::assign_worker_and_publish(int fd, sockinfo *si)
     return worker_id;
 }
 
+bool app_conf::is_dup_of_reuseport(int fd)
+{
+    std::lock_guard<decltype(m_map_lock)> lock(m_map_lock);
+    return set_dup_reuseport.count(fd) != 0;
+}
+
+int app_conf::lookup_dup_parent(int fd)
+{
+    std::lock_guard<decltype(m_map_lock)> lock(m_map_lock);
+    const auto itr = map_dup_fd.find(fd);
+    return itr != map_dup_fd.end() ? itr->second : -1;
+}
+
+void app_conf::register_dup(int fd, int parent_fd, bool reuseport_parent)
+{
+    std::lock_guard<decltype(m_map_lock)> lock(m_map_lock);
+    map_dup_fd[fd] = parent_fd;
+    /* The parent maps to itself */
+    map_dup_fd[parent_fd] = parent_fd;
+    if (reuseport_parent) {
+        set_dup_reuseport.insert(fd);
+    }
+}
+
+void app_conf::forget_fd(int fd)
+{
+    std::lock_guard<decltype(m_map_lock)> lock(m_map_lock);
+    map_dup_fd.erase(fd);
+    set_dup_reuseport.erase(fd);
+}
+
 #if defined(DEFINED_NGINX)
 int app_conf::proc_nginx()
 {
@@ -144,13 +178,37 @@ int app_conf::proc_envoy(int __op, int __fd)
             if (p_socket_object) {
                 rc = p_socket_object->listen(p_socket_object->m_back_log);
                 if (rc < 0) {
-                    return rc;
+                    /* The fd stays OS-listening (the listen() interposer always
+                     * issues the kernel listen()); a retained sockinfo would make
+                     * epoll_ctl() register the fd as offloaded while accept()
+                     * keeps failing. Drop it so the fd serves on the kernel epoll. */
+                    app_degrade_listen_to_kernel(__fd, "listen failed");
+                    rc = 0;
                 }
             }
             std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
             g_p_app->map_listen_fd.erase(__fd);
         } else if (__op == EPOLL_CTL_ADD) {
             int worker_id = -1;
+
+            /* A dup of a live TCP reuse_port listener is the successor of an
+             * Envoy same-address listener update (a full listener
+             * replacement). The successor is not offloaded: degrade it to the
+             * kernel path loudly, now. The ordering wait below only ever
+             * opens on the enable_reuse_port=false path, so waiting would
+             * starve the ADD into an EINVAL black-hole. The fd is already
+             * OS-listening; with no sockinfo on it the interposer registers
+             * it on the kernel epoll and it keeps serving unaccelerated. */
+            if (!p_socket_object && g_p_app->is_dup_of_reuseport(__fd)) {
+                app_account_listen_passthrough(__fd, "reuse_port listener update successor");
+                /* The fd is no longer an XLIO-tracked listener (it serves on
+                 * the kernel epoll). Drop its map_listen_fd entry so a later
+                 * EPOLL_CTL_ADD on the same fd is not re-processed and
+                 * re-counted - symmetric with the worker-init failure exit. */
+                std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
+                g_p_app->map_listen_fd.erase(__fd);
+                return 0;
+            }
 
             /* This check is `enable_reuse_port = false` specific
              *
@@ -187,17 +245,47 @@ int app_conf::proc_envoy(int __op, int __fd)
                 std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
                 g_p_app->map_listen_fd.erase(__fd);
                 g_p_app->map_thread_id.erase(gettid());
+                g_p_app->set_dup_reuseport.erase(__fd);
                 return rc;
             }
         } else if (__op == EPOLL_CTL_DEL) {
             std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
             g_p_app->map_listen_fd.erase(__fd);
+            /* Drop the reuse_port-dup mark for this child fd so it does not
+             * persist across listener updates that recycle the same fd number. */
+            g_p_app->set_dup_reuseport.erase(__fd);
         }
     }
 
     return rc;
 }
 #endif /* DEFINED_ENVOY */
+
+/* The one counting point for a listener that lost acceleration and serves on
+ * the kernel path (surfaced by the tuning report) */
+static void count_listen_passthrough(void)
+{
+    g_tuning_report_counters.n_listen_passthrough.fetch_add(1, std::memory_order_relaxed);
+}
+
+void app_account_listen_passthrough(int listen_fd, const char *reason)
+{
+    count_listen_passthrough();
+    vlog_printf(VLOG_WARNING,
+                "could not offload listen fd=%d (%s); serving on the kernel path, "
+                "acceleration lost\n",
+                listen_fd, reason);
+}
+
+/* A listen fd that XLIO cannot offload must degrade to the kernel path, never
+ * black-hole: a retained half-built sockinfo makes epoll_ctl() register the fd
+ * as offloaded while accept() keeps failing. Dropping it (passthrough=true)
+ * leaves the fd OS-listening, so the kernel epoll serves it. */
+static void app_degrade_listen_to_kernel(int listen_fd, const char *reason)
+{
+    handle_close(listen_fd, false /*cleanup*/, true /*passthrough*/);
+    app_account_listen_passthrough(listen_fd, reason);
+}
 
 static int init_worker(int worker_id, int listen_fd)
 {
@@ -224,18 +312,7 @@ static int init_worker(int worker_id, int listen_fd)
     if (g_p_app->type == APP_ENVOY) {
         p_fd_collection = g_p_fd_collection;
         if (!p_fd_collection->get_sockfd(listen_fd)) {
-            parent_fd = -1;
-            /* map_dup_fd is written by the dup() intercept under m_map_lock.
-             * init_worker() no longer runs with m_map_lock held (it is a leaf
-             * lock, see sock-app.h), so take it for the lookup.
-             */
-            {
-                std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
-                const auto itr = g_p_app->map_dup_fd.find(listen_fd);
-                if (itr != g_p_app->map_dup_fd.end()) {
-                    parent_fd = itr->second;
-                }
-            }
+            parent_fd = g_p_app->lookup_dup_parent(listen_fd);
             if (parent_fd < 0) {
                 return -1;
             }
@@ -244,6 +321,13 @@ static int init_worker(int worker_id, int listen_fd)
             child_sock_fd_api = p_fd_collection->get_sockfd(listen_fd);
             if (child_sock_fd_api) {
                 ret = child_sock_fd_api->listen(child_sock_fd_api->m_back_log);
+                if (ret < 0) {
+                    /* The fd stays OS-listening; a retained sockinfo would make
+                     * epoll_ctl() register the fd as offloaded while accept()
+                     * keeps failing. Drop it so the fd serves on the kernel epoll. */
+                    app_degrade_listen_to_kernel(listen_fd, "listen failed");
+                    ret = 0;
+                }
             }
             return ret;
         }
@@ -270,33 +354,76 @@ static int init_worker(int worker_id, int listen_fd)
         g_p_fd_collection->addsocket(listen_fd, si->get_family(), SOCK_STREAM | block_type);
         child_sock_fd_api = g_p_fd_collection->get_sockfd(listen_fd);
         if (child_sock_fd_api) {
+            /* Error-exit contract for this clone leg (shared by Envoy and nginx
+             * workers): no exit may leave a half-built sockinfo behind, or the
+             * epoll ADD registers the fd as offloaded while accept() keeps
+             * failing, black-holing the listener. Every non-offload exit must
+             * drop the sockinfo (handle_close with passthrough; the fd stays
+             * OS-bound and listening) so the fd serves on the kernel path - for
+             * Envoy through app_degrade_listen_to_kernel(), which also
+             * accounts the lost acceleration. */
             child_sock_fd_api->copy_sockopt_fork(parent_sock_fd_api);
 
             ret = bind_internal(child_sock_fd_api, sa.get_p_sa(), sa_len);
             if (ret < 0) {
-                app_logerr("bind() error");
+                /* Do not listen() on a mis-bound socket; drop it and let the fd
+                 * serve on the kernel path (it is already OS-bound/listening). */
+                if (g_p_app->type == APP_ENVOY) {
+                    app_degrade_listen_to_kernel(listen_fd, "bind failed");
+                    return 0;
+                }
+                app_logerr("bind() error on listen fd %d; serving on the kernel path", listen_fd);
+                handle_close(child_sock_fd_api->get_fd(), false, true);
+                count_listen_passthrough();
+                child_sock_fd_api = nullptr;
             }
 
             // is the socket really offloaded
-            ret = child_sock_fd_api->prepareListen();
-            if (ret < 0) {
-                app_logerr("prepareListen error");
-                child_sock_fd_api = nullptr;
-            } else if (ret > 0) { // Pass-through
-                handle_close(child_sock_fd_api->get_fd(), false, true);
-                child_sock_fd_api = nullptr;
-            } else {
-                app_logdbg("Prepare listen successfully offloaded");
+            if (child_sock_fd_api) {
+                ret = child_sock_fd_api->prepareListen();
+                if (ret < 0) {
+                    if (g_p_app->type == APP_ENVOY) {
+                        app_degrade_listen_to_kernel(listen_fd, "prepareListen failed");
+                        return 0;
+                    }
+                    app_logerr("prepareListen error on listen fd %d; serving on the kernel path",
+                               listen_fd);
+                    handle_close(child_sock_fd_api->get_fd(), false, true);
+                    count_listen_passthrough();
+                    child_sock_fd_api = nullptr;
+                } else if (ret > 0) { // Pass-through
+                    handle_close(child_sock_fd_api->get_fd(), false, true);
+                    /* Routine pass-through: not an error, so no warning - but
+                     * still count the lost acceleration */
+                    count_listen_passthrough();
+                    child_sock_fd_api = nullptr;
+                } else {
+                    app_logdbg("Prepare listen successfully offloaded");
+                }
             }
 
             if (child_sock_fd_api) {
                 ret = child_sock_fd_api->listen(child_sock_fd_api->m_back_log);
                 if (ret < 0) {
-                    app_logerr("Listen error");
+                    if (g_p_app->type == APP_ENVOY) {
+                        app_degrade_listen_to_kernel(listen_fd, "listen failed");
+                        return 0;
+                    }
+                    app_logerr("listen() error on listen fd %d; serving on the kernel path",
+                               listen_fd);
+                    handle_close(child_sock_fd_api->get_fd(), false, true);
+                    count_listen_passthrough();
+                    child_sock_fd_api = nullptr;
                 } else {
                     app_logdbg("Listen success");
                 }
             }
+        } else if (g_p_app->type == APP_ENVOY) {
+            /* No sockinfo was created; the fd is still OS-listening. */
+            app_degrade_listen_to_kernel(listen_fd, "addsocket failed");
+        } else {
+            app_logerr("addsocket() error on listen fd %d; serving on the kernel path", listen_fd);
+            count_listen_passthrough();
         }
     }
     if (PROTO_UDP == si->get_protocol()) {

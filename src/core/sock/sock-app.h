@@ -47,8 +47,14 @@ struct app_conf {
     std::unordered_map<int, pid_t> map_listen_fd;
     /* Associate thread(process) with unique identifier */
     std::unordered_map<pid_t, int> map_thread_id;
-    /* Store duplicated fdwith related original fd */
+    /* Store duplicated fd with related original fd (a parent maps to itself) */
     std::unordered_map<int, int> map_dup_fd;
+    /* Dup'd child fds whose dup source was a live TCP reuse_port listener -
+     * the successors of an Envoy same-address listener update (a full
+     * listener replacement). Those successors are not offloaded: the epoll
+     * ADD degrades a marked fd to the kernel path instead of starving the
+     * enable_reuse_port=false ordering gate (see proc_envoy()). */
+    std::set<int> set_dup_reuseport;
     /* Collection of unused unique identifiers limited by workers_num */
     std::set<int> unused_worker_id;
     void *context;
@@ -71,6 +77,7 @@ struct app_conf {
         map_listen_fd.clear();
         map_thread_id.clear();
         map_dup_fd.clear();
+        set_dup_reuseport.clear();
         unused_worker_id.clear();
         context = nullptr;
 
@@ -115,6 +122,19 @@ struct app_conf {
      * enable_reuse_port=false ordering gate and publish the fd->tid and
      * tid->worker-id mappings */
     int assign_worker_and_publish(int fd, sockinfo *si);
+    /* True when fd is a dup of a live TCP reuse_port listener (an Envoy
+     * same-address listener-update successor) */
+    bool is_dup_of_reuseport(int fd);
+    /* Parent fd recorded for a dup'd fd, or -1 when fd is not tracked (the
+     * writer is the dup() intercept; readers run without m_map_lock, a leaf
+     * lock) */
+    int lookup_dup_parent(int fd);
+    /* Record fd as a dup of parent_fd - and parent_fd as its own original -
+     * marking fd when the dup source is a live TCP reuse_port listener; one
+     * critical section so a reader never sees a torn state */
+    void register_dup(int fd, int parent_fd, bool reuseport_parent);
+    /* Authoritative dup-state teardown for an fd (the handle_close() path) */
+    void forget_fd(int fd);
 
 #if defined(DEFINED_NGINX)
     int proc_nginx();
@@ -126,6 +146,10 @@ struct app_conf {
 };
 
 extern struct app_conf *g_p_app;
+
+/* Count one listener that lost acceleration and warn (shared by the degrade
+ * paths in sock-app.cpp and the epoll_ctl() interposer fallback) */
+void app_account_listen_passthrough(int listen_fd, const char *reason);
 #endif
 
 #endif /* _SOCK_APP_H_ */
