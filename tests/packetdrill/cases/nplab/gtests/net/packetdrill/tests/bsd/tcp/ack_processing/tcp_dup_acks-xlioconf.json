@@ -1,0 +1,9 @@
+{
+    "hardware_features": {
+        "tcp": {
+            "tso": {
+                "enable": "disable"
+            }
+        }
+    }
+}

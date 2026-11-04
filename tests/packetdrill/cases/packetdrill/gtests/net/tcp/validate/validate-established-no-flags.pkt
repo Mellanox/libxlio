@@ -1,0 +1,27 @@
+// Verify current XLIO behavior for an established data segment without ACK.
+
+`packetdrill/gtests/net/common/defaults.sh`
+
+// Create a socket.
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+// Establish a connection.
+   +0 < S 0:0(0) win 20000 <mss 1000,sackOK,nop,nop>
+   +0 > S. 0:0(0) ack 1 <mss 1460>
+ +.01 < . 1:1(0) ack 1 win 20000
+   +0 accept(3, ..., ...) = 4
+
+// Linux drops a data segment without ACK in ESTABLISHED state, as required by
+// its TCP input validation, and leaves the receive queue empty. XLIO currently
+// accepts and queues the payload instead. This expectation deliberately records
+// current XLIO behavior; dropping the segment would improve Linux compatibility.
+ +.01 < - 1:1001(1000) win 20000
+   +0 ioctl(4, SIOCINQ, [1000]) = 0
+
+// The ACK-bearing segment repeats the same sequence range, so it is duplicate
+// data and does not increase the queued byte count.
+ +.01 < . 1:1001(1000) ack 1 win 20000
+   +0 ioctl(4, SIOCINQ, [1000]) = 0

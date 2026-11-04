@@ -48,6 +48,7 @@ dual_gpl_2_bsd_2_no_license:
         - ".*src/core/lwip/.*"
         - ".*tests/gtest/common/tap\\.h"
         - ".*tests/gtest/googletest/.*"
+        - ".*tests/packetdrill/cases/.*"
         - ".*src/core/util/list\\.h"
         - ".*contrib/scripts/libxlio\\.spec\\.in"
         - ".*contrib/scripts/xlio\\.service\\.in"

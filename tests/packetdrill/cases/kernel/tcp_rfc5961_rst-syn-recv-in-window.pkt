@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: GPL-2.0
+//
+// Isolated from tcp_rfc5961_rst-syn-recv.pkt so each scenario runs in a
+// fresh XLIO process with an independent Packetdrill sequence mapping.
+
+`kernel/defaults.sh`
+
+// Linux challenges a non-exact in-window RST and preserves the request.
+// XLIO sends no challenge ACK and immediately destroys the request socket.
+   0 socket(..., SOCK_STREAM|SOCK_NONBLOCK, IPPROTO_TCP) = 3
+  +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+  +0 bind(3, ..., ...) = 0
+  +0 listen(3, 1) = 0
+  +0 < S 0:0(0) win 1000 <mss 1000,sackOK,nop,nop,nop,wscale 0>
+  +0 > S. 0:0(0) ack 1 <...>
+  +0 < R 2:2(0) win 1000
+
+// No connection remains to complete or accept.
+  +0 close(3) = 0

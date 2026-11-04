@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
+# See file LICENSE for terms.
+from pd_common import main
+
+raise SystemExit(main())
