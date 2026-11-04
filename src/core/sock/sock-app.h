@@ -12,6 +12,7 @@
 #include <utils/lock_wrapper.h>
 
 #include <vlogger/vlogger.h>
+#include <atomic>
 #include <climits>
 #include <unordered_map>
 #include <mutex>
@@ -121,8 +122,8 @@ private:
     lock_mutex m_init_lock;
     /* enable_reuse_port=false gate: worker-0 originals still pending (INT_MAX
      * until computed); written under m_init_lock, read unlocked by the
-     * ordering wait */
-    int m_original_listen_count;
+     * ordering wait (hence atomic) */
+    std::atomic<int> m_original_listen_count;
 };
 
 extern struct app_conf *g_p_app;
