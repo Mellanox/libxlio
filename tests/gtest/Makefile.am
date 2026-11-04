@@ -91,6 +91,7 @@ gtest_SOURCES = \
 	sock/sock_base.cc \
 	sock/sock_socket.cc \
 	\
+	mix/app_registry.cc \
 	mix/mix_base.cc \
 	mix/sg_array.cc \
 	mix/sock_addr.cc \
