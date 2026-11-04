@@ -38,69 +38,15 @@ static int init_worker(int worker_id, int listen_fd);
 
 struct app_conf *g_p_app = nullptr;
 
-pid_t app_conf::listen_fd_owner(int fd)
-{
-    std::lock_guard<decltype(m_map_lock)> lock(m_map_lock);
-    auto iter = map_listen_fd.find(fd);
-    return iter != map_listen_fd.end() ? iter->second : -1;
-}
-
-int app_conf::dup_parent_fd(int fd)
-{
-    std::lock_guard<decltype(m_map_lock)> lock(m_map_lock);
-    auto iter = map_dup_fd.find(fd);
-    return iter != map_dup_fd.end() ? iter->second : -1;
-}
-
-void app_conf::record_listen_fd(int fd, pid_t tid)
-{
-    std::lock_guard<decltype(m_map_lock)> lock(m_map_lock);
-    map_listen_fd[fd] = tid;
-}
-
-void app_conf::publish_thread_worker(pid_t tid, int worker_id)
-{
-    std::lock_guard<decltype(m_map_lock)> lock(m_map_lock);
-    map_thread_id[tid] = worker_id;
-}
-
-int app_conf::publish_worker(int fd)
-{
-    std::lock_guard<decltype(m_map_lock)> lock(m_map_lock);
-
-    /* m_total_worker_id is unique for all threads */
-    int worker_id = get_worker_id();
-    if (worker_id < 0) {
-        worker_id = m_total_worker_id;
-        m_total_worker_id++;
-    }
-
-    map_listen_fd[fd] = gettid();
-    map_thread_id[gettid()] = worker_id;
-    return worker_id;
-}
-
-int app_conf::count_original_listeners()
-{
-    std::lock_guard<decltype(m_map_lock)> lock(m_map_lock);
-    int originals = 0;
-    for (const auto &itr : map_dup_fd) {
-        if (itr.first == itr.second) {
-            originals++;
-        }
-    }
-    return originals;
-}
-
 int app_conf::assign_worker_and_publish(int fd, sockinfo *si)
 {
-    int worker_id = publish_worker(fd);
+    int worker_id = workers.publish_worker(fd);
 
     /* enable_reuse_port=false only: count down worker-0 originals to release
      * the ordering wait; serialized by m_init_lock (this path's caller) */
     if (si && !si->get_reuseport() && worker_id == 0) {
         if (m_original_listen_count == INT_MAX) {
-            m_original_listen_count = count_original_listeners();
+            m_original_listen_count = workers.count_original_listeners();
         }
         m_original_listen_count--;
     }
@@ -128,7 +74,7 @@ int app_conf::proc_nginx()
         if (!sock_fd_api || !dynamic_cast<sockinfo *>(sock_fd_api)) {
             continue;
         }
-        g_p_app->record_listen_fd(fd, gettid());
+        g_p_app->workers.record_listen_fd(fd, gettid());
         rc = init_worker(g_p_app->get_worker_id(), fd);
         if (rc != 0) {
             app_logerr("Failed to initialize worker %d, (errno=%d %m)", g_p_app->get_worker_id(),
@@ -147,7 +93,7 @@ int app_conf::proc_envoy(int __op, int __fd)
     int rc = 0;
 
     /* Process only sockets from map_listen_fd */
-    pid_t owner_tid = listen_fd_owner(__fd);
+    pid_t owner_tid = workers.listen_fd_owner(__fd);
     if (owner_tid != -1) {
         sockinfo *p_socket_object = fd_collection_get_sockfd(__fd);
         if (owner_tid == gettid()) {
@@ -160,8 +106,7 @@ int app_conf::proc_envoy(int __op, int __fd)
                     return rc;
                 }
             }
-            std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
-            g_p_app->map_listen_fd.erase(__fd);
+            g_p_app->workers.erase_listen_fd(__fd);
         } else if (__op == EPOLL_CTL_ADD) {
             int worker_id = -1;
 
@@ -188,18 +133,15 @@ int app_conf::proc_envoy(int __op, int __fd)
             worker_id =
                 g_p_app->assign_worker_and_publish(__fd, dynamic_cast<sockinfo *>(p_socket_object));
 
-            /* init_worker() can take device-layer locks: no m_map_lock here */
+            /* init_worker() can take device-layer locks: no registry lock here */
             rc = init_worker(worker_id, __fd);
             if (rc != 0) {
                 app_logerr("Failed to initialize worker %d, (errno=%d %m)", worker_id, errno);
-                std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
-                g_p_app->map_listen_fd.erase(__fd);
-                g_p_app->map_thread_id.erase(gettid());
+                g_p_app->workers.erase_worker(__fd, gettid());
                 return rc;
             }
         } else if (__op == EPOLL_CTL_DEL) {
-            std::lock_guard<decltype(g_p_app->m_map_lock)> lock(g_p_app->m_map_lock);
-            g_p_app->map_listen_fd.erase(__fd);
+            g_p_app->workers.erase_listen_fd(__fd);
         }
     }
 
@@ -232,7 +174,7 @@ static int init_worker(int worker_id, int listen_fd)
     if (g_p_app->type == APP_ENVOY) {
         p_fd_collection = g_p_fd_collection;
         if (!p_fd_collection->get_sockfd(listen_fd)) {
-            parent_fd = g_p_app->dup_parent_fd(listen_fd);
+            parent_fd = g_p_app->workers.dup_parent_fd(listen_fd);
             if (parent_fd < 0) {
                 return -1;
             }
