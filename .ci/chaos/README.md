@@ -5,7 +5,7 @@ meant to catch. The weekly [LibXLIO-opensource-chaos](https://nbuprod.blsm.nvidi
 the main CI in chaos mode, which applies the patches under `patches/` to the
 source tree before running each step. If a step that is expected to fail
 passes instead, the chaos job fails and posts the result to the
-[Libxlio Chaos Testing Builds](https://teams.microsoft.com/l/team/19%3Ah3O6RitjzlNHp8cLHH1J49JydpsJqpHQmS66BO5hqiY1%40thread.tacv2/conversations?groupId=ecfa4fbd-630c-42a5-a945-0925eb354486&tenantId=43083d15-7273-40c1-b7db-39efd9ccc17a)
+[All - XLIO](https://teams.microsoft.com/l/channel/19%3APb9rHwgU4J2ivL3Jmfdycd3Y98IfTPeXXztq-iwNQnY1%40thread.tacv2/All?groupId=c7fe828e-9b90-4f88-a989-62b78567faa6&tenantId=43083d15-7273-40c1-b7db-39efd9ccc17a)
 Teams channel.
 
 ## `chaos_config` format
