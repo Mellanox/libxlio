@@ -249,6 +249,14 @@ bool handle_close(int fd, bool cleanup, bool passthrough)
 #endif
     }
 
+#if defined(DEFINED_ENVOY)
+    /* close() is the fd's universal teardown (EPOLL_CTL_DEL does not retire the
+     * fd), so drop the fd's dup record here or it outlives the fd. */
+    if (g_p_app && g_p_app->type == APP_ENVOY) {
+        g_p_app->forget_fd(fd);
+    }
+#endif /* DEFINED_ENVOY */
+
     return to_close_now;
 }
 
@@ -2239,9 +2247,8 @@ EXPORT_SYMBOL int XLIO_SYMBOL(dup)(int __fd)
     handle_close(fid, true);
 #if defined(DEFINED_ENVOY)
     if (g_p_app && g_p_app->type == APP_ENVOY) {
-        std::lock_guard<decltype(g_p_app->m_lock)> lock(g_p_app->m_lock);
-        g_p_app->map_dup_fd[fid] = __fd;
-        g_p_app->map_dup_fd[__fd] = __fd;
+        sockinfo *src = fd_collection_get_sockfd(__fd);
+        g_p_app->record_dup(fid, __fd, src && src->get_reuseport());
     }
 #endif /* DEFINED_ENVOY */
     return fid;

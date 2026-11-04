@@ -41,27 +41,23 @@ struct app_conf {
     void *context;
 
     app_conf()
+        : app_conf(safe_mce_sys().app.type, safe_mce_sys().app.workers_num)
     {
-        type = APP_NONE;
+    }
+
+    /* Constructs from explicit values instead of the safe_mce_sys() config
+     * read, so a unit test can instantiate app_conf without global state. */
+    app_conf(app_type_t app_type, int app_workers_num)
+    {
+        type = app_type;
         m_lock = lock_spin_recursive("app_conf");
-        workers_num = 0;
-        workers_pow2 = 0;
+        workers_num = app_workers_num;
         add_second_4t_rule = false;
         map_listen_fd.clear();
         map_thread_id.clear();
         map_dup_fd.clear();
         unused_worker_id.clear();
         context = nullptr;
-
-        setup();
-    }
-
-    ~app_conf() = default;
-
-    void setup()
-    {
-        type = safe_mce_sys().app.type;
-        workers_num = safe_mce_sys().app.workers_num;
 
         // Round up to a power of 2 value. Assume the number doesn't exceed 32bit.
         workers_pow2 = workers_num - 1;
@@ -72,6 +68,8 @@ struct app_conf {
         workers_pow2 |= workers_pow2 >> 16;
         workers_pow2++;
     }
+
+    ~app_conf() = default;
 
     inline int get_worker_id()
     {
@@ -89,6 +87,26 @@ struct app_conf {
 
 #if defined(DEFINED_ENVOY)
     int proc_envoy(int op, int fd);
+
+    /* Record only non-reuse_port sources: a reuse_port dup is never resolved
+     * by init_worker(), and its self-entry inflates the ordering gate count. */
+    void record_dup(int fid, int src_fd, bool src_is_reuseport)
+    {
+        if (fid < 0 || src_is_reuseport) {
+            return;
+        }
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        map_dup_fd[fid] = src_fd;
+        map_dup_fd[src_fd] = src_fd;
+    }
+
+    /* Only the Envoy-gated dup() interposer populates map_dup_fd; nginx workers
+     * inherit listener fds across fork(), so only Envoy mode has records to drop. */
+    void forget_fd(int fd)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        map_dup_fd.erase(fd);
+    }
 #endif /* DEFINED_ENVOY */
 };
 
