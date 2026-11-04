@@ -29,6 +29,7 @@ This file documents all 123 XLIO runtime configuration parameters with their typ
   - [`core.syscall.avoid_ctl_syscalls`](#coresyscallavoid_ctl_syscalls) — Avoid system control calls on TCP
   - [`core.syscall.deferred_close`](#coresyscalldeferred_close) — Defer closing of file descriptors
   - [`core.syscall.dup2_close_fd`](#coresyscalldup2_close_fd) — Support dup2 calls
+  - [`core.syscall.exit_barrier`](#coresyscallexit_barrier) — Wait for threads inside XLIO at exit
   - [`core.syscall.fork_support`](#coresyscallfork_support) — Enable fork support
   - [`core.syscall.sendfile_cache_limit`](#coresyscallsendfile_cache_limit) — Sendfile byte limit
 - **[HARDWARE_FEATURES](#hardware_features)**
@@ -712,6 +713,36 @@ When newfd is an XLIO-managed socket, XLIO must release its internal resources f
   XLIO-offloaded sockets; otherwise causes memory leaks and stale internal state.
 
 **Default:** `true`
+
+### `core.syscall.exit_barrier`
+
+> **Type:** boolean
+>
+> **Maps to:** `XLIO_EXIT_BARRIER`
+
+Makes library teardown wait for application threads that are still inside intercepted calls.
+
+**The Problem:**
+Some applications call exit() while other threads still use sockets or epoll, for example
+Redis 8 with I/O threads. The library destructor then frees XLIO sockets and epoll objects
+that those threads are using, which can crash the process at exit.
+
+**How it works:**
+Every intercepted call counts the threads that are inside XLIO. At teardown, XLIO wakes threads
+sleeping in epoll_wait() or in blocking socket calls, and waits up to 1 second for the count to
+reach zero before freeing anything. Calls that start after teardown begins go directly to the
+kernel, except epoll_wait() and epoll_pwait(), which fail with EINTR. If threads are still inside
+XLIO after 1 second, XLIO skips resource cleanup and logs a warning. Threads sleeping in poll()
+or select() inside XLIO are not woken and can delay exit until then.
+
+**Tradeoffs:**
+
+- *false* (default): No per-call overhead. Safe when the application joins its threads
+  before calling exit().
+- *true*: Adds an atomic increment and decrement of a shared counter to every intercepted call.
+  Use for applications that exit while other threads still call into XLIO.
+
+**Default:** `false`
 
 ### `core.syscall.fork_support`
 

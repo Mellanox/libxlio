@@ -7,6 +7,7 @@
 #ifndef SYS_VARS_H
 #define SYS_VARS_H
 
+#include <atomic>
 #include <experimental/optional>
 #include <netinet/in.h>
 #include <sched.h>
@@ -300,6 +301,7 @@ public:
     // sockfd is closed after the rfs rule is destroyed. Otherwise, flow_tag or
     // TCP port can be reused too early.
     bool deferred_close;
+    bool exit_barrier;
     bool tcp_abort_on_close;
     bool rx_poll_on_tx_tcp;
     bool rx_cq_wait_ctrl;
@@ -523,6 +525,7 @@ extern const mce_sys_var &safe_mce_sys();
 #define SYS_VAR_NEIGH_NUM_ERR_RETRIES   "XLIO_NEIGH_NUM_ERR_RETRIES"
 
 #define SYS_VAR_DEFERRED_CLOSE       "XLIO_DEFERRED_CLOSE"
+#define SYS_VAR_EXIT_BARRIER         "XLIO_EXIT_BARRIER"
 #define SYS_VAR_TCP_ABORT_ON_CLOSE   "XLIO_TCP_ABORT_ON_CLOSE"
 #define SYS_VAR_RX_POLL_ON_TX_TCP    "XLIO_RX_POLL_ON_TX_TCP"
 #define SYS_VAR_RX_CQ_WAIT_CTRL      "XLIO_RX_CQ_WAIT_CTRL"
@@ -685,6 +688,7 @@ extern const mce_sys_var &safe_mce_sys();
 
 #define MCE_DEFAULT_LRO                (option_3::AUTO)
 #define MCE_DEFAULT_DEFERRED_CLOSE     (false)
+#define MCE_DEFAULT_EXIT_BARRIER       (false)
 #define MCE_DEFAULT_TCP_ABORT_ON_CLOSE (false)
 #define MCE_DEFAULT_RX_POLL_ON_TX_TCP  (false)
 #define MCE_DEFAULT_RX_CQ_WAIT_CTRL    (false)
@@ -736,7 +740,7 @@ extern const mce_sys_var &safe_mce_sys();
 
 #define VIRTUALIZATION_FLAG "hypervisor"
 
-extern bool g_b_exit;
+extern std::atomic<bool> g_b_exit;
 extern bool g_is_forked_child;
 extern bool g_init_global_ctors_done;
 

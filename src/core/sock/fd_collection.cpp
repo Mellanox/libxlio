@@ -99,6 +99,23 @@ void fd_collection::prepare_to_close()
     unlock();
 }
 
+void fd_collection::wakeup_all_waiters()
+{
+    // A thread inside an intercepted call may hold the lock; blocking here could hang the exit.
+    if (trylock()) {
+        return;
+    }
+    for (int fd = 0; fd < m_n_fd_map_size; ++fd) {
+        if (m_p_sockfd_map[fd]) {
+            m_p_sockfd_map[fd]->m_sock_wakeup_pipe.force_wakeup();
+        }
+        if (m_p_epfd_map[fd]) {
+            m_p_epfd_map[fd]->force_wakeup();
+        }
+    }
+    unlock();
+}
+
 // Called in destructor after Internal-Thread destroyed
 void fd_collection::clear()
 {

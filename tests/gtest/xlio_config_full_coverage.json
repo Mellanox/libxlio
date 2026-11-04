@@ -25,6 +25,7 @@
             "dup2_close_fd": true,
             "fork_support": true,
             "deferred_close": false,
+            "exit_barrier": false,
             "avoid_ctl_syscalls": false,
             "sendfile_cache_limit": 10737418240
         }

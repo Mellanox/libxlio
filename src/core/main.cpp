@@ -48,6 +48,7 @@
 #include "proto/neighbour_table_mgr.h"
 #include "netlink/netlink_wrapper.h"
 #include "event/command.h"
+#include "sock/api_guard.h"
 #include "sock/sock_stats.h"
 #include "sock/sock-redirect.h"
 #include "sock/sock-app.h"
@@ -85,7 +86,7 @@ const char *xlio_version_str = "XLIO_VERSION: " PACKAGE_VERSION "-" STR(PRJ_LIBR
 #endif
     ; // End of xlio_version_str - used in "$ strings libxlio.so | grep XLIO_VERSION"
 
-bool g_b_exit = false;
+std::atomic<bool> g_b_exit {false};
 bool g_init_ibv_fork_done = false;
 enum ibv_fork_status g_ibv_fork_status = IBV_FORK_DISABLED;
 bool g_is_forked_child = false;
@@ -101,6 +102,10 @@ static int free_libxlio_resources()
     vlog_printf(VLOG_DEBUG, "%s: Closing libxlio resources\n", __FUNCTION__);
 
     g_b_exit = true;
+
+    if (!api_guard::drain()) {
+        return 0;
+    }
 
     worker_thread_manager::destroy();
 
@@ -820,6 +825,8 @@ void print_env_vars_xlio_global_settings()
     VLOG_PARAM_STRING("Deferred close", safe_mce_sys().deferred_close, MCE_DEFAULT_DEFERRED_CLOSE,
                       SYS_VAR_DEFERRED_CLOSE,
                       safe_mce_sys().deferred_close ? "Enabled " : "Disabled");
+    VLOG_PARAM_STRING("Exit barrier", safe_mce_sys().exit_barrier, MCE_DEFAULT_EXIT_BARRIER,
+                      SYS_VAR_EXIT_BARRIER, safe_mce_sys().exit_barrier ? "Enabled " : "Disabled");
     VLOG_PARAM_STRING("TCP abort on close", safe_mce_sys().tcp_abort_on_close,
                       MCE_DEFAULT_TCP_ABORT_ON_CLOSE, SYS_VAR_TCP_ABORT_ON_CLOSE,
                       safe_mce_sys().tcp_abort_on_close ? "Enabled " : "Disabled");
@@ -1332,6 +1339,7 @@ extern "C" int xlio_init(void)
         print_env_vars_xlio_global_settings();
     }
     mce_sys_var::safe_instance().freeze();
+    api_guard::init(safe_mce_sys().exit_barrier);
 
     check_debug();
     check_cpu_speed();

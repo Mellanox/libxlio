@@ -115,7 +115,7 @@ typedef enum { e_K = 1024, e_M = 1048576 } units_t;
 #define TIME_DIFF_in_MICRO(start, end)                                                             \
     (SEC_TO_MICRO((end).tv_sec - (start).tv_sec) + (NANO_TO_MICRO((end).tv_nsec - (start).tv_nsec)))
 
-bool g_b_exit = false;
+std::atomic<bool> g_b_exit {false};
 struct sigaction g_sigact;
 uint8_t *g_fd_mask;
 uint32_t g_fd_map_size = e_K;

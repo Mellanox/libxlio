@@ -156,6 +156,7 @@ libxlio_la_SOURCES := \
 	sock/sockinfo_ulp.cpp \
 	sock/sockinfo_tcp.cpp \
 	sock/sockinfo_tcp_listen_context.cpp \
+	sock/api_guard.cpp \
 	sock/fd_collection.cpp \
 	sock/sock-redirect.cpp \
 	sock/sock-app.cpp \
@@ -320,6 +321,7 @@ libxlio_la_SOURCES := \
 	proto/tls.h \
 	proto/xlio_lwip.h \
 	\
+	sock/api_guard.h \
 	sock/cleanable_obj.h \
 	sock/fd_collection.h \
 	sock/blocking_wait_results.h \

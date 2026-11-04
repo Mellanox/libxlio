@@ -23,6 +23,10 @@ public:
     virtual inline bool is_wakeup_fd(int fd) { return fd == g_wakeup_pipes[0]; };
     virtual void remove_wakeup_fd();
     void force_remove_wakeup_fd(); // DEL; ignores m_is_sleeping
+    // ADD without the owner's lock, for teardown only. Ignores m_is_sleeping and
+    // m_wakeup_pending: the woken waiter's remove_wakeup_fd() and a later do_wakeup()
+    // (which accepts EEXIST) both tolerate the untracked registration.
+    void force_wakeup();
 
 private:
     static int g_wakeup_pipes[2];

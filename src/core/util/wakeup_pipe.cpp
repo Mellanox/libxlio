@@ -99,6 +99,17 @@ void wakeup_pipe::force_remove_wakeup_fd()
     errno = tmp_errno;
 }
 
+void wakeup_pipe::force_wakeup()
+{
+    if (m_wakeup_epfd <= 0) {
+        return;
+    }
+
+    int errno_tmp = errno;
+    SYSCALL(epoll_ctl, m_wakeup_epfd, EPOLL_CTL_ADD, g_wakeup_pipes[0], &m_ev);
+    errno = errno_tmp;
+}
+
 wakeup_pipe::~wakeup_pipe()
 {
     int ref = atomic_fetch_and_dec(&ref_count);
