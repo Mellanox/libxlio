@@ -173,9 +173,24 @@ runs_on_dockers:
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
      arch: 'x86_64',
      name: 'gtest',
-     uri: 'xlio/$arch/ubuntu22.04/$name',
-     tag: '20251202',
+     uri: 'xlio/$arch/ubuntu22.04/gtest-pd',
+     tag: '20261103',
      build_args: '--no-cache --target gtest',
+     category: 'tests',
+     annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1@net1,sriov-cx6dx-p2@net2' }],
+     tolerations: "[{key: 'external-hardware', operator: 'Equal', value: 'true', effect: 'NoSchedule'}]",
+     limits: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, nvidia.com/sriov-cx6dx-p1: 1, nvidia.com/sriov-cx6dx-p2: 1}',
+     requests: '{memory: 8Gi, cpu: 8000m, hugepages-2Mi: 8Gi, nvidia.com/sriov-cx6dx-p1: 1, nvidia.com/sriov-cx6dx-p2: 1}',
+     caps_add: '[ IPC_LOCK, SYS_RESOURCE ]',
+     runAsUser: '0',
+     runAsGroup: '0'
+    }
+  # Run Packetdrill in its own pod using the same image as gtests.
+  - {
+     arch: 'x86_64',
+     name: 'packet-drill',
+     uri: 'xlio/$arch/ubuntu22.04/gtest-pd',
+     tag: '20261103',
      category: 'tests',
      annotations: [{ key: 'k8s.v1.cni.cncf.io/networks', value: 'sriov-cx6dx-p1@net1,sriov-cx6dx-p2@net2' }],
      tolerations: "[{key: 'external-hardware', operator: 'Equal', value: 'true', effect: 'NoSchedule'}]",
@@ -442,6 +457,22 @@ steps:
       jenkins/**/arch-*.tar.gz
     archiveJunit-onfail: |
       jenkins/**/*.xml
+
+  - name: packet-drill
+    enable: ${do_gtest}
+    containerSelector:
+      - "{name: 'packet-drill'}"
+    run: |
+      env WORKSPACE=$PWD jenkins_target=${flags} ./contrib/jenkins_tests/packetdrill.sh
+    parallel: false
+    onfail: |
+      ./.ci/artifacts.sh
+    archiveArtifacts-onfail: |
+      jenkins/**/arch-*.tar.gz
+    archiveArtifacts: |
+      jenkins/**/packetdrill.tar.gz
+    archiveJunit-onfail: |
+      jenkins/**/packetdrill/**/junit.xml
 
   - name: Valgrind (R2C)
     enable: ${do_valgrind}

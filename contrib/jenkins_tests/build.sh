@@ -43,6 +43,11 @@ for build_name in "${build_names[@]}"; do
     cd "${build_dir}/${test_id}"
     test_exec="${WORKSPACE}/configure --prefix=${build_dir}/${test_id}/install $build_option $jenkins_test_custom_configure && make $make_opt install"
     do_check_result "$test_exec" "$test_id" "$build_name" "$build_tap" "${build_dir}/build-${test_id}"
+    # Packetdrill uses the optimized default build, whose medium log level
+    # includes DEBUG offload evidence without unoptimized syscall startup costs.
+    if [ "$build_name" = "default" ] && [ -f "${build_dir}/${test_id}/install/lib/libxlio.so" ]; then
+        readlink -f "${build_dir}/${test_id}/install/lib/libxlio.so" > "${build_dir}/packetdrill-xlio.path"
+    fi
     cd "${build_dir}"
     test_id=$((test_id+1))
 done
