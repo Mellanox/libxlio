@@ -28,14 +28,133 @@ extern map_udp_reuse_port_t g_map_udp_resue_port;
 class sockinfo;
 
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
-struct app_conf {
-    app_type_t type;
-    /* m_map_lock: leaf over the maps and m_total_worker_id; never held into
-     * the device layer (ABBA vs get_worker_id() under device locks) */
-    lock_spin_recursive m_map_lock;
-    int workers_num;
-    int workers_pow2;
-    bool add_second_4t_rule;
+/* Worker/listen-fd state and the leaf lock guarding it. The lock is private,
+ * so it is never held into the device layer (the ABBA guard), and every
+ * access to the maps is one short critical section that never nests. */
+class app_worker_registry {
+public:
+    app_worker_registry()
+        : m_lock("app_conf")
+    {
+    }
+
+    /* Owning tid recorded for a tracked listen fd, or -1 */
+    pid_t listen_fd_owner(int fd)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        auto iter = map_listen_fd.find(fd);
+        return iter != map_listen_fd.end() ? iter->second : -1;
+    }
+
+    /* Original fd recorded for a duplicated fd, or -1 */
+    int dup_parent_fd(int fd)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        auto iter = map_dup_fd.find(fd);
+        return iter != map_dup_fd.end() ? iter->second : -1;
+    }
+
+    /* Worker id of a thread(process), or -1 if it has none */
+    int worker_id(pid_t tid)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        auto iter = map_thread_id.find(tid);
+        return iter != map_thread_id.end() ? iter->second : -1;
+    }
+
+    void record_listen_fd(int fd, pid_t tid)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        map_listen_fd[fd] = tid;
+    }
+
+    void erase_listen_fd(int fd)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        map_listen_fd.erase(fd);
+    }
+
+    /* dup() intercept: remember dup->original and original->itself */
+    void record_dup(int dup_fd, int orig_fd)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        map_dup_fd[dup_fd] = orig_fd;
+        map_dup_fd[orig_fd] = orig_fd;
+    }
+
+    void publish_thread_worker(pid_t tid, int worker_id)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        map_thread_id[tid] = worker_id;
+    }
+
+    /* Assign (or reuse) the calling thread's worker id and publish the
+     * fd->tid and tid->worker-id mappings in one critical section */
+    int publish_worker(int fd)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+
+        /* m_total_worker_id is unique for all threads */
+        int worker_id;
+        auto iter = map_thread_id.find(gettid());
+        if (iter != map_thread_id.end()) {
+            worker_id = iter->second;
+        } else {
+            worker_id = m_total_worker_id;
+            m_total_worker_id++;
+        }
+
+        map_listen_fd[fd] = gettid();
+        map_thread_id[gettid()] = worker_id;
+        return worker_id;
+    }
+
+    /* Number of original listen fds: map_dup_fd entries mapping to themselves */
+    int count_original_listeners()
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        int originals = 0;
+        for (const auto &itr : map_dup_fd) {
+            if (itr.first == itr.second) {
+                originals++;
+            }
+        }
+        return originals;
+    }
+
+    /* ADD-failure cleanup: drop the fd mapping and the caller's thread
+     * mapping in one critical section */
+    void erase_worker(int fd, pid_t tid)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        map_listen_fd.erase(fd);
+        map_thread_id.erase(tid);
+    }
+
+    /* Pop a recycled worker id into id; false when none is available */
+    bool pop_unused_worker_id(int &id)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        if (unused_worker_id.empty()) {
+            return false;
+        }
+        auto iter = unused_worker_id.begin();
+        id = *iter;
+        unused_worker_id.erase(iter);
+        return true;
+    }
+
+    /* Return lookup_tid's worker id to the unused pool and drop erase_pid */
+    void recycle_worker(pid_t lookup_tid, pid_t erase_pid)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        auto iter = map_thread_id.find(lookup_tid);
+        unused_worker_id.insert(iter != map_thread_id.end() ? iter->second : -1);
+        map_thread_id.erase(erase_pid);
+    }
+
+private:
+    lock_spin m_lock;
     /* Map listen fd with thread(process) */
     std::unordered_map<int, pid_t> map_listen_fd;
     /* Associate thread(process) with unique identifier */
@@ -44,24 +163,26 @@ struct app_conf {
     std::unordered_map<int, int> map_dup_fd;
     /* Collection of unused unique identifiers limited by workers_num */
     std::set<int> unused_worker_id;
-    void *context;
     /* Next worker id to hand to a thread that has none yet */
-    int m_total_worker_id;
+    int m_total_worker_id = 0;
+};
+
+struct app_conf {
+    app_type_t type;
+    int workers_num;
+    int workers_pow2;
+    bool add_second_4t_rule;
+    app_worker_registry workers;
+    void *context;
 
     app_conf()
         : m_init_lock("app_conf_init")
     {
         type = APP_NONE;
-        m_map_lock = lock_spin_recursive("app_conf");
         workers_num = 0;
         workers_pow2 = 0;
         add_second_4t_rule = false;
-        m_total_worker_id = 0;
         m_original_listen_count = INT_MAX;
-        map_listen_fd.clear();
-        map_thread_id.clear();
-        map_dup_fd.clear();
-        unused_worker_id.clear();
         context = nullptr;
 
         setup();
@@ -84,27 +205,8 @@ struct app_conf {
         workers_pow2++;
     }
 
-    inline int get_worker_id()
-    {
-        std::lock_guard<decltype(this->m_map_lock)> lock(m_map_lock);
-        auto itr = map_thread_id.find(gettid());
-        if (itr != map_thread_id.end()) {
-            return itr->second;
-        }
-        return -1;
-    }
+    inline int get_worker_id() { return workers.worker_id(gettid()); }
 
-    /* Owning tid recorded in map_listen_fd for a tracked listen fd, or -1 */
-    pid_t listen_fd_owner(int fd);
-    /* Original fd recorded in map_dup_fd for a duplicated fd, or -1 */
-    int dup_parent_fd(int fd);
-    void record_listen_fd(int fd, pid_t tid);
-    void publish_thread_worker(pid_t tid, int worker_id);
-    /* Assign (or reuse) the calling thread's worker id and publish the fd->tid
-     * and tid->worker-id mappings in one m_map_lock critical section */
-    int publish_worker(int fd);
-    /* Number of original listen fds: map_dup_fd entries mapping to themselves */
-    int count_original_listeners();
     /* publish_worker() plus the enable_reuse_port=false gate accounting */
     int assign_worker_and_publish(int fd, sockinfo *si);
 
