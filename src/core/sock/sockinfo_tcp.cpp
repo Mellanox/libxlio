@@ -986,6 +986,12 @@ bool sockinfo_tcp::prepare_listen_to_close()
         close(new_sock->get_fd());
     }
 
+    /* Detach the RX sink at close: the destructor can run late and a stale sink
+     * precedes a replacement reuse_port listener in the ring's index-0-first
+     * dispatch. Late listener callbacks reach this object by pointer, not via
+     * this sink. Needs lock depth 1: detach_receiver() unlocks one level. */
+    shutdown_rx();
+
     return true;
 }
 
