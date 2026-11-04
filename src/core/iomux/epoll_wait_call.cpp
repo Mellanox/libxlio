@@ -72,8 +72,11 @@ int epoll_wait_call::get_current_events()
     int i = m_n_all_ready_fds;
     int ready_rfds = 0;
     int ready_wfds = 0;
+    // Reported sockets move to the tail during the walk, so visit each socket at most once.
+    size_t to_visit = m_epfd_info->m_ready_fds.size();
     sockinfo *si = m_epfd_info->m_ready_fds.front();
-    while (si && i < m_maxevents) {
+    while (si && i < m_maxevents && to_visit > 0) {
+        --to_visit;
         sockinfo *si_next = m_epfd_info->m_ready_fds.next(si);
         bool got_event = false;
 
@@ -123,6 +126,12 @@ int epoll_wait_call::get_current_events()
         if (got_event) {
             m_epfd_info->add_rx_migration_cand(si);
             ++i;
+            // A level-triggered socket stays listed after its report. Move it to the tail, so
+            // the next call starts with the sockets that this call did not reach.
+            if (m_epfd_info->m_ready_fds.is_member(si)) {
+                m_epfd_info->m_ready_fds.erase(si);
+                m_epfd_info->m_ready_fds.push_back(si);
+            }
         }
         si = si_next;
     }
