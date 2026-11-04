@@ -1,0 +1,76 @@
+// Verify that three duplicate ACKs trigger fast retransmit and that
+// partial ACKs during recovery advance retransmission across multiple loss.
+//
+// XLIO adaptation:
+// - remove the TCP_CC_INFO-dependent inline cwnd assertion;
+// - warm the RFC 3390 initial congestion window from 4 MSS to 8 MSS before
+//   starting the upstream seven-packet recovery scenario;
+// - use exact wire packets as the observable congestion-control assertion.
+
+// Create a listening TCP socket.
+ 0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
++0.005 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
++0.005 bind(3, ..., ...) = 0
++0.005 listen(3, 1) = 0
+
+// Establish a TCP connection with a 1000-byte peer MSS.
++0.035 < S 0:0(0) win 32792 <mss 1000,nop,wscale 7>
++0.000 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 8>
++0.000 < . 1:1(0) ack 1 win 257
++0.000 accept(3, ..., ...) = 4
++0.000 close(3) = 0
++0.000 setsockopt(4, SOL_SOCKET, SO_SNDBUF, [200000], 4) = 0
+
+// Warm XLIO's RFC 3390 initial window from 4 MSS to 8 MSS.
++0.000 write(4, ..., 10000) = 10000
++0.000 > . 1:1001(1000) ack 1
++0.000 > . 1001:2001(1000) ack 1
++0.000 > . 2001:3001(1000) ack 1
++0.000 > . 3001:4001(1000) ack 1
++0.100 < . 1:1(0) ack 4001 win 257
++0.000 > . 4001:5001(1000) ack 1
++0.000 > . 5001:6001(1000) ack 1
++0.000 > . 6001:7001(1000) ack 1
++0.000 > . 7001:8001(1000) ack 1
++0.000 > . 8001:9001(1000) ack 1
++0.000 > P. 9001:10001(1000) ack 1
++0.100 < . 1:1(0) ack 10001 win 257
+
+// Send the seven-packet recovery flight.
++0.000 write(4, ..., 7000) = 7000
++0.000 > . 10001:11001(1000) ack 1
++0.000 > . 11001:12001(1000) ack 1
++0.000 > . 12001:13001(1000) ack 1
++0.000 > . 13001:14001(1000) ack 1
++0.000 > . 14001:15001(1000) ack 1
++0.000 > . 15001:16001(1000) ack 1
++0.000 > P. 16001:17001(1000) ack 1
+
+// Assume the second, third, and fifth packets are lost. Three duplicate
+// ACKs after the advancing ACK trigger fast retransmit of the second packet.
++0.100 < . 1:1(0) ack 11001 win 257
++0.000 < . 1:1(0) ack 11001 win 257
++0.000 < . 1:1(0) ack 11001 win 257
++0.000 < . 1:1(0) ack 11001 win 257
++0.000 > . 11001:12001(1000) ack 1
+
+// Unlike NewReno, XLIO does not immediately retransmit the next missing
+// packet when the partial ACK arrives. Its retransmission waits for RTO.
+// The microsecond estimator uses SRTT + max(4*RTTVAR, 600 ms): this
+// scenario has about 100 ms RTT, then waits for the next slow-timer check.
+// The observed retransmission delay is about 750 ms (formerly 550 ms).
++0.000 < . 1:1(0) ack 12001 win 257
++0.750 > . 12001:13001(1000) ack 1
++0.000 < . 1:1(0) ack 14001 win 257
+// XLIO retransmits every remaining outstanding MSS, rather than only the
+// missing fifth MSS.
++0.000 > . 14001:15001(1000) ack 1
++0.000 > . 15001:16001(1000) ack 1
++0.000 > P. 16001:17001(1000) ack 1
++0.000 < . 1:1(0) ack 17001 win 257
+
+// Teardown the TCP connection.
++1.000 close(4) = 0
++0.000 > F. 17001:17001(0) ack 1
++0.100 < F. 1:1(0) ack 17002 win 257
++0.000 > . 17002:17002(0) ack 2

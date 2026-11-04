@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: GPL-2.0
+
+// Some TCP stacks send FINs even though the window is closed. Linux breaks
+// a possible FIN/ACK loop by accepting the FIN. XLIO currently does not.
+//
+// The kernel test uses one 60000-byte synthetic packet, which cannot be
+// injected over this MTU-1500 remote link. XLIO doubles SO_RCVBUF and
+// enforces a minimum of two MSS, so requesting 2000 gives a 4000-byte
+// receive buffer. Four MTU-safe packets fill it while preserving the
+// original zero-window FIN behavior.
+
+--mss=1000
+
+`kernel/defaults.sh`
+
+// Establish a connection.
+   +0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 setsockopt(3, SOL_SOCKET, SO_RCVBUF, [2000], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792 <mss 1000,nop,wscale 7>
+// Linux selects wscale 0 for this small per-socket receive buffer. XLIO
+// currently derives the advertised scale from global stack initialization
+// and uses wscale 8 even though this socket's receive buffer is only 4000
+// bytes. This expectation records current XLIO behavior.
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 8>
+   +0 < . 1:1(0) ack 1 win 257
+
+   +0 accept(3, ..., ...) = 4
+
+   +0 < . 1:1001(1000) ack 1 win 257
+   +0 > . 1:1(0) ack 1001
+   +0 < . 1001:2001(1000) ack 1 win 257
+   +0 > . 1:1(0) ack 2001
+   +0 < . 2001:3001(1000) ack 1 win 257
+   +0 > . 1:1(0) ack 3001
+   +0 < P. 3001:4001(1000) ack 1 win 257
+   +0 > . 1:1(0) ack 4001 win 0
+
+   +0 < F. 4001:4001(0) ack 1 win 257
+// Linux consumes this in-sequence FIN and advances to ACK 4002. XLIO keeps
+// rcv_nxt at 4001 while the receive window is zero and ACKs that unchanged
+// sequence number. This expectation deliberately records current XLIO
+// behavior; consuming the FIN would improve Linux compatibility.
+   +0 > . 1:1(0) ack 4001 win 0
