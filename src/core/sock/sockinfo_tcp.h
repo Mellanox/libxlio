@@ -175,6 +175,14 @@ public:
 
     void clean_socket_obj() override;
 
+private:
+    // Listener child-reference machinery; see the m_child_refs contract below.
+    bool try_child_ref_acquire();
+    void child_ref_release();
+    bool request_child_delete();
+    void perform_deferred_delete();
+
+public:
     void setPassthrough(bool _isPassthrough)
     {
         m_sock_offload = _isPassthrough ? TCP_SOCK_PASSTHROUGH : TCP_SOCK_LWIP;
@@ -481,6 +489,9 @@ private:
     // is already created by lwip, but no sockinfo instance is created yet at this stage
     static err_t syn_received_lwip_cb(void *arg, struct tcp_pcb *newpcb);
     static err_t syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb);
+    // Pre-reuse gate for a TIME_WAIT pcb, consulted before tcp_pcb_reuse()
+    // mutates the pcb. False leaves the pcb untouched in TIME_WAIT.
+    static u8_t syn_tw_may_reuse_cb(void *listen_sock);
 
     static err_t syn_received_drop_lwip_cb(void *arg, struct tcp_pcb *newpcb);
 
@@ -717,6 +728,13 @@ private:
     // second call to failed connect blocking socket.
     bool report_connected;
     bool m_is_cleaned = false; // If this socket registered deletion on internal thread.
+    // Every cloned child pins its listener (try_child_ref_acquire in
+    // clone_conn_cb, released in ~sockinfo_tcp, anchored on the child's
+    // write-once m_pcb.listen_sock) so late child callbacks cannot race the
+    // listener free. m_child_refs_lock is a leaf, never held across another lock.
+    lock_spin m_child_refs_lock {"tcp_child_refs"};
+    uint32_t m_child_refs = 0;
+    bool m_child_delete_requested = false;
     bool m_worker_close_routed = false; // under lock: one close job per incarnation
     int m_error_status;
 

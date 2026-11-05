@@ -7,6 +7,7 @@
 #ifndef TESTS_GTEST_COMMON_SUBPROCESS_TEST_H_
 #define TESTS_GTEST_COMMON_SUBPROCESS_TEST_H_
 
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <string>
@@ -76,6 +77,35 @@ protected:
     std::string helper_path(const char *name) const
     {
         return std::string(GTEST_BUILDDIR) + "/" + name;
+    }
+
+    /**
+     * True when @p ip can be an XLIO-offloadable endpoint address: not empty,
+     * not the IPv4/IPv6 any-address and not loopback (XLIO serves those on the
+     * kernel path by design, so a test that must prove offload skips them).
+     * String comparison is sufficient because callers pass canonical
+     * inet_ntop() output (sys_addr2str). IPv4-mapped IPv6 literals
+     * ("::ffff:...") are deliberately not rejected here.
+     */
+    static bool addr_offloadable(const std::string &ip)
+    {
+        return !(ip.empty() || ip == "0.0.0.0" || ip == "::" || ip == "::1" ||
+                 ip.rfind("127.", 0) == 0);
+    }
+
+    /**
+     * Pull a numeric value that follows "<key>" in the report/output text.
+     * Returns false if the key is absent.
+     */
+    static bool find_u64(const std::string &text, const std::string &key, uint64_t &out)
+    {
+        size_t pos = text.find(key);
+        if (pos == std::string::npos) {
+            return false;
+        }
+        pos += key.size();
+        out = strtoull(text.c_str() + pos, nullptr, 10);
+        return true;
     }
 
     /**

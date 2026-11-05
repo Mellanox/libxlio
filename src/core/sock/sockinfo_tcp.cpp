@@ -818,6 +818,14 @@ void sockinfo_tcp::err_lwip_cb_xlio_socket(void *pcb_container, err_t err)
 sockinfo_tcp::~sockinfo_tcp()
 {
     si_tcp_logfunc("");
+
+    // Release this child's listener reference (taken in clone_conn_cb). The
+    // release may free the listener (deferred delete). A listener's own
+    // m_pcb.listen_sock is nullptr, so it never releases a reference on itself.
+    if (m_pcb.listen_sock) {
+        reinterpret_cast<sockinfo_tcp *>(m_pcb.listen_sock)->child_ref_release();
+    }
+
     g_global_stat_static.socket_tcp_destructor_counter.fetch_add(1, std::memory_order_relaxed);
     if (isPassthrough()) {
         g_tuning_report_counters.socket_non_offloaded_destructor_counter.fetch_add(
@@ -929,12 +937,31 @@ void sockinfo_tcp::clean_socket_obj()
     lock_tcp_con();
 
     if (is_cleaned()) {
+        unlock_tcp_con();
         return;
     }
     m_is_cleaned = true;
 
     unlock_tcp_con();
 
+    // A live cloned child may still run a late callback that locks this
+    // listener. Defer the delete to the last child_ref_release() in that case.
+    if (request_child_delete()) {
+        perform_deferred_delete();
+    }
+}
+
+/* Mark this socket delete-requested. True when the caller must perform the
+ * delete: no live child holds a reference. Exactly one caller sees true. */
+bool sockinfo_tcp::request_child_delete()
+{
+    std::lock_guard<lock_spin> guard(m_child_refs_lock);
+    m_child_delete_requested = true;
+    return m_child_refs == 0;
+}
+
+void sockinfo_tcp::perform_deferred_delete()
+{
     event_handler_manager *p_event_mgr = get_event_mgr();
     // Poll-group sockets keep their timers in the group collection even in delegate mode.
     // Unregister those timers before deleting the socket so the group cannot retain a stale
@@ -946,6 +973,34 @@ void sockinfo_tcp::clean_socket_obj()
         p_event_mgr->unregister_socket_timer_and_delete(this);
     } else {
         delete this;
+    }
+}
+
+/* Pin the listener for a new child. False when a delete was already requested:
+ * a condemned listener must not gain new children. */
+bool sockinfo_tcp::try_child_ref_acquire()
+{
+    std::lock_guard<lock_spin> guard(m_child_refs_lock);
+    if (m_child_delete_requested) {
+        return false;
+    }
+    ++m_child_refs;
+    // A wrap here means a missed release somewhere.
+    assert(m_child_refs != 0 && "sockinfo_tcp child refcount overflow");
+    return true;
+}
+
+/* Drop one child reference. The last release after a requested delete runs the
+ * deferred delete, so this call may free the object. */
+void sockinfo_tcp::child_ref_release()
+{
+    m_child_refs_lock.lock();
+    assert(m_child_refs != 0 && "sockinfo_tcp child refcount underflow");
+    --m_child_refs;
+    bool elected = (m_child_refs == 0) && m_child_delete_requested;
+    m_child_refs_lock.unlock();
+    if (elected) {
+        perform_deferred_delete();
     }
 }
 
@@ -984,6 +1039,12 @@ bool sockinfo_tcp::prepare_listen_to_close()
         new_sock->unlock_tcp_con();
         close(new_sock->get_fd());
     }
+
+    /* Detach the RX sink at close: the destructor can run late and a stale sink
+     * precedes a replacement reuse_port listener in the ring's index-0-first
+     * dispatch. Late listener callbacks reach this object by pointer, not via
+     * this sink. Needs lock depth 1: detach_receiver() unlocks one level. */
+    shutdown_rx();
 
     return true;
 }
@@ -1073,6 +1134,7 @@ bool sockinfo_tcp::prepare_to_close(bool process_shutdown /* = false */)
         // 2. In handle_close when fd_collection::del_sockfd is finished and we remove the
         //    socket from epfds.
         m_pcb.syn_tw_handled_cb = &sockinfo_tcp::syn_received_timewait_cb;
+        m_pcb.syn_tw_may_reuse_cb = &sockinfo_tcp::syn_tw_may_reuse_cb;
     }
 
     unlock_tcp_con();
@@ -4239,21 +4301,33 @@ err_t sockinfo_tcp::clone_conn_cb(void *arg, struct tcp_pcb **newpcb)
     }
 
     ASSERT_LOCKED(conn->m_tcp_con_lock);
+
+    // Pin the listener before the lock drops below. Refusal means a delete was
+    // already requested: drop the SYN with ERR_MEM, the regular failure path.
+    if (!conn->try_child_ref_acquire()) {
+        return ERR_MEM;
+    }
+
     conn->m_tcp_con_lock.unlock();
 
     new_sock = conn->accept_clone();
 
+    conn->m_tcp_con_lock.lock();
+
     if (new_sock) {
         *newpcb = (struct tcp_pcb *)(&new_sock->m_pcb);
         new_sock->m_pcb.my_container = (void *)new_sock;
-        /* XXX We have to search for correct listen socket every time,
-         * because the listen socket may be closed and reopened. */
+        /* listen_sock is the write-once anchor of this child's one listener
+         * reference, released in ~sockinfo_tcp(). */
+        assert(new_sock->m_pcb.listen_sock == nullptr &&
+               "listen_sock must be write-once per child incarnation");
         new_sock->m_pcb.listen_sock = (void *)conn;
     } else {
+        // Undo the pin under the held lock: an elected deferred delete then
+        // blocks in ~sockinfo_tcp() on this lock for as long as lwIP needs conn.
+        conn->child_ref_release();
         ret_val = ERR_MEM;
     }
-
-    conn->m_tcp_con_lock.lock();
 
     return ret_val;
 }
@@ -4267,11 +4341,28 @@ void sockinfo_tcp::accepted_pcb_cb(struct tcp_pcb *accepted_pcb)
     accepted_sock->unlock_tcp_con();
 }
 
+/* Pre-reuse gate for TIME_WAIT SYN reuse, called before tcp_pcb_reuse() mutates
+ * the pcb. The child's listener reference keeps listen_sock readable up to 2MSL
+ * after the listener close. The unlocked m_state read is best-effort admission
+ * only: the reference, not this read, is the lifetime guarantee. */
+u8_t sockinfo_tcp::syn_tw_may_reuse_cb(void *listen_sock)
+{
+    sockinfo_tcp *ls = reinterpret_cast<sockinfo_tcp *>(listen_sock);
+    return ls && ls->m_state != SOCKINFO_CLOSING && ls->m_state != SOCKINFO_CLOSED;
+}
+
 err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
 {
     sockinfo_tcp *listen_sock = (sockinfo_tcp *)((arg));
 
     if (unlikely(!listen_sock || !newpcb)) {
+        return ERR_VAL;
+    }
+
+    // Backstop to the syn_tw_may_reuse_cb pre-gate: do not admit a connection
+    // into a listener that started closing after the pre-gate read.
+    if (unlikely(listen_sock->m_state == SOCKINFO_CLOSING ||
+                 listen_sock->m_state == SOCKINFO_CLOSED)) {
         return ERR_VAL;
     }
 
@@ -4314,6 +4405,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     tcp_err(&new_sock->m_pcb, sockinfo_tcp::err_lwip_cb);
     tcp_acked(&new_sock->m_pcb, sockinfo_tcp::ack_recvd_lwip_cb);
     new_sock->m_pcb.syn_tw_handled_cb = nullptr;
+    new_sock->m_pcb.syn_tw_may_reuse_cb = nullptr;
     new_sock->m_sock_wakeup_pipe.wakeup_clear();
     new_sock->m_snd_buf_max = safe_mce_sys().tcp_send_buffer_size;
     new_sock->m_snd_buf = new_sock->m_snd_buf_max;
