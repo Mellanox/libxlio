@@ -8,8 +8,11 @@
 #include "config.h"
 #endif
 
+#include <exception>
+
 #include <util/sys_vars.h>
 #include <util/libxlio.h>
+#include <util/xlio_exception.h>
 #include <vlogger/vlogger.h>
 #include <dev/buffer_pool.h>
 #include <event/event_handler_manager_local.h>
@@ -114,6 +117,24 @@ struct xlio_api_t *extra_api()
  * XLIO Ultra API
  */
 
+/*
+ * The Ultra API is a C API, so an exception must never cross its ABI boundary. Object
+ * constructors can throw std::bad_alloc (allocating members, containers, internal objects)
+ * and xlio_error (for example, sockinfo() throws when epoll_create(2) fails with EMFILE).
+ * Translate such an exception into an errno value for the caller.
+ *
+ * xlio_error carries the original errno, which is more specific than a generic ENOMEM.
+ */
+static int errno_from_exception(const std::exception &e)
+{
+    const xlio_error *xlio_err = dynamic_cast<const xlio_error *>(&e);
+
+    if (xlio_err && xlio_err->errnum) {
+        return xlio_err->errnum;
+    }
+    return ENOMEM;
+}
+
 extern "C" int xlio_init_ex(const struct xlio_init_attr *attr)
 {
     if (g_init_global_ctors_done) {
@@ -155,9 +176,12 @@ extern "C" int xlio_poll_group_create(const struct xlio_poll_group_attr *attr,
         return -1;
     }
 
-    poll_group *grp = new poll_group(*attr);
-    if (!grp) {
-        errno = ENOMEM;
+    poll_group *grp;
+    try {
+        grp = new poll_group(*attr);
+    } catch (const std::exception &e) {
+        __log_dbg("xlio_poll_group_create: cannot create a group (%s)", e.what());
+        errno = errno_from_exception(e);
         return -1;
     }
 
@@ -208,8 +232,18 @@ extern "C" int xlio_socket_create(const struct xlio_socket_attr *attr, xlio_sock
         return -1;
     }
 
-    sockinfo_tcp *si = new sockinfo_tcp(fd, attr->domain);
+    /*
+     * TODO: sockinfo_tcp() can throw an exception, for example, std::bad_alloc from an
+     * allocating member or xlio_error when epoll_create(2) fails with EMFILE. Such an
+     * exception escapes this C API and the fd is leaked. Catching it is not enough to fix
+     * the leak: whether ~sockinfo() has already closed the fd depends on which member
+     * threw and on the deferred_close logic, so the caller cannot tell whether closing the
+     * fd here is a leak fix or a double close. This requires sockinfo to guarantee that
+     * the fd is untouched unless construction of the most-derived object completed.
+     */
+    sockinfo_tcp *si = new (std::nothrow) sockinfo_tcp(fd, attr->domain);
     if (!si) {
+        SYSCALL(close, fd);
         errno = ENOMEM;
         return -1;
     }
@@ -256,8 +290,19 @@ extern "C" int xlio_socket_setsockopt(xlio_socket_t sock, int level, int optname
 {
     sockinfo_tcp *si = reinterpret_cast<sockinfo_tcp *>(sock);
     int errno_save = errno;
+    int rc;
 
-    int rc = si->setsockopt(level, optname, optval, optlen);
+    /*
+     * setsockopt() throws xlio_unsupported_api for an unimplemented option when
+     * XLIO_EXCEPTION_HANDLING is configured to do so. Don't let it cross the C ABI.
+     */
+    try {
+        rc = si->setsockopt(level, optname, optval, optlen);
+    } catch (const std::exception &e) {
+        __log_dbg("xlio_socket_setsockopt: %s", e.what());
+        errno = ENOTSUP;
+        return -1;
+    }
     if (rc == 0) {
         errno = errno_save;
     }
