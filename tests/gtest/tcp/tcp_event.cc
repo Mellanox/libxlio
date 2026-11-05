@@ -13,6 +13,60 @@
 
 class tcp_event : public tcp_base {};
 
+static void ignore_sigint(int signo)
+{
+    UNREFERENCED_PARAMETER(signo);
+}
+
+/**
+ * @test tcp_event.ready_event_precedes_shutdown_interrupt
+ * @brief
+ *    epoll_wait() returns an already-ready event ahead of the shutdown EINTR
+ *
+ * @details
+ */
+TEST_F(tcp_event, ready_event_precedes_shutdown_interrupt)
+{
+    int pid = fork();
+    ASSERT_LE(0, pid);
+
+    if (pid == 0) {
+        int efd = eventfd(0, EFD_NONBLOCK);
+        EXPECT_LE_ERRNO(0, efd);
+
+        int epfd = epoll_create1(0);
+        EXPECT_LE_ERRNO(0, epfd);
+
+        struct epoll_event event = {};
+        event.events = EPOLLIN | EPOLLET;
+        event.data.fd = efd;
+        EXPECT_EQ_ERRNO(0, epoll_ctl(epfd, EPOLL_CTL_ADD, efd, &event));
+
+        uint64_t value = 1;
+        EXPECT_EQ_ERRNO(static_cast<ssize_t>(sizeof(value)), write(efd, &value, sizeof(value)));
+
+        struct sigaction action = {};
+        action.sa_handler = ignore_sigint;
+        sigemptyset(&action.sa_mask);
+        EXPECT_EQ_ERRNO(0, sigaction(SIGINT, &action, nullptr));
+        EXPECT_EQ_ERRNO(0, raise(SIGINT));
+
+        event = {};
+        int rc = epoll_wait(epfd, &event, 1, 0);
+        EXPECT_EQ_ERRNO(1, rc);
+        if (rc == 1) {
+            EXPECT_EQ(efd, event.data.fd);
+            EXPECT_NE(0U, event.events & EPOLLIN);
+        }
+
+        close(epfd);
+        close(efd);
+        exit(testing::Test::HasFailure());
+    }
+
+    EXPECT_EQ(0, wait_fork(pid));
+}
+
 TEST_F(tcp_event, DISABLED_ti_1)
 {
     int rc = EOK;
