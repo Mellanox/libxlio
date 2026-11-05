@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0
+//
+// Isolated from tcp_rfc5961_rst-syn-recv.pkt so each scenario runs in a
+// fresh XLIO process with an independent Packetdrill sequence mapping.
+
+`kernel/defaults.sh`
+
+// Linux silently ignores an out-of-window RST and preserves the request.
+// XLIO sends nothing but destroys the request without validating the RST
+// sequence. The following completion ACK therefore cannot create an
+// accept-ready connection.
+   0 socket(..., SOCK_STREAM|SOCK_NONBLOCK, IPPROTO_TCP) = 3
+  +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+  +0 bind(3, ..., ...) = 0
+  +0 listen(3, 1) = 0
+  +0 < S 0:0(0) win 1000 <mss 1000,sackOK,nop,nop,nop,wscale 0>
+  +0 > S. 0:0(0) ack 1 <...>
+  +0 < R 100001:100001(0) win 1000
+ +.1 < . 1:1(0) ack 1 win 1000
+  +0 accept(3, ..., ...) = -1 EAGAIN (Resource temporarily unavailable)
+  +0 close(3) = 0

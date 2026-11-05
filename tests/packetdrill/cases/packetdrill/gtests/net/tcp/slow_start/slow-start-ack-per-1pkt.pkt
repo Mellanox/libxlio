@@ -1,0 +1,67 @@
+// Test XLIO slow start when not application-limited.
+// In this variant, the receiver ACKs every packet.
+//
+// Linux starts this test at IW10. XLIO follows RFC 3390, starting at
+// 4 MSS for MSS 1000, and grows cwnd by one MSS for each one-MSS ACK.
+//
+// Packetdrill requires unsupported TCP_CC_INFO before evaluating inline
+// tcpi_snd_cwnd assertions, so exact cwnd-limited wire bursts are used
+// as the observable slow-start assertion.
+//
+// Linux marks intermediate cwnd-limited TSO bursts with PSH. XLIO
+// reserves PSH for the final burst that completes the application write.
+
+`packetdrill/gtests/net/common/defaults.sh`
+
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+  +.1 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 8>
+  +.1 < . 1:1(0) ack 1 win 257
+   +0 accept(3, ..., ...) = 4
+   +0 setsockopt(4, SOL_SOCKET, SO_SNDBUF, [200000], 4) = 0
+
+   +0 write(4, ..., 30000) = 30000
+   +0 > . 1:4001(4000) ack 1
+
++.105 < . 1:1(0) ack 1001 win 257
+   +0 > . 4001:6001(2000) ack 1
+
+   +0 < . 1:1(0) ack 2001 win 257
+   +0 > . 6001:8001(2000) ack 1
+
++.005 < . 1:1(0) ack 3001 win 257
+   +0 > . 8001:10001(2000) ack 1
+
+   +0 < . 1:1(0) ack 4001 win 257
+   +0 > . 10001:12001(2000) ack 1
+
++.005 < . 1:1(0) ack 5001 win 257
+   +0 > . 12001:14001(2000) ack 1
+
+   +0 < . 1:1(0) ack 6001 win 257
+   +0 > . 14001:16001(2000) ack 1
+
++.005 < . 1:1(0) ack 7001 win 257
+   +0 > . 16001:18001(2000) ack 1
+
+   +0 < . 1:1(0) ack 8001 win 257
+   +0 > . 18001:20001(2000) ack 1
+
++.005 < . 1:1(0) ack 9001 win 257
+   +0 > . 20001:22001(2000) ack 1
+
+   +0 < . 1:1(0) ack 10001 win 257
+   +0 > . 22001:24001(2000) ack 1
+
++.005 < . 1:1(0) ack 11001 win 257
+   +0 > . 24001:26001(2000) ack 1
+
+   +0 < . 1:1(0) ack 12001 win 257
+   +0 > . 26001:28001(2000) ack 1
+
++.005 < . 1:1(0) ack 13001 win 257
+   +0 > P. 28001:30001(2000) ack 1

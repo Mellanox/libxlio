@@ -1,0 +1,9 @@
+{
+    "network": {
+        "protocols": {
+            "tcp": {
+                "quickack": true
+            }
+        }
+    }
+}

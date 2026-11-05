@@ -53,8 +53,14 @@ RUN mkdir -p /var/run/sshd ~/.ssh && \
     echo "   UserKnownHostsFile /dev/null" >> ~/.ssh/config && \
     echo "   LogLevel ERROR" >> ~/.ssh/config
 
-# Style target, installs clang-format-15
 FROM tests AS gtest
+RUN apt-get update && apt-get install -y python3 python3-yaml git gcc make bison flex iptables procps \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+COPY tests/packetdrill/pd tests/packetdrill/pd_common.py tests/packetdrill/packetdrill.version.json /opt/xlio-packetdrill/
+ENV PD_CACHE_DIR=/opt/packetdrill
+RUN python3 /opt/xlio-packetdrill/pd prepare
+
+# Style target, installs clang-format-15
 FROM build AS style
 RUN apt-get update \
  && apt-get install -y clang-15 clang-format-15 \

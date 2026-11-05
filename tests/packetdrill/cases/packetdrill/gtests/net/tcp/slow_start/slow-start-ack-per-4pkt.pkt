@@ -1,0 +1,48 @@
+// Test XLIO slow start when not application-limited, so that
+// the cwnd continues to grow.
+// In this variant, the receiver sends one ACK per 4 packets.
+//
+// Linux starts this test at IW10 and grows cwnd by all newly ACKed
+// bytes. XLIO follows RFC 3390, starting at 4 MSS for MSS 1000, and
+// RFC 3465, capping each stretch-ACK increase at 2 MSS. The packet
+// and cwnd expectations below deliberately describe XLIO's behavior.
+//
+// Upstream also verifies tcpi_snd_cwnd with inline Packetdrill code.
+// Packetdrill requires both TCP_INFO and TCP_CC_INFO before evaluating
+// that code; XLIO exposes basic cwnd through TCP_INFO but does not implement
+// TCP_CC_INFO. Exact cwnd-limited wire bursts are therefore used here as the
+// observable slow-start assertion.
+
+`packetdrill/gtests/net/common/defaults.sh`
+
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+  +.1 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 8>
+  +.1 < . 1:1(0) ack 1 win 257
+   +0 accept(3, ..., ...) = 4
+   +0 setsockopt(4, SOL_SOCKET, SO_SNDBUF, [200000], 4) = 0
+
+   +0 write(4, ..., 30000) = 30000
+// Linux marks intermediate cwnd-limited TSO bursts with PSH. XLIO currently
+// reserves PSH for the final burst that completes the application write.
+// These flags deliberately describe XLIO's current segmentation behavior.
+   +0 > . 1:4001(4000) ack 1
+
+ +.11 < . 1:1(0) ack 4001 win 257
+   +0 > . 4001:10001(6000) ack 1
+
+ +.01 < . 1:1(0) ack 8001 win 257
+   +0 > . 10001:16001(6000) ack 1
+
++.005 < . 1:1(0) ack 12001 win 257
+   +0 > . 16001:22001(6000) ack 1
+
++.005 < . 1:1(0) ack 16001 win 257
+   +0 > . 22001:28001(6000) ack 1
+
++.005 < . 1:1(0) ack 20001 win 257
+   +0 > P. 28001:30001(2000) ack 1

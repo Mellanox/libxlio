@@ -1,0 +1,33 @@
+// Test for blocking write.
+--tolerance_usecs=10000
+
+`packetdrill/gtests/net/common/defaults.sh`
+
+// Establish a connection.
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+  +.1 < S 0:0(0) win 50000 <mss 1000,nop,wscale 0>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 8>
+  +.1 < . 1:1(0) ack 1 win 50000
+   +0 accept(3, ..., ...) = 4
+
+// Kernel doubles our value -> sk->sk_sndbuf is set to 42000
+   +0 setsockopt(4, SOL_SOCKET, SO_SNDBUF,  [21000], 4) = 0
+   +0 getsockopt(4, SOL_SOCKET, SO_SNDBUF,  [42000], [4]) = 0
+
+// A write larger than SO_SNDBUF blocks until ACKs free enough buffer space.
+   +0...0.300 write(4, ..., 61000) = 61000    // this write() blocks
+
+// XLIO starts with an RFC 3390 initial congestion window of 4 MSS.
+ +.050 < . 1:1(0) ack 4001 win 50000
+
+ +.050 < . 1:1(0) ack 8001 win 50000
+
+ +.050 < . 1:1(0) ack 12001 win 50000
+
+ +.050 < . 1:1(0) ack 16001 win 50000
+
+ +.050 < . 1:1(0) ack 20001 win 50000
