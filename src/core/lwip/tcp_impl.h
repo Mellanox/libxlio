@@ -117,8 +117,14 @@ void set_tmr_resolution(u32_t v);
 #define TCP_HLEN 20
 #endif
 
-#define TCP_FIN_WAIT_TIMEOUT 20000 /* milliseconds */
-#define TCP_SYN_RCVD_TIMEOUT 20000 /* milliseconds */
+#define TCP_FIN_WAIT_TIMEOUT    20000 /* milliseconds */
+#define TCP_SYN_RCVD_TIMEOUT    20000 /* milliseconds */
+#define TCP_USER_TIMEOUT_MAX_MS 1966020000U /* RFC 5482 max: 32767 minutes in ms */
+
+/* Keepalive setsockopt upper bounds, matching Linux include/net/tcp.h MAX_TCP_KEEP* */
+#define TCP_KEEPIDLE_MAX  32767 /* seconds */
+#define TCP_KEEPINTVL_MAX 32767 /* seconds */
+#define TCP_KEEPCNT_MAX   127 /* probes */
 
 #define TCP_OOSEQ_TIMEOUT 6U /* x RTO */
 
@@ -138,8 +144,6 @@ void set_tmr_resolution(u32_t v);
 #ifndef TCP_KEEPCNT_DEFAULT
 #define TCP_KEEPCNT_DEFAULT 9U /* Default Counter for KEEPALIVE probes */
 #endif
-
-#define TCP_MAXIDLE TCP_KEEPCNT_DEFAULT *TCP_KEEPINTVL_DEFAULT /* Maximum KEEPALIVE probe time */
 
 /* Fields are (of course) in network byte order.
  * Some fields are converted to host byte order in tcp_input().
