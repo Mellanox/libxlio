@@ -713,13 +713,8 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
         /* Check if KEEPALIVE should be sent */
         if ((pcb->so_options & SOF_KEEPALIVE) &&
             ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT))) {
-#if LWIP_TCP_KEEPALIVE
             if ((u32_t)(tcp_ticks - pcb->tmr) >
-                tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt * pcb->keep_intvl))
-#else
-            if ((u32_t)(tcp_ticks - pcb->tmr) > tcp_ms_to_ticks(pcb->keep_idle + TCP_MAXIDLE))
-#endif /* LWIP_TCP_KEEPALIVE */
-            {
+                tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt * pcb->keep_intvl)) {
                 LWIP_DEBUGF_IP_ADDR(TCP_DEBUG,
                                     "tcp_slowtmr: KEEPALIVE timeout. Aborting connection to ",
                                     pcb->remote_ip, pcb->is_ipv6);
@@ -727,15 +722,8 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
                 ++pcb_remove;
                 err = ERR_TIMEOUT;
                 ++pcb_reset;
-            }
-#if LWIP_TCP_KEEPALIVE
-            else if ((u32_t)(tcp_ticks - pcb->tmr) >
-                     tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt_sent * pcb->keep_intvl))
-#else
-            else if ((u32_t)(tcp_ticks - pcb->tmr) >
-                     tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt_sent * TCP_KEEPINTVL_DEFAULT))
-#endif /* LWIP_TCP_KEEPALIVE */
-            {
+            } else if ((u32_t)(tcp_ticks - pcb->tmr) >
+                       tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt_sent * pcb->keep_intvl)) {
                 tcp_keepalive(pcb);
                 pcb->keep_cnt_sent++;
             }
@@ -977,10 +965,8 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
     /* Init KEEPALIVE timer */
     pcb->keep_idle = TCP_KEEPIDLE_DEFAULT;
 
-#if LWIP_TCP_KEEPALIVE
     pcb->keep_intvl = TCP_KEEPINTVL_DEFAULT;
     pcb->keep_cnt = TCP_KEEPCNT_DEFAULT;
-#endif /* LWIP_TCP_KEEPALIVE */
 
     pcb->keep_cnt_sent = 0;
     pcb->quickack = 0;
@@ -1299,13 +1285,8 @@ u16_t tcp_send_mss(struct tcp_pcb *pcb)
 void tcp_set_keepalive(struct tcp_pcb *pcb, u32_t idle, u32_t intvl, u32_t cnt)
 {
     pcb->keep_idle = idle;
-#if LWIP_TCP_KEEPALIVE
     pcb->keep_intvl = intvl;
     pcb->keep_cnt = cnt;
-#else
-    (void)intvl;
-    (void)cnt;
-#endif /* LWIP_TCP_KEEPALIVE */
 }
 
 #if TCP_DEBUG || TCP_INPUT_DEBUG || TCP_OUTPUT_DEBUG

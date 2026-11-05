@@ -97,10 +97,8 @@ static bool is_inherited_option(int __level, int __optname)
         case TCP_MAXSEG:
         case TCP_NODELAY:
         case TCP_KEEPIDLE:
-#if LWIP_TCP_KEEPALIVE
         case TCP_KEEPINTVL:
         case TCP_KEEPCNT:
-#endif
         case TCP_USER_TIMEOUT:
             ret = true;
         }
@@ -5147,10 +5145,9 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                 m_pcb.keep_idle = idle_sec * 1000U;
             }
         } break;
-#if LWIP_TCP_KEEPALIVE
         case TCP_KEEPINTVL: {
             auto *int_ptr = reinterpret_cast<const int *>(__optval);
-            if (__optlen < sizeof(int) || *int_ptr <= 0) {
+            if (__optlen < sizeof(int) || *int_ptr <= 0 || *int_ptr > 32767) {
                 errno = EINVAL;
                 ret = -1;
             } else {
@@ -5161,7 +5158,7 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
         } break;
         case TCP_KEEPCNT: {
             auto *int_ptr = reinterpret_cast<const int *>(__optval);
-            if (__optlen < sizeof(int) || *int_ptr <= 0) {
+            if (__optlen < sizeof(int) || *int_ptr <= 0 || *int_ptr > 127) {
                 errno = EINVAL;
                 ret = -1;
             } else {
@@ -5170,7 +5167,6 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
                 m_pcb.keep_cnt = keep_cnt;
             }
         } break;
-#endif /* LWIP_TCP_KEEPALIVE */
         default:
             pass_to_os_always = true;
             supported = false;
@@ -5525,7 +5521,6 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                 errno = EINVAL;
             }
             break;
-#if LWIP_TCP_KEEPALIVE
         case TCP_KEEPINTVL:
             if (*__optlen >= sizeof(unsigned int)) {
                 *(unsigned int *)__optval = m_pcb.keep_intvl / 1000;
@@ -5546,7 +5541,6 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                 errno = EINVAL;
             }
             break;
-#endif /* LWIP_TCP_KEEPALIVE */
         default:
             ret = SOCKOPT_HANDLE_BY_OS;
             break;
