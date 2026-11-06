@@ -764,6 +764,9 @@ err_t sockinfo_tcp::rx_lwip_cb_entity_context(void *arg, struct tcp_pcb *pcb, st
 
         ptmp = ptmp->next;
         buff->lwip_pbuf.next = nullptr;
+        // A detached pbuf must not keep the chain's tot_len: setsockopt(TLS_RX) replays the
+        // ready list through sockinfo_tcp_ops_tls::recv(), which counts bytes by tot_len.
+        buff->lwip_pbuf.tot_len = buff->lwip_pbuf.len;
     }
 
     // Notify on event
