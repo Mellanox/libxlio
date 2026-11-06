@@ -12,9 +12,12 @@
 #include <assert.h>
 #include <mellanox/dpcp.h>
 
-/* Work request completion callback */
+/* Work request completion callback. The buffer is a borrowed identity token for the
+ * completed GET_PSV and must not be dereferenced: CQ processing has already released
+ * its reference. Setup and resync WQEs pass nullptr. */
 /* TODO Add argument for completion status to handle errors. */
-typedef void (*xlio_comp_cb_t)(void *);
+class mem_buf_desc_t;
+typedef void (*xlio_comp_cb_t)(void *, mem_buf_desc_t *);
 
 class xlio_ti;
 
