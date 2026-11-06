@@ -1,3 +1,22 @@
+/*
+ * Original work:
+ *
+ * json-c (copyright was originally missing from this file)
+ *
+ * Modified Work:
+ *
+ * Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES, ALL RIGHTS RESERVED.
+ *
+ * This software product is a proprietary product of NVIDIA CORPORATION &
+ * AFFILIATES (the "Company") and all right, title, and interest in and to the
+ * software product, including all associated intellectual property rights, are
+ * and shall remain exclusively with the Company.
+ *
+ * This software product is governed by the End User License Agreement
+ * provided with the software product.
+ *
+ */
+
 #ifndef _json_strerror_override_h_
 #define _json_strerror_override_h_
 
@@ -17,14 +36,14 @@ extern "C" {
 
 #include <string.h>
 
-JSON_EXPORT char *_json_c_strerror(int errno_in);
+JSON_EXPORT char *doca_third_party__json_c_strerror(int errno_in);
 
 #ifndef STRERROR_OVERRIDE_IMPL
-#define strerror	_json_c_strerror
+#define strerror doca_third_party__json_c_strerror
 #endif
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _json_strerror_override_h_ */ 
+#endif /* _json_strerror_override_h_ */

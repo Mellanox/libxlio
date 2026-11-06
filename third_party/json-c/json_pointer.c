@@ -1,8 +1,22 @@
 /*
- * Copyright (c) 2016 Alexandru Ardelean.
+ * Original work:
+ *
+ * Copyright (c) 2016 Alexadru Ardelean.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the MIT license. See COPYING for details.
+ *
+ * Modified Work:
+ *
+ * Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES, ALL RIGHTS RESERVED.
+ *
+ * This software product is a proprietary product of NVIDIA CORPORATION &
+ * AFFILIATES (the "Company") and all right, title, and interest in and to the
+ * software product, including all associated intellectual property rights, are
+ * and shall remain exclusively with the Company.
+ *
+ * This software product is governed by the End User License Agreement
+ * provided with the software product.
  *
  */
 
@@ -14,11 +28,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 
+#include "json_object_private.h"
 #include "json_pointer.h"
+#include "json_pointer_private.h"
 #include "strdup_compat.h"
 #include "vasprintf_compat.h"
+
+/* Avoid ctype.h and locale overhead */
+#define is_plain_digit(c) ((c) >= '0' && (c) <= '9')
 
 /**
  * JavaScript Object Notation (JSON) Pointer
@@ -27,10 +45,12 @@
 
 static void string_replace_all_occurrences_with_char(char *s, const char *occur, char repl_char)
 {
-	int slen = strlen(s);
-	int skip = strlen(occur) - 1; /* length of the occurence, minus the char we're replacing */
+	size_t slen = strlen(s);
+	size_t skip =
+	    strlen(occur) - 1; /* length of the occurrence, minus the char we're replacing */
 	char *p = s;
-	while ((p = strstr(p, occur))) {
+	while ((p = strstr(p, occur)))
+	{
 		*p = repl_char;
 		p++;
 		slen -= skip;
@@ -38,55 +58,61 @@ static void string_replace_all_occurrences_with_char(char *s, const char *occur,
 	}
 }
 
-static int is_valid_index(struct json_object *jo, const char *path, int32_t *idx)
+static int is_valid_index(const char *path, size_t *idx)
 {
-	int i, len = strlen(path);
-	/* this code-path optimizes a bit, for when we reference the 0-9 index range in a JSON array
-	   and because leading zeros not allowed */
-	if (len == 1) {
-		if (isdigit((int)path[0])) {
+	size_t i, len = strlen(path);
+	/* this code-path optimizes a bit, for when we reference the 0-9 index range
+	 * in a JSON array and because leading zeros not allowed
+	 */
+	if (len == 1)
+	{
+		if (is_plain_digit(path[0]))
+		{
 			*idx = (path[0] - '0');
-			goto check_oob;
+			return 1;
 		}
 		errno = EINVAL;
 		return 0;
 	}
 	/* leading zeros not allowed per RFC */
-	if (path[0] == '0') {
+	if (path[0] == '0')
+	{
 		errno = EINVAL;
 		return 0;
 	}
 	/* RFC states base-10 decimals */
-	for (i = 0; i < len; i++) {
-		if (!isdigit((int)path[i])) {
+	for (i = 0; i < len; i++)
+	{
+		if (!is_plain_digit(path[i]))
+		{
 			errno = EINVAL;
 			return 0;
 		}
 	}
 
-	*idx = strtol(path, NULL, 10);
-	if (*idx < 0) {
-		errno = EINVAL;
-		return 0;
-	}
-check_oob:
-	len = json_object_array_length(jo);
-	if (*idx >= len) {
-		errno = ENOENT;
-		return 0;
-	}
+	// We know it's all digits, so the only error case here is overflow,
+	// but ULLONG_MAX will be longer than any array length so that's ok.
+	*idx = strtoull(path, NULL, 10);
 
 	return 1;
 }
 
-static int json_pointer_get_single_path(struct json_object *obj, char *path, struct json_object **value)
+static int json_pointer_get_single_path(struct json_object *obj, char *path,
+                                        struct json_object **value, size_t *idx)
 {
-	if (json_object_is_type(obj, json_type_array)) {
-		int32_t idx;
-		if (!is_valid_index(obj, path, &idx))
+	if (doca_third_party_json_object_is_type(obj, json_type_array))
+	{
+		if (!is_valid_index(path, idx))
 			return -1;
-		obj = json_object_array_get_idx(obj, idx);
-		if (obj) {
+		if (*idx >= doca_third_party_json_object_array_length(obj))
+		{
+			errno = ENOENT;
+			return -1;
+		}
+
+		obj = doca_third_party_json_object_array_get_idx(obj, *idx);
+		if (obj)
+		{
 			if (value)
 				*value = obj;
 			return 0;
@@ -100,7 +126,8 @@ static int json_pointer_get_single_path(struct json_object *obj, char *path, str
 	string_replace_all_occurrences_with_char(path, "~1", '/');
 	string_replace_all_occurrences_with_char(path, "~0", '~');
 
-	if (!json_object_object_get_ex(obj, path, value)) {
+	if (!doca_third_party_json_object_object_get_ex(obj, path, value))
+	{
 		errno = ENOENT;
 		return -1;
 	}
@@ -108,42 +135,51 @@ static int json_pointer_get_single_path(struct json_object *obj, char *path, str
 	return 0;
 }
 
-static int json_pointer_set_single_path(
-	struct json_object *parent,
-	const char *path,
-	struct json_object *value)
+static int json_object_array_put_idx_cb(struct json_object *parent, size_t idx,
+                                        struct json_object *value, void *priv)
 {
-	if (json_object_is_type(parent, json_type_array)) {
-		int32_t idx;
+	return doca_third_party_json_object_array_put_idx(parent, idx, value);
+}
+
+static int json_pointer_set_single_path(struct json_object *parent, const char *path,
+                                        struct json_object *value,
+                                        json_pointer_array_set_cb array_set_cb, void *priv)
+{
+	if (doca_third_party_json_object_is_type(parent, json_type_array))
+	{
+		size_t idx;
 		/* RFC (Chapter 4) states that '-' may be used to add new elements to an array */
 		if (path[0] == '-' && path[1] == '\0')
-			return json_object_array_add(parent, value);
-		if (!is_valid_index(parent, path, &idx))
+			return doca_third_party_json_object_array_add(parent, value);
+		if (!is_valid_index(path, &idx))
 			return -1;
-		return json_object_array_put_idx(parent, idx, value);
+		return array_set_cb(parent, idx, value, priv);
 	}
 
 	/* path replacements should have been done in json_pointer_get_single_path(),
-	   and we should still be good here */
-	if (json_object_is_type(parent, json_type_object))
-		return json_object_object_add(parent, path, value);
+	 * and we should still be good here
+	 */
+	if (doca_third_party_json_object_is_type(parent, json_type_object))
+		return doca_third_party_json_object_object_add(parent, path, value);
 
-	/* Getting here means that we tried to "dereference" a primitive JSON type (like string, int, bool).
-	   i.e. add a sub-object to it */
+	/* Getting here means that we tried to "dereference" a primitive JSON type
+	 * (like string, int, bool).i.e. add a sub-object to it
+	 */
 	errno = ENOENT;
 	return -1;
 }
 
-static int json_pointer_get_recursive(
-	struct json_object *obj,
-	char *path,
-	struct json_object **value)
+static int json_pointer_result_get_recursive(struct json_object *obj, char *path,
+                                             struct json_pointer_get_result *res)
 {
+	struct json_object *parent_obj = obj;
+	size_t idx = 0; /* Resolve compile warning in old GCC versions */
 	char *endp;
 	int rc;
 
 	/* All paths (on each recursion level must have a leading '/' */
-	if (path[0] != '/') {
+	if (path[0] != '/')
+	{
 		errno = EINVAL;
 		return -1;
 	}
@@ -154,55 +190,108 @@ static int json_pointer_get_recursive(
 		*endp = '\0';
 
 	/* If we err-ed here, return here */
-	if ((rc = json_pointer_get_single_path(obj, path, &obj)))
+	if ((rc = json_pointer_get_single_path(obj, path, &obj, &idx)))
 		return rc;
 
-	if (endp) {
-		*endp = '/'; /* Put the slash back, so that the sanity check passes on next recursion level */
-		return json_pointer_get_recursive(obj, endp, value);
+	if (endp)
+	{
+		/* Put the slash back, so that the sanity check passes on next recursion level */
+		*endp = '/';
+		return json_pointer_result_get_recursive(obj, endp, res);
 	}
 
 	/* We should be at the end of the recursion here */
-	if (value)
-		*value = obj;
+	if (res)
+	{
+		res->parent = parent_obj;
+		res->obj = obj;
+		if (doca_third_party_json_object_is_type(res->parent, json_type_array))
+			res->index_in_parent = idx;
+		else
+			res->key_in_parent = path;
+	}
 
 	return 0;
 }
 
-int json_pointer_get(struct json_object *obj, const char *path, struct json_object **res)
+static int json_pointer_object_get_recursive(struct json_object *obj, char *path,
+                                             struct json_object **value)
+{
+	struct json_pointer_get_result res;
+	int rc;
+
+	rc = json_pointer_result_get_recursive(obj, path, &res);
+	if (rc)
+		return rc;
+
+	if (value)
+		*value = res.obj;
+
+	return 0;
+}
+
+int doca_third_party_json_pointer_get_internal(struct json_object *obj, const char *path,
+                              struct json_pointer_get_result *res)
 {
 	char *path_copy = NULL;
 	int rc;
 
-	if (!obj || !path) {
+	if (!obj || !path)
+	{
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (path[0] == '\0') {
-		if (res)
-			*res = obj;
+	if (path[0] == '\0')
+	{
+		res->parent = NULL;
+		res->obj = obj;
+		res->key_in_parent = NULL;
+		res->index_in_parent = -1;
 		return 0;
 	}
 
 	/* pass a working copy to the recursive call */
-	if (!(path_copy = strdup(path))) {
+	if (!(path_copy = strdup(path)))
+	{
 		errno = ENOMEM;
 		return -1;
 	}
-	rc = json_pointer_get_recursive(obj, path_copy, res);
+	rc = json_pointer_result_get_recursive(obj, path_copy, res);
+	/* re-map the path string to the const-path string */
+	if (rc == 0 && doca_third_party_json_object_is_type(res->parent, json_type_object) &&
+	    res->key_in_parent)
+		res->key_in_parent = path + (res->key_in_parent - path_copy);
 	free(path_copy);
 
 	return rc;
 }
 
-int json_pointer_getf(struct json_object *obj, struct json_object **res, const char *path_fmt, ...)
+int doca_third_party_json_pointer_get(struct json_object *obj, const char *path,
+                                      struct json_object **res)
+{
+	struct json_pointer_get_result jpres;
+	int rc;
+
+	rc = doca_third_party_json_pointer_get_internal(obj, path, &jpres);
+	if (rc)
+		return rc;
+
+	if (res)
+		*res = jpres.obj;
+
+	return 0;
+}
+
+int doca_third_party_json_pointer_getf(struct json_object *obj, struct json_object **res,
+                                       const char *path_fmt, ...)
 {
 	char *path_copy = NULL;
 	int rc = 0;
 	va_list args;
 
-	if (!obj || !path_fmt) {
+	if (!obj || !path_fmt)
+	{
 		errno = EINVAL;
 		return -1;
 	}
@@ -214,65 +303,82 @@ int json_pointer_getf(struct json_object *obj, struct json_object **res, const c
 	if (rc < 0)
 		return rc;
 
-	if (path_copy[0] == '\0') {
+	if (path_copy[0] == '\0')
+	{
 		if (res)
 			*res = obj;
 		goto out;
 	}
 
-	rc = json_pointer_get_recursive(obj, path_copy, res);
+	rc = json_pointer_object_get_recursive(obj, path_copy, res);
 out:
 	free(path_copy);
 
 	return rc;
 }
 
-int json_pointer_set(struct json_object **obj, const char *path, struct json_object *value)
+int doca_third_party_json_pointer_set_with_array_cb(struct json_object **obj, const char *path,
+                                                    struct json_object *value,
+                                                    json_pointer_array_set_cb array_set_cb,
+                                                    void *priv)
 {
 	const char *endp;
 	char *path_copy = NULL;
 	struct json_object *set = NULL;
 	int rc;
 
-	if (!obj || !path) {
+	if (!obj || !path)
+	{
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (path[0] == '\0') {
-		json_object_put(*obj);
+	if (path[0] == '\0')
+	{
+		doca_third_party_json_object_put(*obj);
 		*obj = value;
 		return 0;
 	}
 
-	if (path[0] != '/') {
+	if (path[0] != '/')
+	{
 		errno = EINVAL;
 		return -1;
 	}
 
 	/* If there's only 1 level to set, stop here */
-	if ((endp = strrchr(path, '/')) == path) {
+	if ((endp = strrchr(path, '/')) == path)
+	{
 		path++;
-		return json_pointer_set_single_path(*obj, path, value);
+		return json_pointer_set_single_path(*obj, path, value, array_set_cb, priv);
 	}
 
 	/* pass a working copy to the recursive call */
-	if (!(path_copy = strdup(path))) {
+	if (!(path_copy = strdup(path)))
+	{
 		errno = ENOMEM;
 		return -1;
 	}
 	path_copy[endp - path] = '\0';
-	rc = json_pointer_get_recursive(*obj, path_copy, &set);
+	rc = json_pointer_object_get_recursive(*obj, path_copy, &set);
 	free(path_copy);
 
 	if (rc)
 		return rc;
 
 	endp++;
-	return json_pointer_set_single_path(set, endp, value);
+	return json_pointer_set_single_path(set, endp, value, array_set_cb, priv);
 }
 
-int json_pointer_setf(struct json_object **obj, struct json_object *value, const char *path_fmt, ...)
+int doca_third_party_json_pointer_set(struct json_object **obj, const char *path,
+                                      struct json_object *value)
+{
+	return doca_third_party_json_pointer_set_with_array_cb(obj, path, value,
+	                                                       json_object_array_put_idx_cb, NULL);
+}
+
+int doca_third_party_json_pointer_setf(struct json_object **obj, struct json_object *value,
+                                       const char *path_fmt, ...)
 {
 	char *endp;
 	char *path_copy = NULL;
@@ -280,7 +386,8 @@ int json_pointer_setf(struct json_object **obj, struct json_object *value, const
 	va_list args;
 	int rc = 0;
 
-	if (!obj || !path_fmt) {
+	if (!obj || !path_fmt)
+	{
 		errno = EINVAL;
 		return -1;
 	}
@@ -293,35 +400,37 @@ int json_pointer_setf(struct json_object **obj, struct json_object *value, const
 	if (rc < 0)
 		return rc;
 
-	if (path_copy[0] == '\0') {
-		json_object_put(*obj);
+	if (path_copy[0] == '\0')
+	{
+		doca_third_party_json_object_put(*obj);
 		*obj = value;
 		goto out;
 	}
 
-	if (path_copy[0] != '/') {
+	if (path_copy[0] != '/')
+	{
 		errno = EINVAL;
 		rc = -1;
 		goto out;
 	}
 
 	/* If there's only 1 level to set, stop here */
-	if ((endp = strrchr(path_copy, '/')) == path_copy) {
+	if ((endp = strrchr(path_copy, '/')) == path_copy)
+	{
 		set = *obj;
 		goto set_single_path;
 	}
 
 	*endp = '\0';
-	rc = json_pointer_get_recursive(*obj, path_copy, &set);
+	rc = json_pointer_object_get_recursive(*obj, path_copy, &set);
 
 	if (rc)
 		goto out;
 
 set_single_path:
 	endp++;
-	rc = json_pointer_set_single_path(set, endp, value);
+	rc = json_pointer_set_single_path(set, endp, value, json_object_array_put_idx_cb, NULL);
 out:
 	free(path_copy);
 	return rc;
 }
-
