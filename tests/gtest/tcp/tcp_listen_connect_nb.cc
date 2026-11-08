@@ -5,7 +5,10 @@
  */
 #include "tcp_base.h"
 
-class tcp_listen_connect_nb : public tcp_base {};
+class tcp_listen_connect_nb : public tcp_base {
+protected:
+    void check_listen_connect(int backlog);
+};
 
 /**
  * @test tcp_listen_connect_nb.server_client_nb
@@ -20,7 +23,32 @@ class tcp_listen_connect_nb : public tcp_base {};
  */
 TEST_F(tcp_listen_connect_nb, server_client_nb)
 {
+    check_listen_connect(5);
+}
+
+/**
+ * A backlog smaller than the worker count must still allow connections.
+ * The worker-mode CI matrix runs this suite with 1, 2, and 3 workers.
+ * Checking listen() alone would miss children dropping all incoming SYNs.
+ */
+TEST_F(tcp_listen_connect_nb, backlog_one)
+{
+    check_listen_connect(1);
+}
+
+/**
+ * listen(0) is normalized to a backlog of one before division among workers.
+ * It must also remain usable when more than one worker is configured.
+ */
+TEST_F(tcp_listen_connect_nb, backlog_zero)
+{
+    check_listen_connect(0);
+}
+
+void tcp_listen_connect_nb::check_listen_connect(int backlog)
+{
     int pid = fork();
+    ASSERT_GE(pid, 0);
 
     if (0 == pid) { // Child
         int fd, rc;
@@ -93,7 +121,7 @@ TEST_F(tcp_listen_connect_nb, server_client_nb)
             goto parent_cleanup;
         }
 
-        rc = listen(l_fd, 5);
+        rc = listen(l_fd, backlog);
         EXPECT_EQ_ERRNO(0, rc);
         if (rc != 0) {
             goto parent_cleanup;
