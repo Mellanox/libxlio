@@ -270,6 +270,9 @@ int epfd_info::add_fd(int fd, epoll_event *event)
             // params. Meaning: user will get 2 ready WRITE events on startup of socket
             events |= EPOLLOUT;
         }
+        if ((event->events & EPOLLRDHUP) && temp_sock_fd_api->is_read_hup()) {
+            events |= EPOLLRDHUP;
+        }
         if ((event->events & EPOLLERR) && temp_sock_fd_api->is_errorable(&errors)) {
             if (errors & POLLERR) {
                 events |= EPOLLERR;
@@ -540,13 +543,21 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
             // params. Meaning: user will get 2 ready WRITE events on startup of socket
             events |= EPOLLOUT;
         }
-        if (events != 0) {
-            insert_epoll_event(temp_sock_fd_api, events);
-        }
     }
 
-    if (event->events == 0 || events == 0) {
+    if (events == 0) {
         remove_socket_from_ready_list(temp_sock_fd_api);
+    }
+
+    // Query persistent shutdown AFTER removing stale readiness. A worker may
+    // publish FIN between the initial IN/OUT checks and that removal; querying
+    // before removal could discard its only RDHUP notification. FIN publishes
+    // the state before notifying, so either this check or its callback queues it.
+    if (is_offloaded && (event->events & EPOLLRDHUP) && temp_sock_fd_api->is_read_hup()) {
+        events |= EPOLLRDHUP;
+    }
+    if (events != 0) {
+        insert_epoll_event(temp_sock_fd_api, events);
     }
 
     __log_func("fd %d modified in epfd %d with events=%#x and data=%#x", fd, m_epfd, event->events,
@@ -584,7 +595,11 @@ void epfd_info::fd_closed(int fd, bool passthrough)
 
 void epfd_info::insert_epoll_event_cb(sockinfo *sock_fd, uint32_t event_flags)
 {
-    if (sock_fd->get_entity_context()) {
+    // Serialize receive shutdown with ADD/MOD even in worker mode. The
+    // persistent shutdown state is published before this callback. Checking
+    // interest under the epoll lock guarantees either the callback observes
+    // the new mask or ADD/MOD observes the already-published shutdown.
+    if (sock_fd->get_entity_context() && !(event_flags & EPOLLRDHUP)) {
         // EPOLLHUP | EPOLLERR are reported without user request
         if (event_flags & (sock_fd->m_fd_rec.events | EPOLLHUP | EPOLLERR)) {
             size_t vecindex =
