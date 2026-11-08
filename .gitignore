@@ -80,3 +80,6 @@ docs/man/xlio_stats.8
 
 tests/unit_tests/unit_tests
 *.pyc
+
+# Pull request text fetched for the secret scan. Generated in CI, not source.
+secret_scan_context/
