@@ -66,6 +66,9 @@ test_base::test_base()
 
 test_base::~test_base()
 {
+    if (m_efd >= 0) {
+        close(m_efd);
+    }
     m_break_signal = 0;
 }
 
