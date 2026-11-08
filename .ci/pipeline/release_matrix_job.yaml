@@ -55,6 +55,7 @@ runs_on_dockers:
      limits: '{memory: 8Gi, cpu: 6000m}',
      requests: '{memory: 8Gi, cpu: 6000m}'
     }
+  - {name: 'secret-scan', url: '${registry_host}/swx-storage/tools/secret_scan:devops-stable', arch: 'x86_64', tag: 'devops-stable', category: 'tool', limits: '{memory: 3Gi, cpu: 2000m}', requests: '{memory: 3Gi, cpu: 2000m}'}
 
 steps:
   - name: Build-dpcp
@@ -92,6 +93,14 @@ steps:
         .ci/blackduck_source.sh
     archiveArtifacts: 'logs/'
     credentialsId: 'blackduck_api_token'
+
+  - name: Secret Scan
+    parallel: false
+    containerSelector:
+      - "{name: 'secret-scan', category: 'tool'}"
+    run: |
+      /opt/nvidia/secret_scan.py --path "$WORKSPACE" --git-repo "$WORKSPACE" --report-file secret_scan.html
+    archiveArtifacts: 'secret_scan.html'
 
 pipeline_start:
     shell: action
