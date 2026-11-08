@@ -2023,6 +2023,7 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
             if (conn->m_sock_state == TCP_SOCK_ASYNC_CONNECT) {
                 NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLERR | EPOLLHUP));
             } else {
+                conn->m_rx_shutdown.store(true, std::memory_order_release);
                 NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP));
             }
             /* TODO what about no route to host type of errors, need to add EPOLLERR in this
@@ -2181,6 +2182,7 @@ void sockinfo_tcp::tcp_shutdown_rx()
 {
     /* Call this method under connection lock */
 
+    m_rx_shutdown.store(true, std::memory_order_release);
     NOTIFY_ON_EVENTS(this, EPOLLIN | EPOLLRDHUP);
 
     io_mux_call::update_fd_array(m_iomux_ready_fd_array, m_fd);
@@ -4307,6 +4309,7 @@ err_t sockinfo_tcp::syn_received_timewait_cb(void *arg, struct tcp_pcb *newpcb)
     new_sock->m_state = SOCKINFO_OPENED;
     new_sock->m_sock_state = TCP_SOCK_INITED;
     new_sock->m_conn_state = TCP_CONN_INIT;
+    new_sock->m_rx_shutdown.store(false, std::memory_order_release);
     // Recycle is a new life. The first close already consumed the one-shot latch.
     new_sock->m_worker_close_routed = false;
     new_sock->m_parent = listen_sock;
@@ -4782,10 +4785,12 @@ int sockinfo_tcp::shutdown(int __how)
     case SHUT_RD:
         if (is_connected()) {
             m_sock_state = TCP_SOCK_CONNECTED_WR;
-            NOTIFY_ON_EVENTS(this, EPOLLIN);
+            m_rx_shutdown.store(true, std::memory_order_release);
+            NOTIFY_ON_EVENTS(this, EPOLLIN | EPOLLRDHUP);
         } else if (is_rtr()) {
             m_sock_state = TCP_SOCK_BOUND;
-            NOTIFY_ON_EVENTS(this, EPOLLIN | EPOLLHUP);
+            m_rx_shutdown.store(true, std::memory_order_release);
+            NOTIFY_ON_EVENTS(this, EPOLLIN | EPOLLHUP | EPOLLRDHUP);
         } else if (m_sock_state == TCP_SOCK_ACCEPT_READY) {
             m_sock_state = TCP_SOCK_ACCEPT_SHUT;
         } else {
@@ -4809,7 +4814,8 @@ int sockinfo_tcp::shutdown(int __how)
     case SHUT_RDWR:
         if (is_connected() || is_rts() || is_rtr()) {
             m_sock_state = TCP_SOCK_BOUND;
-            NOTIFY_ON_EVENTS(this, EPOLLIN | EPOLLHUP);
+            m_rx_shutdown.store(true, std::memory_order_release);
+            NOTIFY_ON_EVENTS(this, EPOLLIN | EPOLLHUP | EPOLLRDHUP);
         } else if (m_sock_state == TCP_SOCK_ACCEPT_READY) {
             m_sock_state = TCP_SOCK_ACCEPT_SHUT;
         } else {
