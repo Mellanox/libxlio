@@ -262,6 +262,7 @@ public:
                                   int flags, const tx_call_ctx &tx_ctx) = 0;
     virtual bool is_readable(bool do_poll = true, fd_array_t *p_fd_array = nullptr) = 0;
     virtual bool is_writeable() = 0;
+    virtual bool is_read_hup() const { return false; }
     virtual bool is_errorable(int *errors) = 0;
     virtual void clean_socket_obj() = 0;
     virtual void setPassthrough() = 0;
