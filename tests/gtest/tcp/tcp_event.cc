@@ -51,7 +51,7 @@ protected:
         int listener = track(sock_create_to(m_family, true, 10));
         ASSERT_GE(listener, 0);
         ASSERT_EQ(0, bind(listener, &server_addr.addr, sizeof(server_addr)));
-        ASSERT_EQ(0, listen(listener, 1));
+        ASSERT_EQ(0, listen(listener, SOMAXCONN));
         ASSERT_EQ(1, send(control, "L", 1, MSG_NOSIGNAL));
         int fd = track(accept(listener, nullptr, nullptr));
         ASSERT_GE(fd, 0);
