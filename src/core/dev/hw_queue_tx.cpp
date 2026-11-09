@@ -1031,11 +1031,16 @@ void hw_queue_tx::tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32
                                false, false);
 }
 
-void hw_queue_tx::tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey)
+void hw_queue_tx::tls_get_progress_params_rx(xlio_tir *tir, mem_buf_desc_t *buf, uint32_t lkey)
 {
     /* Address must be aligned by 64. */
-    assert((uintptr_t)buf == ((uintptr_t)buf >> 6U << 6U));
+    assert((uintptr_t)buf->lwip_pbuf.payload == ((uintptr_t)buf->lwip_pbuf.payload >> 6U << 6U));
 
+    // The socket keeps its reference until it consumes the result or closes. Hold a second
+    // reference for the NIC; CQ processing releases it only after GET_PSV has completed.
+    // The caller holds the TX ring lock, which also serializes both reference releases.
+    assert(buf->lwip_pbuf.ref > 0);
+    ++buf->lwip_pbuf.ref;
     tls_get_progress_params_wqe(tir, tir->get_tirn(), buf, lkey);
 }
 
@@ -1196,8 +1201,8 @@ inline void hw_queue_tx::tls_post_progress_params_wqe(xlio_ti *ti, uint32_t tis_
     submit_wqe(nullptr, SQ_CREDITS_SET_PSV, TLS_SET_PROGRESS_PARAMS_WQEBBS, ti, false);
 }
 
-inline void hw_queue_tx::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn, void *buf,
-                                                     uint32_t lkey)
+inline void hw_queue_tx::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn,
+                                                     mem_buf_desc_t *buf, uint32_t lkey)
 {
     struct mlx5_get_tls_progress_params_wqe *wqe =
         reinterpret_cast<struct mlx5_get_tls_progress_params_wqe *>(m_sq_wqe_hot);
@@ -1217,9 +1222,9 @@ inline void hw_queue_tx::tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn,
     psv->num_psv = 1U << 4U;
     psv->l_key = htobe32(lkey);
     psv->psv_index[0] = htobe32(tirn);
-    psv->va = htobe64((uintptr_t)buf);
+    psv->va = htobe64((uintptr_t)buf->lwip_pbuf.payload);
 
-    submit_wqe(nullptr, SQ_CREDITS_GET_PSV, TLS_GET_PROGRESS_WQEBBS, ti, false);
+    submit_wqe(buf, SQ_CREDITS_GET_PSV, TLS_GET_PROGRESS_WQEBBS, ti, false);
 }
 
 void hw_queue_tx::tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey,
