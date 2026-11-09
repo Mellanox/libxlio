@@ -2603,6 +2603,10 @@ ssize_t sockinfo_tcp::rx_read_ready_packets(iovec *p_iov, ssize_t sz_iov, int *p
     }
     const int rc = rx_wait_for_data(*p_flags, __msg, rcv_timeout, min_ready_bytes);
     if (rc < 1) {
+        if (rc == 0) {
+            // EOF is a successful return: drop the EAGAIN set while waiting for data.
+            errno = errno_tmp;
+        }
         return rc;
     }
 
