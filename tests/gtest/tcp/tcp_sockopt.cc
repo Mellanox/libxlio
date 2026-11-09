@@ -11,6 +11,7 @@
 
 #include <sys/socket.h>
 #include <sys/types.h> /* See NOTES */
+#include <poll.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include "googletest/include/gtest/gtest.h"
@@ -849,22 +850,18 @@ TEST_P(tcp_sockopt_positive, set_and_get_value)
 INSTANTIATE_TEST_CASE_P(
     keep_alive, tcp_sockopt_positive,
     testing::Values(
-#if LWIP_TCP_KEEPALIVE
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, 1),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, std::numeric_limits<int16_t>::max()),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, 1),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max()),
-#endif
         std::make_tuple(AF_INET, SOL_SOCKET, SO_KEEPALIVE, 1),
         std::make_tuple(AF_INET, SOL_SOCKET, SO_KEEPALIVE, 0),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, 1),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, std::numeric_limits<int16_t>::max()),
-#if LWIP_TCP_KEEPALIVE
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, 1),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, std::numeric_limits<int16_t>::max()),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, 1),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max()),
-#endif
         std::make_tuple(AF_INET6, SOL_SOCKET, SO_KEEPALIVE, 1),
         std::make_tuple(AF_INET6, SOL_SOCKET, SO_KEEPALIVE, 0),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE, 1),
@@ -896,33 +893,79 @@ TEST_P(tcp_setsockopt_negative, set_invalid_value)
  * There may be multiple instantiations of the tcp_setsockopt_negative class and
  * it's test cases.
  */
-INSTANTIATE_TEST_CASE_P(
-    keep_alive, tcp_setsockopt_negative,
-    testing::Values(
-#if LWIP_TCP_KEEPALIVE
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, -1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, 0),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
-                        std::numeric_limits<int16_t>::max() + 1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, -1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, 0),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max() + 1),
-#endif
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, -1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
-                        std::numeric_limits<int16_t>::max() + 1),
-#if LWIP_TCP_KEEPALIVE
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, -1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, 0),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
-                        std::numeric_limits<int16_t>::max() + 1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, -1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, 0),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max() + 1),
-#endif
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE, -1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
-                        std::numeric_limits<int16_t>::max() + 1)));
+INSTANTIATE_TEST_CASE_P(keep_alive, tcp_setsockopt_negative,
+                        testing::Values(std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, -1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, 0),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        std::numeric_limits<int16_t>::max() + 1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, -1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, 0),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        std::numeric_limits<int8_t>::max() + 1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, -1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        std::numeric_limits<int16_t>::max() + 1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, -1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, 0),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        std::numeric_limits<int16_t>::max() + 1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, -1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, 0),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        std::numeric_limits<int8_t>::max() + 1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE, -1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        std::numeric_limits<int16_t>::max() + 1)));
+
+/*
+ * @test tcp_sockopt.user_timeout_rejects_out_of_range
+ * @brief TCP_USER_TIMEOUT range validation is XLIO-specific: XLIO rejects a value
+ *    above the RFC 5482 maximum (TCP_USER_TIMEOUT_MAX_MS) with EINVAL, whereas Linux
+ *    accepts it. This runs only under libxlio so a bare (non-XLIO) run does not report
+ *    a false failure. 0xFFFFFFFF (a -1 int) also exceeds the maximum.
+ */
+TEST_F(tcp_sockopt, user_timeout_rejects_out_of_range)
+{
+    SKIP_TRUE(xlio_get_api(), "This test should be launched under libxlio.so");
+    auto family = ((struct sockaddr *)&gtest_conf.server_addr)->sa_family;
+    auto fd = reusable_cleanable_test_socket(family, SOCK_STREAM, 0);
+    ASSERT_GE(fd, 0) << "socket syscall failed to setup a socket";
+    for (unsigned int v : {0xFFFFFFFFU, 2000000000U}) {
+        errno = 0;
+        EXPECT_EQ(-1, setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &v, sizeof(v)))
+            << "value " << v << " was accepted";
+        EXPECT_EQ(EINVAL, errno);
+    }
+}
+
+/*
+ * @test tcp_sockopt.user_timeout_rejects_bad_optlen_and_null
+ * @brief TCP_USER_TIMEOUT setsockopt rejects a short optlen and a NULL optval with
+ *    EINVAL, and accepts a valid value.
+ */
+TEST_F(tcp_sockopt, user_timeout_rejects_bad_optlen_and_null)
+{
+    auto family = ((struct sockaddr *)&gtest_conf.server_addr)->sa_family;
+    auto fd = reusable_cleanable_test_socket(family, SOCK_STREAM, 0);
+    ASSERT_GE(fd, 0) << "socket syscall failed to setup a socket";
+    unsigned int val = 5000U;
+
+    errno = 0;
+    EXPECT_EQ(-1, setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &val, sizeof(val) - 1))
+        << "short optlen was accepted";
+    EXPECT_EQ(EINVAL, errno);
+
+    errno = 0;
+    EXPECT_EQ(-1, setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, nullptr, sizeof(val)))
+        << "NULL optval was accepted";
+    /* A NULL optval is rejected by the common setsockopt layer (EFAULT) before the
+     * option handler; either EFAULT or EINVAL is a valid rejection. */
+    EXPECT_TRUE(errno == EINVAL || errno == EFAULT)
+        << "unexpected errno for NULL optval: " << errno;
+
+    EXPECT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &val, sizeof(val)))
+        << "a valid TCP_USER_TIMEOUT was rejected";
+}
 
 using getscokopt_params = std::tuple<int, int, int, const char *>;
 using tcp_sockopt_default = testing::TestWithParam<getscokopt_params>;
@@ -960,21 +1003,18 @@ TEST_P(tcp_sockopt_default, matches_the_value_in_the_file)
 }
 
 INSTANTIATE_TEST_CASE_P(keep_alive, tcp_sockopt_default,
-                        testing::Values(
-#if LWIP_TCP_KEEPALIVE
-                            std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
-                            std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_probes"),
-                            std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
-                            std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_probes"),
-#endif
-                            std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_time"),
-                            std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_time")));
+                        testing::Values(std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_probes"),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_probes"),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_time"),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_time")));
 
 using setsockopt_param = std::tuple<int, int, int>;
 class tcp_with_fifo : public testing::TestWithParam<setsockopt_param> {
@@ -1056,12 +1096,107 @@ TEST_P(tcp_with_fifo, accepted_socket_inherits_the_setsockopt_param)
     }
 }
 
-INSTANTIATE_TEST_CASE_P(keep_alive, tcp_with_fifo,
-                        testing::Values(
-#if LWIP_TCP_KEEPALIVE
-                            std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPINTVL, 12345),
-                            std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPCNT, 123),
-#endif
-                            std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 0),
-                            std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 1),
-                            std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPIDLE, 1234)));
+INSTANTIATE_TEST_CASE_P(
+    keep_alive, tcp_with_fifo,
+    testing::Values(std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPINTVL, 12345),
+                    std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPCNT, 123),
+                    std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 0),
+                    std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 1),
+                    std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPIDLE, 1234)));
+
+class tcp_keepalive_e2e : public testing::Test {
+protected:
+    ipc m_ipc {};
+    void SetUp() override { m_ipc.create(); }
+    void TearDown() override { m_ipc.reset(); }
+};
+
+/*
+ * @test tcp_keepalive_e2e.answered_probes_keep_user_timeout_connection_alive
+ * @brief With SO_KEEPALIVE + TCP_USER_TIMEOUT set and a peer that answers every
+ *    keepalive probe, the connection must stay up past the user timeout
+ *    (RFC 1122 4.2.2.17 / Linux: an answered probe resets the deadline). This
+ *    guards against a false abort of a healthy idle connection - the regression
+ *    class this PR addresses. The abort-on-silent-peer direction is timer- and
+ *    network-driven and is covered by the lab RED-GREEN in the PR evidence.
+ *    This exercises XLIO's keepalive timer only on an offloaded connection, so
+ *    the gtest harness must supply distinct offloadable client/server addresses
+ *    (--addr=<client>,<server>); on a loopback/kernel path it reduces to an
+ *    idle-survivor smoke check.
+ */
+TEST_F(tcp_keepalive_e2e, answered_probes_keep_user_timeout_connection_alive)
+{
+    SKIP_TRUE(!getenv("XLIO_TCP_CTL_THREAD"), "Skip non default XLIO_TCP_CTL_THREAD");
+
+    auto family = ((struct sockaddr *)&gtest_conf.server_addr)->sa_family;
+    pid_t pid = fork();
+
+    if (pid > 0) { // Parent: the keepalive sender
+        auto listen_fd = reusable_cleanable_test_socket(family, SOCK_STREAM, 0);
+        ASSERT_GE(listen_fd, 0);
+        ASSERT_EQ(bind(listen_fd, (struct sockaddr *)&gtest_conf.server_addr,
+                       sizeof(gtest_conf.server_addr)),
+                  0);
+        ASSERT_EQ(listen(listen_fd, 5), 0);
+        m_ipc.signal_to_peer();
+
+        reusable_cleanable_test_socket accepted_fd {accept(listen_fd, nullptr, 0)};
+        ASSERT_GE(accepted_fd, 0);
+
+        int on = 1, idle = 1, intvl = 1, cnt = 5;
+        unsigned int ut_ms = 2000U;
+        EXPECT_EQ(0, setsockopt(accepted_fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on)));
+        EXPECT_EQ(0, setsockopt(accepted_fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)));
+        EXPECT_EQ(0, setsockopt(accepted_fd, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl)));
+        EXPECT_EQ(0, setsockopt(accepted_fd, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt)));
+        EXPECT_EQ(0, setsockopt(accepted_fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &ut_ms, sizeof(ut_ms)));
+
+        /* Idle well past user_timeout. The peer answers every probe; a correct
+         * stack keeps the connection up. A false abort surfaces as POLLHUP/POLLERR
+         * or ECONNRESET. Poll keeps the RX path draining the answered probes. */
+        struct pollfd pfd = {accepted_fd, POLLIN, 0};
+        bool aborted = false;
+        for (int elapsed = 0; elapsed < 6000; elapsed += 200) {
+            int r = poll(&pfd, 1, 200);
+            if (r > 0 && (pfd.revents & (POLLHUP | POLLERR))) {
+                aborted = true;
+                break;
+            }
+        }
+        EXPECT_FALSE(aborted) << "connection aborted despite answered keepalive probes";
+
+        int soerr = -1;
+        socklen_t errlen = sizeof(soerr);
+        EXPECT_EQ(0, getsockopt(accepted_fd, SOL_SOCKET, SO_ERROR, &soerr, &errlen));
+        EXPECT_EQ(0, soerr) << "SO_ERROR set despite answered probes";
+        EXPECT_EQ(1, send(accepted_fd, "x", 1, MSG_NOSIGNAL))
+            << "send failed: connection torn down";
+
+        m_ipc.signal_to_peer();
+        int status;
+        EXPECT_EQ(pid, waitpid(pid, &status, 0));
+        ASSERT_TRUE(WIFEXITED(status));
+        EXPECT_EQ(0, WEXITSTATUS(status)) << "child process reported a failure";
+    } else if (pid == 0) { // Child: the answering peer (polls so XLIO ACKs the probes)
+        auto client_fd = reusable_cleanable_test_socket(family, SOCK_STREAM, 0);
+        EXPECT_GE(client_fd, 0);
+        EXPECT_EQ(bind(client_fd, (struct sockaddr *)&gtest_conf.client_addr,
+                       sizeof(gtest_conf.client_addr)),
+                  0);
+        m_ipc.wait_peer();
+        EXPECT_EQ(0,
+                  connect(client_fd, (struct sockaddr *)&gtest_conf.server_addr,
+                          sizeof(gtest_conf.server_addr)));
+
+        struct pollfd pfd = {client_fd, POLLIN, 0};
+        for (int i = 0; i < 35; ++i) {
+            poll(&pfd, 1, 200);
+            char buf[8];
+            recv(client_fd, buf, sizeof(buf), MSG_DONTWAIT);
+        }
+        m_ipc.wait_peer();
+        exit(testing::Test::HasFailure());
+    } else {
+        FAIL() << "Fork failed";
+    }
+}
