@@ -760,13 +760,12 @@ err_t sockinfo_tcp::rx_lwip_cb_entity_context(void *arg, struct tcp_pcb *pcb, st
         conn->m_rx_pkt_ready_list.push_back(buff);
         conn->m_n_rx_pkt_ready_list_count++;
         conn->m_rx_ready_byte_count += ptmp->len;
-        buff->rx.sz_payload = ptmp->len; // Must sync rx.sz_payload to pkt size after shrinks.
+        // Normalize sizes after trimming and detaching from the chain.
+        buff->rx.sz_payload = ptmp->len;
+        buff->lwip_pbuf.tot_len = ptmp->len;
 
         ptmp = ptmp->next;
         buff->lwip_pbuf.next = nullptr;
-        // A detached pbuf must not keep the chain's tot_len: setsockopt(TLS_RX) replays the
-        // ready list through sockinfo_tcp_ops_tls::recv(), which counts bytes by tot_len.
-        buff->lwip_pbuf.tot_len = buff->lwip_pbuf.len;
     }
 
     // Notify on event
