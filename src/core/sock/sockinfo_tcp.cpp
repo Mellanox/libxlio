@@ -3778,7 +3778,7 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
             return -1;
         }
     }
-    if (g_b_exit) {
+    if (m_ready_conn_cnt == 0 && g_b_exit) {
         si_tcp_logdbg("interrupted accept");
         unlock_tcp_con();
         errno = EINTR;
