@@ -106,8 +106,8 @@ struct accept_wait_outcome {
     int err;
 };
 
-// conn_ready here; accept_helper() post-loop g_b_exit is teardown-wins. exiting before
-// listen_closed. TIMEOUT maps to EAGAIN when SO_RCVTIMEO expires.
+// A ready connection wins over exit, including accept_helper()'s post-loop check.
+// Otherwise exiting precedes listen_closed. SO_RCVTIMEO expiry maps to EAGAIN.
 inline accept_wait_outcome map_accept_wait_result(blocking_wait::result r, bool conn_ready,
                                                   bool exiting, bool listen_closed)
 {

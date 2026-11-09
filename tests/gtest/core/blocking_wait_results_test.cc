@@ -219,7 +219,7 @@ TEST(accept_wait_result, ready_conn_returns_success_no_errno)
     EXPECT_EQ(0, o.err);
 }
 
-// Table: conn_ready wins. accept_helper post-loop g_b_exit is teardown-wins (R2C).
+// A queued connection wins over exit in both the wait result and accept_helper().
 TEST(accept_wait_result, ready_conn_wins_over_exit)
 {
     accept_wait_outcome o = map_accept_wait_result(result::READY, /*conn_ready=*/true,

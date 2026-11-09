@@ -291,3 +291,82 @@ TEST(sigaction_test, sig_err_is_accepted_by_sigaction_only)
     ASSERT_LE(0, pid);
     EXPECT_EQ(0, test_base::wait_fork(pid));
 }
+
+class sigaction_iomux_test : public testing::TestWithParam<int> {};
+
+/*
+ * These intentionally use an OS fd: Envoy's libevent signal pipe shares epoll with
+ * accelerated sockets. Once the kernel returns its edge, XLIO must deliver it even
+ * if its SIGINT trampoline has already set g_b_exit.
+ */
+TEST_P(sigaction_iomux_test, ready_results_survive_sigint)
+{
+    const int api = GetParam();
+    pid_t pid = fork_child([api]() {
+        const int fd = eventfd(1, EFD_NONBLOCK | EFD_CLOEXEC);
+        ASSERT_LE(0, fd);
+        ASSERT_LT(fd, FD_SETSIZE);
+        const int epfd = epoll_create1(EPOLL_CLOEXEC);
+        ASSERT_LE(0, epfd);
+        epoll_event event = {};
+        event.events = EPOLLIN | EPOLLET;
+        event.data.fd = fd;
+        ASSERT_EQ(0, epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event));
+
+        struct sigaction action = {};
+        action.sa_handler = handler_a;
+        sigemptyset(&action.sa_mask);
+        ASSERT_EQ(0, sigaction(SIGINT, &action, nullptr));
+        ASSERT_EQ(0, raise(SIGINT));
+        ASSERT_EQ(HANDLER_A, static_cast<int>(g_handler_id));
+
+        sigset_t mask;
+        sigemptyset(&mask);
+        pollfd pfd = {fd, POLLIN, 0};
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(fd, &readfds);
+        timeval timeout = {};
+        timespec timeout_ts = {};
+        int rc = -1;
+        switch (api) {
+        case 0:
+            rc = epoll_wait(epfd, &event, 1, 0);
+            break;
+        case 1:
+            rc = epoll_pwait(epfd, &event, 1, 0, &mask);
+            break;
+        case 2:
+            rc = poll(&pfd, 1, 0);
+            break;
+        case 3:
+            rc = ppoll(&pfd, 1, &timeout_ts, &mask);
+            break;
+        case 4:
+            rc = select(fd + 1, &readfds, nullptr, nullptr, &timeout);
+            break;
+        case 5:
+            rc = pselect(fd + 1, &readfds, nullptr, nullptr, &timeout_ts, &mask);
+            break;
+        }
+        ASSERT_EQ(1, rc) << "api=" << api << ", errno=" << errno;
+        if (api < 2) {
+            EXPECT_EQ(fd, event.data.fd);
+            EXPECT_EQ(static_cast<uint32_t>(EPOLLIN), event.events);
+        } else if (api < 4) {
+            EXPECT_EQ(POLLIN, pfd.revents);
+        } else {
+            EXPECT_TRUE(FD_ISSET(fd, &readfds));
+        }
+        uint64_t value = 0;
+        EXPECT_EQ(static_cast<ssize_t>(sizeof(value)), read(fd, &value, sizeof(value)));
+        EXPECT_EQ(1U, value);
+        close(epfd);
+        close(fd);
+    });
+
+    ASSERT_LE(0, pid);
+    EXPECT_EQ(0, test_base::wait_fork(pid));
+}
+
+INSTANTIATE_TEST_CASE_P(shutdown, sigaction_iomux_test, testing::Range(0, 6));
