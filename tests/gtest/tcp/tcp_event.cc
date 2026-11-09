@@ -54,7 +54,9 @@ protected:
         ASSERT_EQ(0, listen(listener, SOMAXCONN));
         ASSERT_EQ(1, send(control, "L", 1, MSG_NOSIGNAL));
         int fd = track(accept(listener, nullptr, nullptr));
-        ASSERT_GE(fd, 0);
+        const int accept_errno = errno;
+        ASSERT_GE(fd, 0) << "accept errno=" << accept_errno << " (" << strerror(accept_errno)
+                         << ")";
         ASSERT_EQ(1, send(control, "A", 1, MSG_NOSIGNAL));
         for (;;) {
             char command = 0;
@@ -133,7 +135,25 @@ protected:
     void expect_events(uint32_t expected, uint64_t data = 1)
     {
         epoll_event event = {};
-        ASSERT_EQ(1, epoll_wait(m_epfd, &event, 1, 1000));
+        int rc = epoll_wait(m_epfd, &event, 1, 1000);
+        if (rc != 1) {
+            const int wait_errno = rc < 0 ? errno : 0;
+            tcp_info info = {};
+            socklen_t len = sizeof(info);
+            int info_rc = getsockopt(m_socket, IPPROTO_TCP, TCP_INFO, &info, &len);
+            const int info_errno = info_rc < 0 ? errno : 0;
+            // SO_ERROR is read only on failure: reading it clears the pending error.
+            int socket_error = -1;
+            len = sizeof(socket_error);
+            int error_rc = getsockopt(m_socket, SOL_SOCKET, SO_ERROR, &socket_error, &len);
+            const int error_errno = error_rc < 0 ? errno : 0;
+            FAIL() << "epoll_wait returned " << rc << ", expected events=" << expected
+                   << ", errno=" << wait_errno << " (" << strerror(wait_errno) << ")"
+                   << "; TCP_INFO rc=" << info_rc << ", errno=" << info_errno
+                   << ", state=" << (info_rc == 0 ? int(info.tcpi_state) : -1)
+                   << "; SO_ERROR rc=" << error_rc << ", errno=" << error_errno
+                   << ", value=" << socket_error;
+        }
         EXPECT_EQ(expected, event.events);
         EXPECT_EQ(data, event.data.u64);
     }
