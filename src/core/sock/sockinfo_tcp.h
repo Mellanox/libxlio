@@ -289,6 +289,7 @@ public:
     bool is_readable(bool do_poll = true, fd_array_t *p_fd_array = NULL) override;
     bool is_writeable() override;
     bool is_errorable(int *errors) override;
+    bool is_read_hup() const override { return m_rx_shutdown.load(std::memory_order_acquire); }
     bool is_closable() override
     {
         return get_tcp_state(&m_pcb) == CLOSED && m_syn_received.empty() &&
@@ -670,6 +671,9 @@ private:
     timestamps_t m_rx_timestamps;
     tcp_sock_offload_e m_sock_offload;
     tcp_sock_state_e m_sock_state;
+    // Persistent receive shutdown, independent of consumed epoll notifications.
+    // Queried under the epoll lock, where taking m_tcp_con_lock would invert locks.
+    std::atomic<bool> m_rx_shutdown {false};
     std::atomic<int32_t> m_snd_buf;
     uint32_t m_snd_buf_max;
     sockinfo_tcp *m_parent;

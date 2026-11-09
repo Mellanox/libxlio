@@ -61,6 +61,9 @@ function do_get_addrs()
 gtest_opt="--addr=$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1),$(ip -f inet addr show net2 | awk '/inet / {print $2}' | cut -d/ -f1)"
 gtest_opt_ipv6="--addr=$(ip -f inet6 addr show net1 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1),$(ip -f inet6 addr show net2 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1) -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" #
 
+# The reconnect regression requires worker mode; exclude it from broad R2C runs.
+r2c_basic_filter="-xlio*:ultra*:tcp_event.rdhup_worker_rejected_reconnect"
+
 set +eE
 
 if [[ -z "${MANUAL_RUN}" ]]; then
@@ -73,7 +76,7 @@ fi
 eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 \
 XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_full_coverage.json \
 GTEST_TAP=2 LD_PRELOAD=$gtest_lib \
-$gtest_app $gtest_opt --gtest_filter=-xlio_*:-ultra* \
+$gtest_app $gtest_opt --gtest_filter=$r2c_basic_filter \
 --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
 rc=$(($rc+$?))
 
@@ -88,15 +91,15 @@ $gtest_app $gtest_opt --gtest_filter=tcp_sockopt.ti_1b_tcp_info_low_rtt_us \
 rc=$(($rc+$?))
 
 # Exclude EXTRA API tests IPv6
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio_*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$r2c_basic_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic-ipv6.xml"
 rc=$(($rc+$?))
 
 # Verify Delegated TCP Timers tests
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
+eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$r2c_basic_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
 rc=$(($rc+$?))
 
 # Verify Delegated TCP Timers tests IPv6
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$r2c_basic_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate-ipv6.xml"
 rc=$(($rc+$?))
 
 if [[ -z "${MANUAL_RUN}" ]]; then
@@ -128,8 +131,9 @@ eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib XLIO_TCP_CC
 rc=$(($rc+$?))
 
 
-# Worker Threads Mode test filter
-worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event*:tcp_stream_integrity*:-tcp_bind.mapped_ipv4_bind"
+# Worker Threads Mode test filter: include the complete epoll suite, including
+# tests excluded from R2C. This filter is shared by every worker-mode sample.
+worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event.*:tcp_stream_integrity*:-tcp_bind.mapped_ipv4_bind"
 
 worker_threads_failures=()
 worker_threads_samples=0
