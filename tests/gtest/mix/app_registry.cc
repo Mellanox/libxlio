@@ -79,15 +79,55 @@ TEST_F(app_registry, record_and_erase_listen_fd)
 
 TEST_F(app_registry, dup_records_resolve_to_the_original)
 {
-    m_reg.record_dup(41, 40);
+    m_reg.record_dup(41, 40, /*orig_can_be_parent=*/true);
 
     EXPECT_EQ(40, m_reg.dup_parent_fd(41));
     EXPECT_EQ(40, m_reg.dup_parent_fd(40));
     EXPECT_EQ(1, m_reg.count_original_listeners());
 
-    m_reg.record_dup(42, 40);
+    m_reg.record_dup(42, 40, /*orig_can_be_parent=*/true);
     EXPECT_EQ(40, m_reg.dup_parent_fd(42));
     EXPECT_EQ(1, m_reg.count_original_listeners());
+}
+
+TEST_F(app_registry, non_parent_dup_source_is_not_recorded)
+{
+    m_reg.record_dup(41, 40, /*orig_can_be_parent=*/false);
+
+    EXPECT_EQ(-1, m_reg.dup_parent_fd(41));
+    EXPECT_EQ(-1, m_reg.dup_parent_fd(40));
+    EXPECT_EQ(0, m_reg.count_original_listeners());
+}
+
+TEST_F(app_registry, failed_dup_is_not_recorded)
+{
+    m_reg.record_dup(-1, 40, /*orig_can_be_parent=*/true);
+
+    EXPECT_EQ(-1, m_reg.dup_parent_fd(-1));
+    EXPECT_EQ(-1, m_reg.dup_parent_fd(40));
+    EXPECT_EQ(0, m_reg.count_original_listeners());
+}
+
+TEST_F(app_registry, original_count_tracks_recorded_sources_only)
+{
+    m_reg.record_dup(51, 50, /*orig_can_be_parent=*/false);
+    m_reg.record_dup(41, 40, /*orig_can_be_parent=*/true);
+
+    EXPECT_EQ(1, m_reg.count_original_listeners());
+}
+
+TEST_F(app_registry, erase_dup_fd_drops_only_the_given_fd)
+{
+    m_reg.record_dup(41, 40, /*orig_can_be_parent=*/true);
+
+    m_reg.erase_dup_fd(41);
+    EXPECT_EQ(-1, m_reg.dup_parent_fd(41));
+    EXPECT_EQ(40, m_reg.dup_parent_fd(40));
+    EXPECT_EQ(1, m_reg.count_original_listeners());
+
+    m_reg.erase_dup_fd(40);
+    EXPECT_EQ(-1, m_reg.dup_parent_fd(40));
+    EXPECT_EQ(0, m_reg.count_original_listeners());
 }
 
 TEST_F(app_registry, erase_worker_drops_fd_and_thread_mappings)
