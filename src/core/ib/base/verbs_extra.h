@@ -190,9 +190,7 @@ typedef struct mlx5dv_clock_info xlio_ibv_clock_info;
 #ifdef DEFINED_IBV_DM
 #define xlio_ibv_alloc_dm(ctx, attr) ibv_alloc_dm(ctx, attr)
 #define xlio_ibv_free_dm(dm)         ibv_free_dm(dm)
-#define xlio_ibv_reg_dm_mr(mr)                                                                     \
-    ibv_reg_dm_mr((mr)->pd, (mr)->dm, 0, (mr)->length,                                             \
-                  IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_ZERO_BASED)
+#define xlio_ibv_reg_dm_mr(mr)       ibv_reg_dm_mr((mr)->pd, (mr)->dm, 0, (mr)->length, (mr)->access)
 #define xlio_ibv_memcpy_dm(dm, attr)                                                               \
     ibv_memcpy_to_dm(dm, (attr)->dm_offset, (attr)->host_addr, (attr)->length)
 #define xlio_ibv_init_memcpy_dm(attr, src, head, size)                                             \
@@ -206,6 +204,7 @@ typedef struct mlx5dv_clock_info xlio_ibv_clock_info;
         in_mr.pd = ctx_pd;                                                                         \
         in_mr.length = size;                                                                       \
         in_mr.dm = allocated_dm;                                                                   \
+        in_mr.access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_ZERO_BASED;                             \
     }
 typedef struct ibv_alloc_dm_attr xlio_ibv_alloc_dm_attr;
 typedef struct ibv_dm xlio_ibv_dm;
@@ -218,6 +217,7 @@ typedef struct {
     struct ibv_pd *pd;
     size_t length;
     xlio_ibv_dm *dm;
+    unsigned int access;
 } xlio_ibv_reg_mr_in;
 #endif
 

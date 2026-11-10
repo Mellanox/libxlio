@@ -75,6 +75,11 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
     // Initialize MR attributes
     memset(&mr_in, 0, sizeof(mr_in));
     xlio_ibv_init_dm_mr(mr_in, ib_ctx->get_ibv_pd(), allocation_size, m_p_ibv_dm);
+    // Device memory keeps the historical access flags. Current kernels reject a
+    // relaxed-ordering access flag on device-memory registration, and a rejected
+    // registration disables device-memory TX without an error. Whether the
+    // relaxed-ordering-only rule applies to device memory is an open firmware
+    // question (issue 5154148).
 
     // Register On Device Memory MR
     m_p_dm_mr = xlio_ibv_reg_dm_mr(&mr_in);

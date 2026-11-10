@@ -83,6 +83,10 @@ ring_simple::ring_simple(int if_index, ring *parent, bool use_locks)
         ring_logpanic("m_p_ib_ctx = NULL. It can be related to wrong bonding configuration");
     }
 
+    // The ring binds this device to offloaded traffic. Abort on an ordering mismatch
+    // before the lkey lookup and before any queue or mkey creation on the device.
+    m_p_ib_ctx->abort_on_relaxed_ordering_mismatch();
+
     m_tx_lkey = g_buffer_pool_tx->find_lkey_by_ib_ctx_thread_safe(m_p_ib_ctx);
     if (m_tx_lkey == 0) {
         __log_info_panic("invalid lkey found %u", m_tx_lkey);

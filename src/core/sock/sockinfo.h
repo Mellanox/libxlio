@@ -455,6 +455,8 @@ protected:
 private:
     int fcntl_helper(int __cmd, unsigned long int __arg, bool &bexit);
     bool attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool skip_rules);
+    bool skip_wildcard_attach_on_incompatible_device(const ip_address &local_addr,
+                                                     sa_family_t family);
 
     /**
      * @brief Update the RX ring fast-path pointer based on ring map size.
