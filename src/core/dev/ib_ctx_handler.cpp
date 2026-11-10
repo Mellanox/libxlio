@@ -324,6 +324,21 @@ void ib_ctx_handler::check_capabilities()
 
         m_max_sq_wqebbs = (1U << caps.log_max_qp_sz);
         ibch_logdbg("Max SQ WQEBBs: %" PRIu32, m_max_sq_wqebbs);
+
+        // The support flag uses the write capability alone. The verbs API passes one
+        // relaxed ordering access flag. The kernel sets each mkey ordering bit from
+        // its own device capability. Devices exist that set the write capability and
+        // clear both read capabilities. A gate that requires a read capability would
+        // reject those devices.
+        m_relaxed_ordering_supported = caps.relaxed_ordering_write;
+        m_relaxed_ordering_only = caps.relaxed_ordering_only;
+        ibch_logdbg(
+            "Relaxed Ordering caps: write: %s, read: %s, read_pci_enabled: %s, "
+            "write_umr: %s, read_umr: %s, relaxed ordering only: %s",
+            caps.relaxed_ordering_write ? "Yes" : "No", caps.relaxed_ordering_read ? "Yes" : "No",
+            caps.relaxed_ordering_read_pci_enabled ? "Yes" : "No",
+            caps.relaxed_ordering_write_umr ? "Yes" : "No",
+            caps.relaxed_ordering_read_umr ? "Yes" : "No", m_relaxed_ordering_only ? "Yes" : "No");
     }
 }
 

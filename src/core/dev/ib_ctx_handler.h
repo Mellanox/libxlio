@@ -94,6 +94,8 @@ private:
     pacing_caps_t m_pacing_caps;
     size_t m_on_device_memory;
     uint32_t m_max_sq_wqebbs = 0U;
+    bool m_relaxed_ordering_supported = false;
+    bool m_relaxed_ordering_only = false;
     bool m_removed;
     lock_spin m_lock_umr;
     time_converter *m_p_ctx_time_converter;
