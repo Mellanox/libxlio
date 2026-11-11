@@ -31,6 +31,7 @@
 #include "core/proto/ip_frag.h"
 #include "core/proto/xlio_lwip.h"
 #include "core/util/hugepage_mgr.h"
+#include "core/util/relaxed_ordering.h"
 #include "core/util/utils.h"
 #include "core/util/xlio_stats.h"
 #include "utils/rdtsc.h"
@@ -1917,6 +1918,26 @@ void mce_sys_var::validate_config() const
                     "Worker threads already run the TCP timers of their sockets.\n",
                     CONFIG_VAR_TCP_CTL_THREAD.name, SYS_VAR_TCP_CTL_THREAD,
                     CONFIG_VAR_WORKER_THREADS.name, SYS_VAR_WORKER_THREADS);
+        exit(-1);
+    }
+
+    // The build arm of the relaxed ordering decision. Device capabilities are unknown at this
+    // stage, so pass the permissive values; ib_ctx_handler::check_capabilities() evaluates the
+    // device arms per device.
+#ifdef DEFINED_IBV_ACCESS_RELAXED_ORDERING
+    constexpr bool build_has_relaxed_ordering = true;
+#else
+    constexpr bool build_has_relaxed_ordering = false;
+#endif
+    if (decide_relaxed_ordering(enable_relaxed_ordering, /*caps_ro_supported=*/true,
+                                /*caps_ro_only=*/false, build_has_relaxed_ordering) ==
+        ro_decision::FATAL_RO_UNSUPPORTED_BUILD) {
+        vlog_printf(VLOG_ERROR,
+                    "Error: %s=true (%s) requires IBV_ACCESS_RELAXED_ORDERING, and this build "
+                    "does not provide it. Set %s=false (%s) or rebuild against a libibverbs "
+                    "that defines IBV_ACCESS_RELAXED_ORDERING.\n",
+                    CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING,
+                    CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING);
         exit(-1);
     }
 }

@@ -291,6 +291,14 @@ bool xlio_registrator::register_memory(void *data, size_t size, ib_ctx_handler *
     if (likely(ib_ctx_map)) {
         for (const auto &ib_ctx_key_val : *ib_ctx_map) {
             p_ib_ctx_h = ib_ctx_key_val.second;
+            if (!p_ib_ctx_h->is_relaxed_ordering_compatible()) {
+                // Global registration covers every open device. Skip an ordering
+                // incompatible device. Ring creation on it stops the process earlier,
+                // see ib_ctx_handler::abort_on_relaxed_ordering_mismatch().
+                __log_info_dbg("skipping registration on dev %s: ordering mismatch",
+                               p_ib_ctx_h->get_ibname());
+                continue;
+            }
             lkey = register_memory_single(data, size, p_ib_ctx_h, access);
 
             if (lkey == LKEY_ERROR) {

@@ -786,16 +786,42 @@ working set = 10GB → default 10GB is appropriate.
 > **Maps to:** `XLIO_RELAXED_ORDERING`
 
 Controls whether XLIO asks the network adapter to relax PCIe write ordering for host memory
-registered by XLIO. Relaxed Ordering can improve I/O performance on supported systems.
+registered by XLIO. Relaxed Ordering can improve I/O performance on supported systems. Some firmware supports
+only relaxed-ordering memory keys.
 
 **Values:**
 
-- false (default): Do not request Relaxed Ordering for XLIO-created memory keys. This does not
-  force strict ordering; the NIC can still use Relaxed Ordering when its device-wide configuration
-  forces it.
-- true: Request Relaxed Ordering for XLIO-created memory keys. This allows NIC DMA writes to reach
-  memory out of order. Completion and final data visibility semantics are unchanged, but
-  intermediate write-after-write ordering is not guaranteed.
+- true (default): Request Relaxed Ordering for XLIO-created memory keys. This allows NIC DMA
+  writes to reach memory out of order. Completion and final data visibility semantics are
+  unchanged, but intermediate write-after-write ordering is not guaranteed.
+- false: Keep strict ordering for XLIO-created memory keys. Use only on legacy devices without
+  Relaxed Ordering memory-key support.
+
+**Validation:**
+
+XLIO computes a per-device ordering verdict during initialization. The verdict checks the
+device write capability (relaxed_ordering_write) alone. The kernel sets each memory-key
+ordering bit from its own device capability. An incompatible device without offloaded traffic
+logs the mismatch at debug level. XLIO skips the device during global memory registration.
+
+A wildcard (0.0.0.0) bind attaches receive flows on every IP-bearing interface. XLIO skips an
+incompatible device on that path and warns once per device. Wildcard traffic on the skipped
+interface goes through the kernel without acceleration. An Ultra API listener accepts
+connections from XLIO rings only. The skip does not apply to that listener. An incompatible
+device stops its process. Traffic that selects an incompatible
+device stops the process with a clear error. The triggers are an explicit bind, SO_BINDTODEVICE,
+a connect or send that routes through the device, and a multicast join that resolves to the
+device. A UDP sendto on a wildcard-bound socket also stops the process when the route selects
+the device. DNS lookups use this socket pattern. The error depends on the configured value:
+
+- true on a device without Relaxed Ordering memory-key support: set this parameter to false for
+  this process, or exclude the device from offloaded traffic.
+- false on a device whose firmware supports only relaxed-ordering memory keys: remove the false
+  override for this process, or exclude the device from offloaded traffic.
+
+true in a build whose verbs headers lack `IBV_ACCESS_RELAXED_ORDERING` stops the process at
+configuration load: set this parameter to false, or rebuild against a libibverbs that provides
+the flag.
 
 **Hardware configuration:**
 
@@ -805,15 +831,16 @@ change the NIC's `mlxconfig` setting.
 
 **Support notes:**
 
-When requested, XLIO passes `IBV_ACCESS_RELAXED_ORDERING` to libibverbs. If the build's verbs
-headers do not provide this flag, XLIO logs a warning and continues without applying the request.
-A modern libibverbs can also mask optional access flags when paired with a kernel that does not
-support them, without reporting that decision to XLIO. Startup output therefore reports whether
-XLIO requested Relaxed Ordering, not the effective hardware ordering mode.
+A modern libibverbs can still silently mask `IBV_ACCESS_RELAXED_ORDERING` when paired with a
+kernel that does not support it, without reporting that decision to XLIO. The device capability
+check above is the gate XLIO enforces; on relaxed-ordering-only firmware a masked flag surfaces
+as a loud `ibv_reg_mr` failure during memory registration.
 
-This setting does not affect memory regions registered directly by the application.
+This setting does not affect memory regions registered directly by the application, including
+memory keys the application passes through the Ultra API. Those registrations remain the
+application's responsibility.
 
-**Default:** `false`
+**Default:** `true`
 
 ### `hardware_features.striding_rq.enable`
 

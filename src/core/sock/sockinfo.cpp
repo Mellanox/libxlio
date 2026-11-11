@@ -1803,6 +1803,15 @@ bool sockinfo::attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool
         for (auto itr = addrvec.cbegin(); ret && addrvec.cend() != itr; ++itr) {
             si_logfunc("Attaching IP: %s", (*itr).get().local_addr.to_str(family).c_str());
 
+            // A wildcard attach skips an ordering incompatible device (issue 5154148).
+            // Wildcard traffic on the skipped interface goes through the kernel.
+            // An explicit bind or connect keeps the fatal check in the ring
+            // constructor, see ring_simple::ring_simple(). An Ultra API
+            // listener has no kernel path and never takes the skip.
+            if (skip_wildcard_attach_on_incompatible_device((*itr).get().local_addr, family)) {
+                continue;
+            }
+
             transport_t target_family = TRANS_XLIO;
             if (!skip_rules) {
                 addr.set_sa_family(family);
@@ -1827,6 +1836,32 @@ bool sockinfo::attach_as_uc_receiver_anyip(sa_family_t family, role_t role, bool
     }
 
     return ret;
+}
+
+bool sockinfo::skip_wildcard_attach_on_incompatible_device(const ip_address &local_addr,
+                                                           sa_family_t family)
+{
+    if (is_xlio_socket()) {
+        // An Ultra API listener accepts connections from rings only and has no
+        // kernel path. A skip would silently drop the connections from this device, so
+        // the attach proceeds and the ring constructor check applies.
+        return false;
+    }
+    net_device_val *p_ndev =
+        g_p_net_device_table_mgr->get_net_device_val(ip_addr(local_addr, family));
+    if (!p_ndev) {
+        // create_nd_resources() reports a missing device on the attach path.
+        return false;
+    }
+    for (const slave_data_t *p_slave : p_ndev->get_slave_array()) {
+        if (p_slave && p_slave->p_ib_ctx && !p_slave->p_ib_ctx->is_relaxed_ordering_compatible()) {
+            p_slave->p_ib_ctx->warn_wildcard_ro_skip_once();
+            si_logdbg("skipping wildcard attach on %s: ordering incompatible device %s",
+                      p_ndev->get_ifname(), p_slave->p_ib_ctx->get_ibname());
+            return true;
+        }
+    }
+    return false;
 }
 
 void sockinfo::update_rx_ring_ptr()

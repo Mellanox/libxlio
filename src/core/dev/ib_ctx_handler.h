@@ -8,11 +8,13 @@
 #define IB_CTX_HANDLER_H
 
 #include <infiniband/verbs.h>
+#include <atomic>
 #include <unordered_map>
 
 #include "event/event_handler_ibverbs.h"
 #include "dev/time_converter.h"
 #include "ib/base/verbs_extra.h"
+#include "util/relaxed_ordering.h"
 #include "utils/lock_wrapper.h"
 #include <mellanox/dpcp.h>
 
@@ -70,6 +72,12 @@ public:
     bool is_packet_pacing_supported(uint32_t rate = 1);
     size_t get_on_device_memory_size() { return m_on_device_memory; }
     uint32_t get_max_sq_wqebbs() { return m_max_sq_wqebbs; }
+    bool is_relaxed_ordering_compatible() const
+    {
+        return !ro_verdict_is_fatal(m_relaxed_ordering_verdict);
+    }
+    void abort_on_relaxed_ordering_mismatch();
+    void warn_wildcard_ro_skip_once();
     bool is_active(int port_num);
     bool is_mlx4() { return is_mlx4(get_ibname()); }
     static bool is_mlx4(const char *dev) { return strncmp(dev, "mlx4", 4) == 0; }
@@ -94,6 +102,18 @@ private:
     pacing_caps_t m_pacing_caps;
     size_t m_on_device_memory;
     uint32_t m_max_sq_wqebbs = 0U;
+    bool m_relaxed_ordering_supported = false;
+    bool m_relaxed_ordering_only = false;
+    // Set when check_capabilities() reads the HCA capabilities. Without them the
+    // ordering verdict keeps its default and firmware stays the authority.
+    bool m_hca_caps_available = false;
+    // Per device ordering verdict from check_capabilities(). The verdict is a gate
+    // only, never the registration decision: mem_reg() derives the access flags
+    // from the configuration alone.
+    ro_decision m_relaxed_ordering_verdict = ro_decision::STRICT;
+    // A wildcard attach warns once per device when it skips the device. A benign
+    // race prints at most one extra line; the atomic keeps the flag well defined.
+    std::atomic<bool> m_wildcard_ro_skip_warned {false};
     bool m_removed;
     lock_spin m_lock_umr;
     time_converter *m_p_ctx_time_converter;

@@ -12,6 +12,8 @@
 #include "utils/bullseye.h"
 #include "vlogger/vlogger.h"
 #include <util/sys_vars.h>
+#include "config/config_var_definitions.h"
+#include "util/relaxed_ordering.h"
 #include "dev/ib_ctx_handler.h"
 #include "ib/base/verbs_extra.h"
 #include "dev/time_converter_ib_ctx.h"
@@ -319,12 +321,112 @@ void ib_ctx_handler::check_capabilities()
     dpcp::adapter_hca_capabilities caps;
     dpcp::status rc = m_p_adapter->get_hca_capabilities(caps);
     if (rc == dpcp::DPCP_OK) {
+        m_hca_caps_available = true;
         set_flow_tag_capability(caps.flow_table_caps.receive.is_flow_action_tag_supported);
         ibch_logdbg("Flow Tag Support: %s", get_flow_tag_capability() ? "Yes" : "No");
 
         m_max_sq_wqebbs = (1U << caps.log_max_qp_sz);
         ibch_logdbg("Max SQ WQEBBs: %" PRIu32, m_max_sq_wqebbs);
+
+        // The support flag uses the write capability alone. The verbs API passes one
+        // relaxed ordering access flag. The kernel sets each mkey ordering bit from
+        // its own device capability. Devices exist that set the write capability and
+        // clear both read capabilities. A gate that requires a read capability would
+        // reject those devices.
+        m_relaxed_ordering_supported = caps.relaxed_ordering_write;
+        m_relaxed_ordering_only = caps.relaxed_ordering_only;
+        ibch_logdbg(
+            "Relaxed Ordering caps: write: %s, read: %s, read_pci_enabled: %s, "
+            "write_umr: %s, read_umr: %s, relaxed ordering only: %s",
+            caps.relaxed_ordering_write ? "Yes" : "No", caps.relaxed_ordering_read ? "Yes" : "No",
+            caps.relaxed_ordering_read_pci_enabled ? "Yes" : "No",
+            caps.relaxed_ordering_write_umr ? "Yes" : "No",
+            caps.relaxed_ordering_read_umr ? "Yes" : "No", m_relaxed_ordering_only ? "Yes" : "No");
+
+#ifdef DEFINED_IBV_ACCESS_RELAXED_ORDERING
+        constexpr bool build_has_relaxed_ordering = true;
+#else
+        constexpr bool build_has_relaxed_ordering = false;
+#endif
+        // An unused incompatible device only logs here, at debug level.
+        // abort_on_relaxed_ordering_mismatch() stops the process when offloaded
+        // traffic selects the device.
+        m_relaxed_ordering_verdict = decide_relaxed_ordering(
+            safe_mce_sys().enable_relaxed_ordering, m_relaxed_ordering_supported,
+            m_relaxed_ordering_only, build_has_relaxed_ordering);
+        switch (m_relaxed_ordering_verdict) {
+        case ro_decision::FATAL_RO_UNSUPPORTED_DEVICE:
+            ibch_logdbg("device %s lacks relaxed ordering mkey support and %s=true (%s); "
+                        "offloaded traffic on this device stops the process",
+                        get_ibname(), CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING);
+            break;
+        case ro_decision::FATAL_STRICT_UNSUPPORTED_DEVICE:
+            ibch_logdbg("device %s requires relaxed ordering mkeys and %s=false (%s); "
+                        "offloaded traffic on this device stops the process",
+                        get_ibname(), CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING);
+            break;
+        case ro_decision::FATAL_RO_UNSUPPORTED_BUILD:
+            // mce_sys_var::validate_config() stops this arm at configuration load.
+            break;
+        case ro_decision::RO:
+        case ro_decision::STRICT:
+            break;
+        }
+    } else {
+        ibch_logwarn("could not read HCA capabilities for device %s (dpcp status %d); "
+                     "relaxed ordering validation is skipped for this device and firmware "
+                     "stays the authority on memory registration",
+                     get_ibname(), static_cast<int>(rc));
     }
+}
+
+void ib_ctx_handler::abort_on_relaxed_ordering_mismatch()
+{
+    // Fatal mismatches follow the configuration abort pattern of
+    // mce_sys_var::validate_config(): one VLOG_ERROR line, then exit.
+    switch (m_relaxed_ordering_verdict) {
+    case ro_decision::FATAL_RO_UNSUPPORTED_DEVICE:
+        vlog_printf(VLOG_ERROR,
+                    "Error: %s=true (%s) is not supported by device %s. The device lacks "
+                    "relaxed ordering mkey support. Set %s=false (%s) for this process, or "
+                    "exclude the device from offloaded traffic.\n",
+                    CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING, get_ibname(),
+                    CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING);
+        exit(-1);
+    case ro_decision::FATAL_STRICT_UNSUPPORTED_DEVICE:
+        vlog_printf(VLOG_ERROR,
+                    "Error: device %s requires relaxed ordering mkeys and cannot register "
+                    "memory with strict ordering. Remove the %s=false (%s) override for "
+                    "this process, or exclude the device from offloaded traffic.\n",
+                    get_ibname(), CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING);
+        exit(-1);
+    case ro_decision::FATAL_RO_UNSUPPORTED_BUILD:
+        // mce_sys_var::validate_config() stops this arm at configuration load. This
+        // arm stays for completeness of the stored verdict.
+        vlog_printf(VLOG_ERROR,
+                    "Error: %s=true (%s) requires IBV_ACCESS_RELAXED_ORDERING, and this "
+                    "build does not provide it. Set %s=false (%s) or rebuild against a "
+                    "libibverbs that defines IBV_ACCESS_RELAXED_ORDERING.\n",
+                    CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING,
+                    CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING);
+        exit(-1);
+    case ro_decision::RO:
+    case ro_decision::STRICT:
+        break;
+    }
+}
+
+void ib_ctx_handler::warn_wildcard_ro_skip_once()
+{
+    if (m_wildcard_ro_skip_warned.exchange(true)) {
+        return;
+    }
+    ibch_logwarn("XLIO skips device %s on wildcard socket attaches. The device does not "
+                 "match the configured memory ordering (%s / %s). Wildcard traffic on "
+                 "the device interfaces goes through the kernel without acceleration. "
+                 "An explicit bind, a routed connect or send, or a multicast join that "
+                 "selects the device stops the process.",
+                 get_ibname(), CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING);
 }
 
 void ib_ctx_handler::set_ctx_time_converter_status(ts_conversion_mode_t conversion_mode)
@@ -400,20 +502,31 @@ uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
     struct ibv_mr *mr = nullptr;
     uint32_t lkey = LKEY_ERROR;
 
+    // Registration must not reach an ordering incompatible device. Ring creation aborts
+    // first on offloaded paths, and global registration skips such devices. This call is
+    // the backstop for any other registration path.
+    abort_on_relaxed_ordering_mismatch();
+
+    // Startup validation already rejected a relaxed ordering request on a build without
+    // IBV_ACCESS_RELAXED_ORDERING, see mce_sys_var::validate_config().
+#ifdef DEFINED_IBV_ACCESS_RELAXED_ORDERING
     if (safe_mce_sys().enable_relaxed_ordering) {
-#ifndef DEFINED_IBV_ACCESS_RELAXED_ORDERING
-        VLOG_PRINTF_ONCE_THEN_DEBUG(VLOG_WARNING,
-                                    "Relaxed Ordering was requested but "
-                                    "IBV_ACCESS_RELAXED_ORDERING is unavailable; "
-                                    "the request was not applied\n");
-#else
         access |= IBV_ACCESS_RELAXED_ORDERING;
-#endif
     }
+#endif
     mr = ibv_reg_mr(m_p_ibv_pd, addr, length, access);
     VALGRIND_MAKE_MEM_DEFINED(mr, sizeof(ibv_mr));
     if (!mr) {
-        print_warning_rlimit_memlock(length, errno);
+        int reg_errno = errno;
+        print_warning_rlimit_memlock(length, reg_errno);
+        // Name memory ordering as a possible cause when relaxed ordering was requested,
+        // and also when the capability read failed and the ordering verdict is unknown.
+        if (safe_mce_sys().enable_relaxed_ordering || !m_hca_caps_available) {
+            ibch_logerr("ibv_reg_mr failed (errno=%d %s); memory ordering is a possible "
+                        "cause. The kernel can silently mask IBV_ACCESS_RELAXED_ORDERING, "
+                        "and relaxed-ordering-only firmware rejects strict mkeys.",
+                        reg_errno, strerror(reg_errno));
+        }
     } else {
         m_mr_map_lkey[mr->lkey] = mr;
         lkey = mr->lkey;
