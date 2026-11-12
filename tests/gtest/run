@@ -1,0 +1,311 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: NVIDIA CORPORATION & AFFILIATES
+# Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
+"""Run the shared developer/CI gtest profiles without configuring the host."""
+import argparse
+from datetime import datetime, timezone
+from dataclasses import dataclass
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import uuid
+import xml.etree.ElementTree as ET
+
+
+SOURCE_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_DIR = SOURCE_ROOT / 'tests/gtest/config'
+BASIC_FILTER = '-xlio_*:ultra*'
+# This test previously skipped itself when the legacy delegate env var was set.
+DELEGATE_FILTER = ('-xlio*:ultra*:'
+                   '*tcp_with_fifo.accepted_socket_inherits_the_setsockopt_param*')
+WORKER_FILTER = ('tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event*:'
+                 'tcp_stream_integrity*:-tcp_bind.mapped_ipv4_bind')
+PASSTHROUGH_FILTER = 'tcp_listen_connect_nb.server_client_nb'
+
+
+@dataclass(frozen=True)
+class Profile:
+    # JSON template filename relative to tests/gtest/config/.
+    config: str
+    # Default gtest filter; the runner's --filter option overrides it.
+    test_filter: str
+    # XML report filename stem, without the .xml extension.
+    xml_name: str
+    # Fixed client,server addresses; when nonempty, overrides --addr.
+    endpoints: str = ''
+    # Extra child-process environment settings as (name, value) pairs.
+    env: tuple = ()
+
+
+# All profile-specific choices are data. Listing and execution use this table.
+PROFILES = {
+    'r2c-full': Profile('xlio_config_full_coverage.json', BASIC_FILTER, 'test-basic'),
+    'rto-floor-max': Profile('xlio_config_rto_floor_max.json',
+                             'tcp_sockopt.ti_1b_tcp_info_low_rtt_us', 'test-rto-floor-max',
+                             env=(('XLIO_GTEST_EXPECT_RTO_MSEC', '120000'),)),
+    'r2c-default': Profile('default.json', BASIC_FILTER, 'test-basic-default'),
+    'delegate': Profile('delegate.json', DELEGATE_FILTER, 'test-delegate'),
+    'extra': Profile('default.json', 'xlio_*', 'test-extra'),
+    'ultra': Profile('default.json', 'ultra_api*', 'test-xlio_ultra_api'),
+    'ultra-full-sq': Profile('ultra-full-sq.json', 'ultra_api_socket_send_receive_full_sq*',
+                             'test-xlio_ultra_api_full_sq_completion'),
+    'wtbusy': Profile('wtbusy.json', WORKER_FILTER, 'test-worker-threads-busy-poll'),
+    'wtbusy-pow2': Profile('wtbusy-pow2.json', WORKER_FILTER, 'test-worker-threads-busy-poll-pow2'),
+    'wtbusy-not-pow2': Profile('wtbusy-not-pow2.json', WORKER_FILTER,
+                               'test-worker-threads-busy-poll-not-pow2'),
+    'wtintr': Profile('wtintr.json', WORKER_FILTER, 'test-worker-threads-pure-intr'),
+    'wtintr-pow2': Profile('wtintr-pow2.json', WORKER_FILTER, 'test-worker-threads-pure-intr-pow2'),
+    'wtintr-not-pow2': Profile('wtintr-not-pow2.json', WORKER_FILTER,
+                               'test-worker-threads-pure-intr-not-pow2'),
+    'wtbp': Profile('wtbp.json', WORKER_FILTER, 'test-worker-threads-bounded-poll'),
+    'wtbp-pow2': Profile('wtbp-pow2.json', WORKER_FILTER, 'test-worker-threads-bounded-poll-pow2'),
+    'wtbp-not-pow2': Profile('wtbp-not-pow2.json', WORKER_FILTER,
+                             'test-worker-threads-bounded-poll-not-pow2'),
+    'passthrough-loopback-wt': Profile('worker-threads.json', PASSTHROUGH_FILTER,
+                                      'test-passthrough-loopback-wt',
+                                      endpoints='127.0.0.1,127.0.0.1'),
+    'passthrough-loopback-r2c': Profile('default.json', PASSTHROUGH_FILTER,
+                                       'test-passthrough-loopback-r2c',
+                                       endpoints='127.0.0.1,127.0.0.1'),
+    'passthrough-rules-wt': Profile('passthrough-rules-wt.json', PASSTHROUGH_FILTER,
+                                   'test-passthrough-rules-wt'),
+    'passthrough-rules-r2c': Profile('passthrough-rules-r2c.json', PASSTHROUGH_FILTER,
+                                    'test-passthrough-rules-r2c'),
+}
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=__doc__, allow_abbrev=False,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Profiles (config/filter details: --list-profiles):\n  '
+        + ', '.join(PROFILES) + '\n'
+        + '''
+Filter examples:
+  All tests in the tcp_sockopt module:
+    tests/gtest/run --addr CLIENT,SERVER --filter 'tcp_sockopt.*'
+  All tests whose full name contains "connect":
+    tests/gtest/run --addr CLIENT,SERVER --filter '*connect*'
+
+Pass additional gtest arguments after -- (e.g. -- --port=55556).
+Use --filter to override every selected profile's filter. Addresses and XML
+output belong to the runner. Arrange privileges
+and offloadable networking beforehand; this script never invokes sudo.
+''')
+    parser.add_argument('--list-profiles', action='store_true',
+                        help='show every profile with its config and filter, then exit')
+    parser.add_argument('--profiles', default='r2c-full,wtbp', help='comma-separated profiles (default: %(default)s)')
+    parser.add_argument('--addr', default='', metavar='CLIENT,SERVER', help='client and server endpoints on offloadable interfaces')
+    parser.add_argument('--filter', metavar='PATTERN', help="override every selected profile's gtest filter")
+    parser.add_argument('--gtest-bin', type=Path, default=SOURCE_ROOT / 'tests/gtest/gtest', help='gtest executable')
+    parser.add_argument('--xlio-lib', type=Path, default=SOURCE_ROOT / 'src/core/.libs/libxlio.so', help='XLIO library')
+    parser.add_argument('--output-dir', type=Path, default=Path.cwd() / 'gtest-results',
+                        help='parent for timestamped run directories (default: ./gtest-results)')
+    parser.add_argument('--timeout', default='20m', help='per-run GNU timeout duration (default: %(default)s; 0 disables)')
+    parser.add_argument('--dry-run', action='store_true', help='print commands without running or writing files')
+    argv = sys.argv[1:]
+    separator = argv.index('--') if '--' in argv else len(argv)
+    args = parser.parse_args(argv[:separator])
+    args.extra = argv[separator + 1:]
+    if args.list_profiles:
+        return parser, args
+    for arg in args.extra:
+        if arg.startswith(('--gtest_filter', '--gtest_output', '--addr', '--if', '-a', '-i')):
+            parser.error(arg + ' is runner-owned; use --filter or the runner address options')
+    for name in ('gtest_bin', 'xlio_lib', 'output_dir'):
+        setattr(args, name, getattr(args, name).resolve())
+    if not args.dry_run:
+        if not args.gtest_bin.is_file() or not os.access(str(args.gtest_bin), os.X_OK):
+            parser.error('executable not found: ' + str(args.gtest_bin))
+        if not args.xlio_lib.is_file() or not os.access(str(args.xlio_lib), os.R_OK):
+            parser.error('library not found: ' + str(args.xlio_lib))
+    if not args.timeout:
+        parser.error('empty timeout')
+    if args.timeout != '0' and not shutil.which('timeout'):
+        parser.error('timeout not found; use --timeout=0 to disable')
+    return parser, args
+
+
+def describe_profile(name, args):
+    """Return the command settings without changing files or the environment."""
+    if name not in PROFILES:
+        raise ValueError('unknown profile: ' + name)
+    profile = PROFILES[name]
+    endpoint = profile.endpoints or args.addr
+    endpoints = endpoint.split(',')
+    if len(endpoints) != 2 or not all(endpoints):
+        raise ValueError('{} requires two endpoints via --addr'.format(name))
+    if not re.fullmatch(r'[a-zA-Z0-9.:,%_-]+', endpoint):
+        raise ValueError('invalid endpoints: ' + endpoint)
+    network_args = ['--addr=' + endpoint]
+    run_dir = args.output_dir / name
+    env = dict(profile.env, XLIO_USE_NEW_CONFIG='1',
+               XLIO_CONFIG_FILE=str(run_dir / profile.config))
+    substitutions = {'CLIENT_IP': endpoints[0], 'SERVER_IP': endpoints[1],
+                     'PROFILE': name, 'RUN_DIR': str(run_dir), 'SOURCE_ROOT': str(SOURCE_ROOT)}
+    return (env, network_args, profile.test_filter, profile.xml_name,
+            CONFIG_DIR / profile.config, substitutions)
+
+
+def render_config(source, substitutions):
+    """Expand @NAME@ tokens in JSON string values, preserving other JSON types."""
+    def replace(match):
+        name = match.group(1)
+        if name not in substitutions:
+            raise ValueError('{}: unknown placeholder @{}@'.format(source, name))
+        return substitutions[name]
+
+    def expand(value):
+        if isinstance(value, str):
+            return re.sub(r'@([A-Za-z_][A-Za-z0-9_]*)@', replace, value)
+        if isinstance(value, list):
+            return [expand(item) for item in value]
+        if isinstance(value, dict):
+            return {key: expand(item) for key, item in value.items()}
+        return value
+
+    return json.dumps(expand(json.loads(source.read_text())), indent=4) + '\n'
+
+
+def read_report(path):
+    """Count test cases, not assertion failures, in gtest's XML output."""
+    root = ET.parse(str(path)).getroot()
+    if root.tag not in ('testsuites', 'testsuite'):
+        raise ValueError('not a gtest XML report')
+    passed = skipped = disabled = 0
+    failed = []
+    for case in root.iter('testcase'):
+        if case.find('failure') is not None or case.find('error') is not None:
+            failed.append('.'.join(filter(None, (case.get('classname'), case.get('name')))))
+        elif case.get('status') == 'notrun' or case.get('result') == 'suppressed':
+            disabled += 1
+        elif case.find('skipped') is not None or case.get('result') == 'skipped':
+            skipped += 1
+        else:
+            passed += 1
+    return passed, failed, skipped, disabled
+
+
+def execute(command, directory, env):
+    """Stream test output to the terminal and preserve it alongside the results."""
+    with (directory / 'gtest.log').open('w') as log:
+        with subprocess.Popen(command, cwd=str(directory), env=env, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, text=True, errors='replace') as process:
+            for line in process.stdout:
+                print(line, end='', flush=True)
+                log.write(line)
+            return process.wait()
+
+
+def main():
+    parser, args = parse_args()
+    if args.list_profiles:
+        for name, profile in PROFILES.items():
+            print('Profile {}\n  Config: config/{}\n  Filter: {}\n'.format(
+                name, profile.config, profile.test_filter))
+        return 0
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S.%fZ')
+    args.output_dir /= timestamp + '-' + uuid.uuid4().hex[:8]
+    selected = args.profiles.split(',')
+    if len(selected) != len(set(selected)):
+        parser.error('duplicate profile')
+    try:
+        if not all(selected):
+            raise ValueError('empty profile')
+        descriptions = [describe_profile(name, args) for name in selected]
+        rendered_configs = [render_config(description[4], description[5])
+                            for description in descriptions]
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+    if not args.dry_run:
+        try:
+            args.output_dir.mkdir(parents=True, exist_ok=False)
+        except OSError as error:
+            parser.error('cannot create results directory: ' + str(error))
+    print('Results: ' + str(args.output_dir), flush=True)
+
+    # Work on a copy: only gtest children see the profile's environment.
+    child_env = {key: value for key, value in os.environ.items()
+                 if key not in ('GTEST_FILTER', 'GTEST_OUTPUT')}
+    child_env.setdefault('WORKSPACE', str(SOURCE_ROOT))
+    failures = []
+    summaries = []
+    for name, description, rendered_config in zip(selected, descriptions, rendered_configs):
+        env, network_args, test_filter, xml_name, config_source, substitutions = description
+        if args.filter is not None:
+            test_filter = args.filter
+        env = dict(LD_PRELOAD=str(args.xlio_lib), **env)
+        run_dir = args.output_dir / name
+        xml_path = args.output_dir / (xml_name + '.xml')
+        command = ([] if args.timeout == '0' else ['timeout', '-s', 'SIGKILL', '--', args.timeout])
+        # Set LD_PRELOAD after timeout starts, so only the tested process and
+        # its helpers load XLIO, matching CI's original invocation.
+        command += ['env'] + [key + '=' + value for key, value in env.items()]
+        command += [str(args.gtest_bin)] + network_args
+        command += ['--gtest_filter=' + test_filter, '--gtest_output=xml:' + str(xml_path)]
+        command += args.extra
+        command_text = ' '.join(shlex.quote(arg) for arg in command)
+        print('[{}] {}'.format(name, command_text), flush=True)
+        if args.dry_run:
+            print('  render {} -> {}'.format(config_source, env['XLIO_CONFIG_FILE']))
+            continue
+        report = None
+        report_error = ''
+        rc = 0
+        try:
+            run_dir.mkdir(parents=True, exist_ok=True)
+            (run_dir / 'command.txt').write_text(
+                'cd ' + shlex.quote(str(run_dir)) + '\n' + command_text + '\n')
+            Path(env['XLIO_CONFIG_FILE']).write_text(rendered_config)
+            rc = execute(command, run_dir, child_env)
+            report = read_report(xml_path)
+        except (OSError, ET.ParseError, ValueError) as error:
+            print('{}: {}'.format(name, error), file=sys.stderr)
+            report_error = str(error)
+            rc = rc or 1
+        summaries.append((name, report, report_error, rc, command_text, run_dir))
+        if report is not None and report[1]:
+            rc = rc or 1
+        if rc:
+            failures.append('{} (rc={})'.format(name, rc))
+    summary = ['Test summary:'] if summaries else []
+    summary.append('Gtest profiles: {} selected, {} failures'.format(len(selected), len(failures)))
+    total_passed = total_failed = 0
+    for name, report, error, rc, command_text, run_dir in summaries:
+        summary.append('')
+        if report is None:
+            summary.append('  Profile {}: incomplete (rc={}; {})'.format(name, rc, error))
+        else:
+            passed, failed, skipped, disabled = report
+            total_passed += passed
+            total_failed += len(failed)
+            status = ' (rc={})'.format(rc) if rc else ''
+            summary.append('  Profile {}: {} passed, {} failed, {} skipped, {} disabled{}'.format(
+                name, passed, len(failed), skipped, disabled, status))
+            for test_name in failed:
+                summary.append('    FAILED: ' + test_name)
+        summary.append('    Directory: ' + str(run_dir))
+        summary.append('    Command: ' + command_text)
+        summary.append('')
+    for failure in failures:
+        summary.append('  FAILED: Profile ' + failure)
+    summary.append('Total: {} passed, {} failed.'.format(total_passed, total_failed))
+    summary_text = '\n'.join(summary) + '\n'
+    print('\n' + summary_text, end='')
+    if not args.dry_run:
+        try:
+            (args.output_dir / 'summary.txt').write_text(summary_text)
+        except OSError as error:
+            print('cannot write summary: ' + str(error), file=sys.stderr)
+            return 1
+    return 1 if failures else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

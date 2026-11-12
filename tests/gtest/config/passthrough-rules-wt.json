@@ -1,0 +1,19 @@
+{
+    "performance": {
+        "threading": {
+            "worker_threads": 1
+        }
+    },
+    "acceleration_control": {
+        "rules": [
+            {
+                "id": "*",
+                "name": "*",
+                "actions": [
+                    "use os tcp_client @SERVER_IP@:*:*:*",
+                    "use os tcp_server @SERVER_IP@:*"
+                ]
+            }
+        ]
+    }
+}

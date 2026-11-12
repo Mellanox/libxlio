@@ -1,6 +1,6 @@
 #!/bin/bash -eExl
 
-source $(dirname $0)/globals.sh
+source "$(dirname "$0")/globals.sh"
 
 # Fix hugepages for docker environments
 do_hugepages
@@ -16,11 +16,11 @@ if [[ -z "${MANUAL_RUN}" ]]; then
 		exit 1
 	fi
 
-	cd $WORKSPACE
+	cd "$WORKSPACE"
 
-	rm -rf $gtest_dir
-	mkdir -p $gtest_dir
-	cd $gtest_dir
+	rm -rf "$gtest_dir"
+	mkdir -p "$gtest_dir"
+	cd "$gtest_dir"
 
 	gtest_app="$PWD/tests/gtest/gtest"
 	gtest_lib=$install_dir/lib/${prj_lib}
@@ -29,75 +29,51 @@ else
 	# Enable running gtest tests manually without build stage requirement.
 	# To run manually. From main directory:
 	# env MANUAL_RUN=1 MANUAL_RUN_GTEST_APP=<gtest-path>/gtest MANUAL_RUN_INST_DIR=<xlio-install-path> MANUAL_RUN_ADAPTER='ConnectX-6' WORKSPACE=$PWD TARGET=default jenkins_test_gtest=yes contrib/test_jenkins.sh
-	cd $WORKSPACE
+	cd "$WORKSPACE"
 	gtest_app=${MANUAL_RUN_GTEST_APP}
 	install_dir=${MANUAL_RUN_INST_DIR}
 	gtest_lib=$install_dir/lib/${prj_lib}
 	opt2=${MANUAL_RUN_ADAPTER:-'ConnectX-7'}
 fi
 
-# Retrieve server/client addresses for the test.
-# $1 - [ib|eth|inet6] to select link type or empty to select the first found
-#
-function do_get_addrs()
+# CI owns interface discovery; the shared runner owns test profiles.
+gtest_addr="$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1),$(ip -f inet addr show net2 | awk '/inet / {print $2}' | cut -d/ -f1)"
+gtest_addr6="$(ip -f inet6 addr show net1 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1),$(ip -f inet6 addr show net2 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1)"
+# A fresh directory also avoids stale artifacts in MANUAL_RUN mode.
+mkdir -p "$gtest_dir"
+gtest_results=$(mktemp -d "$gtest_dir/results.XXXXXX")
+read -r -a gtest_sudo <<< "${sudo_cmd}"
+
+function run_ci_profile()
 {
-	gtest_ip_list="$(do_get_ip $1 $2)"
-	if [ ! -z $2 ]; then
-		gtest_ip_list_2="$(do_get_ip $1 $2 $gtest_ip_list)"
-	else
-		gtest_ip_list_2="$(do_get_ip $1 '' $gtest_ip_list)"
-	fi
-
-	if [ ! -z ${gtest_ip_list_2} ]; then
-		gtest_ip_list="${gtest_ip_list},${gtest_ip_list_2}"
-	else
-		echo "[SKIP] two eth interfaces are required. found: ${gtest_ip_list}" >&2
-		exit 0
-	fi
-
-	echo $gtest_ip_list
+    local profile_name=$1 artifact_label=$2 addresses=$3 profile_rc
+    local sample_name="${profile_name}-${artifact_label}"
+    shift 3
+    if "${gtest_sudo[@]}" env WORKSPACE="$WORKSPACE" GTEST_TAP=2 \
+        "${WORKSPACE}/tests/gtest/run" \
+        --profiles="$profile_name" --addr="$addresses" \
+        --gtest-bin="$gtest_app" --xlio-lib="$gtest_lib" \
+        --output-dir="$gtest_results/$sample_name" -- "$@"; then
+        profile_rc=0
+    else
+        profile_rc=$?
+    fi
+    rc=$((rc + profile_rc))
 }
-
-gtest_opt="--addr=$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1),$(ip -f inet addr show net2 | awk '/inet / {print $2}' | cut -d/ -f1)"
-gtest_opt_ipv6="--addr=$(ip -f inet6 addr show net1 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1),$(ip -f inet6 addr show net2 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1) -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" #
 
 set +eE
 
 if [[ -z "${MANUAL_RUN}" ]]; then
-	${WORKSPACE}/configure --prefix=$install_dir $jenkins_test_custom_configure
+	"${WORKSPACE}/configure" --prefix="$install_dir" $jenkins_test_custom_configure
 	make $make_opt -C tests/gtest
 	rc=$(($rc+$?))
 fi
 
-# Test with full coverage of the config-file feature
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 \
-XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_full_coverage.json \
-GTEST_TAP=2 LD_PRELOAD=$gtest_lib \
-$gtest_app $gtest_opt --gtest_filter=-xlio_*:-ultra* \
---gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
-rc=$(($rc+$?))
-
-# Pin structured-config activation at the 120 s cap. At the cap, tcpi_rto is
-# independent of live RTT variance, so this check remains deterministic on
-# loaded runners.
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 \
-XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_rto_floor_max.json \
-XLIO_GTEST_EXPECT_RTO_MSEC=120000 GTEST_TAP=2 LD_PRELOAD=$gtest_lib \
-$gtest_app $gtest_opt --gtest_filter=tcp_sockopt.ti_1b_tcp_info_low_rtt_us \
---gtest_output=xml:${WORKSPACE}/${prefix}/test-rto-floor-max.xml"
-rc=$(($rc+$?))
-
-# Exclude EXTRA API tests IPv6
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio_*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic-ipv6.xml"
-rc=$(($rc+$?))
-
-# Verify Delegated TCP Timers tests
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
-rc=$(($rc+$?))
-
-# Verify Delegated TCP Timers tests IPv6
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate-ipv6.xml"
-rc=$(($rc+$?))
+run_ci_profile r2c-full ipv4 "$gtest_addr"
+run_ci_profile rto-floor-max ipv4 "$gtest_addr"
+run_ci_profile r2c-default ipv6 "$gtest_addr6" -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+run_ci_profile delegate ipv4 "$gtest_addr"
+run_ci_profile delegate ipv6 "$gtest_addr6" -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
 
 if [[ -z "${MANUAL_RUN}" ]]; then
 	make -C tests/gtest clean
@@ -105,114 +81,36 @@ if [[ -z "${MANUAL_RUN}" ]]; then
 	rc=$(($rc+$?))
 fi
 
-# Verify XLIO EXTRA API tests
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=xlio_* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra.xml"
-rc=$(($rc+$?))
-
-# Verify XLIO EXTRA API tests IPv6
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=xlio_* --gtest_output=xml:${WORKSPACE}/${prefix}/test-extra-ipv6.xml"
-rc=$(($rc+$?))
-
-# XLIO Ultra API
-
-# IPV4
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=ultra_api* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api.xml"
-rc=$(($rc+$?))
-
-# IPV6
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=ultra_api* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api-ipv6.xml"
-rc=$(($rc+$?))
-
-# Full SQ completion test - Needs XLIO_TCP_CC_ALGO=1 XLIO_TCP_NODELAY=1 to fill SQ deterministically without handling initially small congestion window and delayed packets.
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib XLIO_TCP_CC_ALGO=1 XLIO_TCP_NODELAY=1 $gtest_app $gtest_opt --gtest_filter=ultra_api_socket_send_receive_full_sq* --gtest_output=xml:${WORKSPACE}/${prefix}/test-xlio_ultra_api_full_sq_completion.xml"
-rc=$(($rc+$?))
-
-
-# Worker Threads Mode test filter
-worker_threads_filter="tcp_listen*:sock_socket.ti_2:tcp_bind*:tcp_event*:tcp_stream_integrity*:-tcp_bind.mapped_ipv4_bind"
-
-worker_threads_failures=()
-worker_threads_samples=0
-
-function run_worker_threads_test()
-{
-	local sample_name=$1
-	local command=$2
-	local sample_rc
-
-	if eval "$command"; then
-		sample_rc=0
-	else
-		sample_rc=$?
-		worker_threads_failures+=("$sample_name (rc=$sample_rc)")
-	fi
-	rc=$((rc + sample_rc))
-	worker_threads_samples=$((worker_threads_samples + 1))
-}
-
-for poll_spec in "-1:busy-poll" "0:pure-intr" "10:bounded-poll"
-do
-	IFS=: read -r select_poll poll_mode <<< "$poll_spec"
-
-	run_worker_threads_test "$poll_mode/ipv4/1-worker" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}.xml"
-
-	run_worker_threads_test "$poll_mode/ipv6/1-worker" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-ipv6.xml"
-
-	run_worker_threads_test "$poll_mode/ipv4/2-workers" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-pow2.xml"
-
-	run_worker_threads_test "$poll_mode/ipv4/3-workers" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-not-pow2.xml"
-done
-
-echo "Worker Threads Mode tests: $worker_threads_samples samples, ${#worker_threads_failures[@]} failures"
-if ((${#worker_threads_failures[@]})); then
-	printf '  FAILED: %s\n' "${worker_threads_failures[@]}"
-fi
-
-# Passthrough tests
-
-passthrough_filter="tcp_listen_connect_nb.server_client_nb"
-
-# Passthrough via non-offloadable NIC (loopback)
-
-# worker threads mode
-gtest_opt_lo="--addr=127.0.0.1,127.0.0.1"
-eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_lo --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-loopback-wt.xml"
-rc=$(($rc+$?))
-
-# R2C mode
-eval "${sudo_cmd} $timeout_exe env GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_lo --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-loopback-r2c.xml"
-rc=$(($rc+$?))
-
-###### Passthrough via XLIO offload rules
-
-
-# Create a temporary libxlio.conf with passthrough rules and point XLIO_CONFIG_FILE to it.
-server_ip=$(ip -f inet addr show net2 | awk '/inet / {print $2}' | cut -d/ -f1)
-passthrough_conf=$(mktemp /tmp/libxlio-passthrough-XXXXXX.conf)
-printf "use os tcp_client %s:*:*:*\nuse os tcp_server %s:*\n" "$server_ip" "$server_ip" > "$passthrough_conf"
-
-# worker threads mode
-eval "${sudo_cmd} $timeout_exe env XLIO_CONFIG_FILE=$passthrough_conf XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-rules-wt.xml"
-rc=$(($rc+$?))
-
-# R2C mode
-eval "${sudo_cmd} $timeout_exe env XLIO_CONFIG_FILE=$passthrough_conf GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-rules-r2c.xml"
-rc=$(($rc+$?))
-
-rm -f "$passthrough_conf"
-###### End of Passthrough via XLIO offload rules
-
+run_ci_profile extra ipv4 "$gtest_addr"
+run_ci_profile extra ipv6 "$gtest_addr6" -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+run_ci_profile ultra ipv4 "$gtest_addr"
+run_ci_profile ultra ipv6 "$gtest_addr6" -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+run_ci_profile ultra-full-sq ipv4 "$gtest_addr"
+run_ci_profile wtbusy ipv4 "$gtest_addr"
+run_ci_profile wtbusy ipv6 "$gtest_addr6" -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+run_ci_profile wtbusy-pow2 ipv4 "$gtest_addr"
+run_ci_profile wtbusy-not-pow2 ipv4 "$gtest_addr"
+run_ci_profile wtintr ipv4 "$gtest_addr"
+run_ci_profile wtintr ipv6 "$gtest_addr6" -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+run_ci_profile wtintr-pow2 ipv4 "$gtest_addr"
+run_ci_profile wtintr-not-pow2 ipv4 "$gtest_addr"
+run_ci_profile wtbp ipv4 "$gtest_addr"
+run_ci_profile wtbp ipv6 "$gtest_addr6" -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+run_ci_profile wtbp-pow2 ipv4 "$gtest_addr"
+run_ci_profile wtbp-not-pow2 ipv4 "$gtest_addr"
+run_ci_profile passthrough-loopback-wt ipv4 "$gtest_addr"
+run_ci_profile passthrough-loopback-r2c ipv4 "$gtest_addr"
+run_ci_profile passthrough-rules-wt ipv4 "$gtest_addr"
+run_ci_profile passthrough-rules-r2c ipv4 "$gtest_addr"
 
 set -eE
 
-for f in $(find $gtest_dir -name '*.tap')
-do
-    cp $f ${WORKSPACE}/${prefix}/gtest-$(basename $f .tap).tap
-done
+# Keep every profile's TAP results; suite names repeat between configurations.
+while IFS= read -r -d '' tap_file; do
+    relative=${tap_file#"$gtest_results"/}
+    profile_name=${relative%%/*}
+    cp -- "$tap_file" "${WORKSPACE}/${prefix}/gtest-${profile_name}-$(basename "$tap_file")"
+done < <(find "$gtest_results" -mindepth 2 -name '*.tap' -print0)
 
 echo "[${0##*/}]..................exit code = $rc"
 exit $rc
