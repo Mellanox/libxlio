@@ -3391,7 +3391,9 @@ void XmlUnitTestResultPrinter::OutputXmlTestInfo(::std::ostream* stream,
     }
   }
 
-  if (failures == 0)
+  if (result.Skipped())
+    *stream << ">\n      <skipped/>\n    </testcase>\n";
+  else if (failures == 0)
     *stream << " />\n";
   else
     *stream << "    </testcase>\n";

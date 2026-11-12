@@ -18,3 +18,83 @@ The XLIO Extended API gtest environment requires that there be two interfaces
 connected back to back or via a switch. One is the server and the other is the
 client.
 
+Running the runner
+------------------------------
+The 'run' script allows running the tests with various XLIO configurations. 
+Each profile selects a set of the tests to run and the XLIO configuration file
+to use when running these tests. For each selected profile, the 'gtest' 
+executable is run exactly once, with the results written to a separate directory.
+
+After building XLIO and the gtest executable, run from the source root:
+
+   tests/gtest/run --addr=client_ip,server_ip
+
+This defaults to --profiles=r2c-full,wtbp . Use --help to see the available profiles.
+
+--profiles accepts a comma-separated list of profile names.
+
+List every profile's config and filter without addresses or a build:
+
+   tests/gtest/run --list-profiles
+
+Profiles use JSON template files in config/ for XLIO runtime settings. 
+Every file is translated to a file written to the profile run directory, 
+substituting special fields marked by @xxx@. JSON string
+values (including nested objects and arrays) can use @CLIENT_IP@, @SERVER_IP@,
+@PROFILE@, @RUN_DIR@, and @SOURCE_ROOT@. Addresses are those selected for the
+profile, including IPv6 or loopback when applicable. Unknown placeholders fail 
+before any tests run. Templates are validated in --dry-run too, without writing files. 
+
+Select profiles explicitly, or inspect the gtest commands without executing them:
+
+   tests/gtest/run --profiles=wtbp --addr=client_ip,server_ip
+   tests/gtest/run --dry-run --addr=client_ip,server_ip
+
+The Python 3 runner accepts both --option=value and --option value:
+
+   tests/gtest/run --addr client_ip,server_ip --profiles r2c-full,wtbp
+
+Override the profile's filter for every selected run with --filter:
+
+   tests/gtest/run --addr client_ip,server_ip --filter 'tcp_sockopt.*'
+   tests/gtest/run --addr=client_ip,server_ip --filter='-tcp_sockopt.*'
+
+Use the = form when a filter starts with a dash. Without --filter, each
+profile uses its CI filter. An override leaves its configuration and mode intact.
+
+For out-of-tree builds or an installed library, supply absolute or
+current-directory-relative paths:
+
+   tests/gtest/run --addr=client_ip,server_ip \
+       --gtest-bin=/build/tests/gtest/gtest \
+       --xlio-lib=/install/lib/libxlio.so --output-dir=/tmp/gtest-results
+
+Additional gtest arguments follow --, for example -- --port=55556. Use the
+runner's --filter to override filters; addresses and XML output are owned by
+the runner. --timeout=20m is the per-invocation default; --timeout=0 disables
+it. See --help for all profiles.
+
+Each invocation creates a unique UTC timestamped directory under --output-dir
+(default ./gtest-results), for example 20261108-123456.123456Z-a1b2c3d4.
+
+--dry-run creates no directories or files. 
+
+The summary reports passed, failed, runtime-skipped, and disabled tests
+separately. DISABLED_ tests are excluded unless --gtest_also_run_disabled_tests
+is passed after --; GTEST_SKIP() stops a selected test at runtime.
+
+LD_PRELOAD points to the selected library, including for test subprocesses. 
+The caller's environment is unchanged. The runner defaults WORKSPACE to the 
+source tree only when it is not set, preserving any caller-provided value. 
+Other environment variables are inherited without assigning defaults
+
+Hardware-free runner contract checks:
+
+   python3 tests/gtest/test_run.py
+
+
+Profiles are independent of address family. Pass IPv4 or IPv6 endpoints using
+--addr. CI uses r2c-full for IPv4 and r2c-default for IPv6. Additional gtest
+arguments can follow --, for example:
+
+   tests/gtest/run --profiles r2c-default --addr 2001:db8::1,2001:db8::2 -- -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff

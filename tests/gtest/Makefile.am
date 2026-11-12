@@ -55,6 +55,10 @@ libgtest_la_CXXFLAGS = \
 	$(AM_CXXFLAGS)
 
 EXTRA_DIST = \
+	run \
+	test_run.py \
+	README \
+	config \
 	googletest/include \
 	googletest/src \
 	googletest/README.md \

@@ -81,3 +81,6 @@ docs/man/xlio_stats.8
 
 tests/unit_tests/unit_tests
 *.pyc
+
+# Test results
+*gtest-results/

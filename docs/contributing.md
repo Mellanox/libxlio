@@ -145,48 +145,47 @@ Keep these rules in mind as you are working:
 
 
 ## <a name="tests"></a> Unit tests
-This set of tests is based on [Google Test C++] (https://github.com/google/googletest) environment 
+This set of tests is based on [Google Test C++] (https://github.com/google/googletest) environment
 
 Suite support [TAP protocol](https://en.wikipedia.org/wiki/Test_Anything_Protocol) for test result output.
 Just set **GTEST_TAP=2** as  environment variable.
 
 This suite includes standard socket api and library specific api tests.
-**LD_PRELOAD** should be done to verify target library. 
+**LD_PRELOAD** should be done to verify target library.
 
 Build standard tests:
 ```shell
 $ make -C tests/gtest
 ```
 
-Build specific tests:
+Build Extra API tests:
 ```shell
 $ make -C tests/gtest CPPFLAGS="-DEXTRA_API_ENABLED=1"
 ```
 
-Display help:
-```shell
-$ ./tests/gtest --help
-```
-
+Run tests from the repository root:
 All tests can be launched on single node that has two interfaces.
 
 Run tests under OS:
 ```shell
-$ ./tests/gtest --addr=1.1.3.6,1.1.4.6
+$ ./tests/gtest/gtest --addr=1.1.3.6,1.1.4.6
 ```
 or
 ```shell
-$ ./tests/gtest --if=ens2f0,ens2f1 --gtest_filter=tcp_sendfile.*
+$ ./tests/gtest/gtest --if=ens2f0,ens2f1 --gtest_filter=tcp_sendfile.*
 ```
 
 Run tests under XLIO:
 ```shell
-$ LD_PRELOAD=libxlio.so ./tests/gtest --addr=1.1.3.6,1.1.4.6
+$ ./tests/gtest/run --addr=1.1.3.6,1.1.4.6
 ```
 or
 ```shell
-$ LD_PRELOAD=libxlio.so ./tests/gtest --if=ens2f0,ens2f1 --gtest_filter=tcp_sendfile.*
+$ ./tests/gtest/run --addr=1.1.3.6,1.1.4.6 --filter=tcp_sendfile.* 
 ```
+
+See [tests/gtest/README](../tests/gtest/README) for profiles, filters, and further
+usage information.
 
 
 ## <a name="ci"></a> Continuous Integration
