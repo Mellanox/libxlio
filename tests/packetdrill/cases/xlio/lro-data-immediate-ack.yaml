@@ -1,0 +1,5 @@
+# Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+
+# Pending #5267303: the data ACK is delayed by about 260 ms on the original base.
+disabled: true

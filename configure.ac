@@ -75,7 +75,9 @@ AC_CONFIG_MACRO_DIR(config/m4)
 
 # Init automake and libtool
 #
-AM_INIT_AUTOMAKE(foreign [subdir-objects])
+# Use ustar so make dist includes source-qualified Packetdrill paths that
+# exceed the old tar format's 99-character filename limit.
+AM_INIT_AUTOMAKE([foreign subdir-objects tar-ustar])
 
 # Configure third party libs
 AC_CONFIG_SUBDIRS([third_party/json-c])

@@ -1,0 +1,21 @@
+// Verify a RST is correctly emitted when SO_LINGER(1, 0) + close() is used.
+// no data exchanged
+
+`multipath-tcp/gtests/net/common/defaults.sh`
+
+// Initialize a server socket.
+ 0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+ +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+ +0 bind(3, ..., ...) = 0
+ +0 listen(3, 1) = 0
+
+ +0 < S 0:0(0) win 32792
+ +0 > S. 0:0(0) ack 1 <mss 1460>
+ +0 < . 1:1(0) ack 1 win 257
+
+ +0 accept(3, ..., ...) = 4
+
+ +0 setsockopt(4, SOL_SOCKET, SO_LINGER, {onoff=1, linger=0}, 8) = 0
+ +0 close(4) = 0
+
+ +0 > R. 1:1(0) ack 1
