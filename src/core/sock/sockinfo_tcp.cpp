@@ -3687,6 +3687,12 @@ int sockinfo_tcp::accept_wait_threads_mode(loops_timer &accept_timeout)
         },
         timeout_ms);
 
+    // Exit may have satisfied the predicate before it harvested an advertised child queue.
+    if (g_b_exit && m_ready_conn_cnt == 0 && m_sock_state == TCP_SOCK_ACCEPT_READY) {
+        const int saved_errno = errno;
+        harvest_sockinfo_tcp_listen_objects();
+        errno = saved_errno;
+    }
     const accept_wait_outcome outcome = map_accept_wait_result(
         r, m_ready_conn_cnt > 0, g_b_exit, m_sock_state != TCP_SOCK_ACCEPT_READY);
     if (outcome.err) {
@@ -3778,7 +3784,14 @@ int sockinfo_tcp::accept_helper(struct sockaddr *__addr, socklen_t *__addrlen,
             return -1;
         }
     }
-    if (g_b_exit) {
+    // In threads mode, readiness may still reside on an RSS child when exit skips the loop.
+    if (g_b_exit && m_ready_conn_cnt == 0 && should_use_threads_mode() &&
+        m_sock_state == TCP_SOCK_ACCEPT_READY) {
+        const int saved_errno = errno;
+        harvest_sockinfo_tcp_listen_objects();
+        errno = saved_errno;
+    }
+    if (g_b_exit && m_ready_conn_cnt == 0) {
         si_tcp_logdbg("interrupted accept");
         unlock_tcp_con();
         errno = EINTR;

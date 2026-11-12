@@ -49,18 +49,13 @@ static void handler_siginfo(int signo, siginfo_t *info, void *context)
     g_handler_si_pid = (info ? info->si_pid : -1);
 }
 
-/* Runs the body in a child process. The child never returns to the test body. */
-static pid_t fork_child(const std::function<void()> &body)
+/* Signal-specific initialization; common fork/exit handling lives in test_base. */
+static pid_t fork_signal_child(const std::function<void()> &body)
 {
-    pid_t pid = fork();
-
-    if (pid == 0) {
+    return test_base::fork_child([&body]() {
         g_handler_id = HANDLER_NONE;
         body();
-        fflush(nullptr);
-        _exit(testing::Test::HasFailure() ? 1 : 0);
-    }
-    return pid;
+    });
 }
 
 /*
@@ -69,7 +64,7 @@ static pid_t fork_child(const std::function<void()> &body)
  */
 TEST(sigaction_test, oldact_reports_application_action)
 {
-    pid_t pid = fork_child([]() {
+    pid_t pid = fork_signal_child([]() {
         struct sigaction action = {};
         action.sa_handler = SIG_DFL;
         sigemptyset(&action.sa_mask);
@@ -98,7 +93,7 @@ TEST(sigaction_test, oldact_reports_application_action)
 /* A plain application handler is chained from the XLIO SIGINT trampoline. */
 TEST(sigaction_test, chains_application_handler)
 {
-    pid_t pid = fork_child([]() {
+    pid_t pid = fork_signal_child([]() {
         struct sigaction action = {};
         action.sa_handler = handler_a;
         sigemptyset(&action.sa_mask);
@@ -116,7 +111,7 @@ TEST(sigaction_test, chains_application_handler)
 /* An SA_SIGINFO action keeps its 3-argument calling convention and receives a valid siginfo. */
 TEST(sigaction_test, chains_siginfo_handler)
 {
-    pid_t pid = fork_child([]() {
+    pid_t pid = fork_signal_child([]() {
         struct sigaction action = {};
         action.sa_sigaction = handler_siginfo;
         sigemptyset(&action.sa_mask);
@@ -141,7 +136,7 @@ TEST(sigaction_test, chains_siginfo_handler)
 /* SIG_DFL is not trampolined - SIGINT terminates the process as usual. */
 TEST(sigaction_test, default_disposition_terminates_process)
 {
-    pid_t pid = fork_child([]() {
+    pid_t pid = fork_signal_child([]() {
         struct sigaction action = {};
         action.sa_handler = SIG_DFL;
         sigemptyset(&action.sa_mask);
@@ -161,7 +156,7 @@ TEST(sigaction_test, default_disposition_terminates_process)
 /* SIG_IGN is not trampolined - SIGINT is dropped and the disposition is reported back. */
 TEST(sigaction_test, ignored_disposition_drops_signal)
 {
-    pid_t pid = fork_child([]() {
+    pid_t pid = fork_signal_child([]() {
         struct sigaction action = {};
         action.sa_handler = SIG_IGN;
         sigemptyset(&action.sa_mask);
@@ -182,7 +177,7 @@ TEST(sigaction_test, ignored_disposition_drops_signal)
 /* signal() and sigaction() share a single saved action, and the latest handler is dispatched. */
 TEST(sigaction_test, signal_and_sigaction_share_state)
 {
-    pid_t pid = fork_child([]() {
+    pid_t pid = fork_signal_child([]() {
         signal(SIGINT, SIG_DFL);
         EXPECT_EQ(SIG_DFL, signal(SIGINT, handler_a));
         EXPECT_EQ(&handler_a, signal(SIGINT, handler_b));
@@ -202,7 +197,7 @@ TEST(sigaction_test, signal_and_sigaction_share_state)
 /* Only SIGINT is interposed - any other signal is a plain pass-through. */
 TEST(sigaction_test, other_signals_are_not_interposed)
 {
-    pid_t pid = fork_child([]() {
+    pid_t pid = fork_signal_child([]() {
         struct sigaction action = {};
         action.sa_handler = handler_a;
         sigemptyset(&action.sa_mask);
@@ -224,7 +219,7 @@ TEST(sigaction_test, other_signals_are_not_interposed)
 /* signal() rejects SIG_ERR with EINVAL, like glibc does, and keeps the current action. */
 TEST(sigaction_test, signal_rejects_sig_err)
 {
-    pid_t pid = fork_child([]() {
+    pid_t pid = fork_signal_child([]() {
         EXPECT_NE(SIG_ERR, signal(SIGINT, handler_a));
 
         errno = EOK;
@@ -244,7 +239,7 @@ TEST(sigaction_test, signal_rejects_sig_err)
 /* A one-shot action is consumed by the first delivery and leaves SIG_DFL behind. */
 TEST(sigaction_test, one_shot_action_resets_to_default)
 {
-    pid_t pid = fork_child([]() {
+    pid_t pid = fork_signal_child([]() {
         struct sigaction action = {};
         action.sa_handler = handler_a;
         sigemptyset(&action.sa_mask);
@@ -273,7 +268,7 @@ TEST(sigaction_test, one_shot_action_resets_to_default)
  */
 TEST(sigaction_test, sig_err_is_accepted_by_sigaction_only)
 {
-    pid_t pid = fork_child([]() {
+    pid_t pid = fork_signal_child([]() {
         struct sigaction action = {};
         action.sa_handler = SIG_ERR;
         sigemptyset(&action.sa_mask);
@@ -290,4 +285,108 @@ TEST(sigaction_test, sig_err_is_accepted_by_sigaction_only)
 
     ASSERT_LE(0, pid);
     EXPECT_EQ(0, test_base::wait_fork(pid));
+}
+
+/*
+ * These intentionally use an OS fd: Envoy's libevent signal pipe shares epoll with
+ * accelerated sockets. Once the kernel returns its edge, XLIO must deliver it even
+ * if its SIGINT trampoline has already set g_b_exit.
+ */
+static void ready_results_survive_sigint(int api)
+{
+    pid_t pid = fork_signal_child([api]() {
+        const int fd = eventfd(1, EFD_NONBLOCK | EFD_CLOEXEC);
+        ASSERT_LE(0, fd);
+        ASSERT_LT(fd, FD_SETSIZE);
+        const int epfd = epoll_create1(EPOLL_CLOEXEC);
+        ASSERT_LE(0, epfd);
+        epoll_event event = {};
+        event.events = EPOLLIN | EPOLLET;
+        event.data.fd = fd;
+        ASSERT_EQ(0, epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event));
+
+        struct sigaction action = {};
+        action.sa_handler = handler_a;
+        sigemptyset(&action.sa_mask);
+        ASSERT_EQ(0, sigaction(SIGINT, &action, nullptr));
+        ASSERT_EQ(0, raise(SIGINT));
+        ASSERT_EQ(HANDLER_A, static_cast<int>(g_handler_id));
+
+        sigset_t mask;
+        sigemptyset(&mask);
+        pollfd pfd = {fd, POLLIN, 0};
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(fd, &readfds);
+        timeval timeout = {};
+        timespec timeout_ts = {};
+        int rc = -1;
+        switch (api) {
+        case 0:
+            rc = epoll_wait(epfd, &event, 1, 0);
+            break;
+        case 1:
+            rc = epoll_pwait(epfd, &event, 1, 0, &mask);
+            break;
+        case 2:
+            rc = poll(&pfd, 1, 0);
+            break;
+        case 3:
+            rc = ppoll(&pfd, 1, &timeout_ts, &mask);
+            break;
+        case 4:
+            rc = select(fd + 1, &readfds, nullptr, nullptr, &timeout);
+            break;
+        case 5:
+            rc = pselect(fd + 1, &readfds, nullptr, nullptr, &timeout_ts, &mask);
+            break;
+        }
+        ASSERT_EQ(1, rc) << "api=" << api << ", errno=" << errno;
+        if (api < 2) {
+            EXPECT_EQ(fd, event.data.fd);
+            EXPECT_EQ(static_cast<uint32_t>(EPOLLIN), event.events);
+        } else if (api < 4) {
+            EXPECT_EQ(POLLIN, pfd.revents);
+        } else {
+            EXPECT_TRUE(FD_ISSET(fd, &readfds));
+        }
+        uint64_t value = 0;
+        EXPECT_EQ(static_cast<ssize_t>(sizeof(value)), read(fd, &value, sizeof(value)));
+        EXPECT_EQ(1U, value);
+        close(epfd);
+        close(fd);
+    });
+
+    ASSERT_LE(0, pid);
+    EXPECT_EQ(0, test_base::wait_fork(pid));
+}
+
+TEST(sigaction_iomux_test, ready_results_survive_sigint_epoll_wait)
+{
+    ready_results_survive_sigint(0);
+}
+
+TEST(sigaction_iomux_test, ready_results_survive_sigint_epoll_pwait)
+{
+    ready_results_survive_sigint(1);
+}
+
+TEST(sigaction_iomux_test, ready_results_survive_sigint_poll)
+{
+    ready_results_survive_sigint(2);
+}
+
+TEST(sigaction_iomux_test, ready_results_survive_sigint_ppoll)
+{
+    ready_results_survive_sigint(3);
+}
+
+TEST(sigaction_iomux_test, ready_results_survive_sigint_select)
+{
+    ready_results_survive_sigint(4);
+}
+
+TEST(sigaction_iomux_test, ready_results_survive_sigint_pselect)
+{
+    ready_results_survive_sigint(5);
 }

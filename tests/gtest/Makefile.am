@@ -43,7 +43,7 @@ AM_CPPFLAGS = \
 
 
 # lgtest
-noinst_LTLIBRARIES = libgtest.la
+noinst_LTLIBRARIES = libgtest.la libiomux_wait_hook.la
 
 libgtest_la_CPPFLAGS = \
 	-I$(top_srcdir)/tests/gtest/googletest \
@@ -66,7 +66,7 @@ libgtest_la_SOURCES = \
 	googletest/src/gtest_main.cc
 
 # gtest
-gtest_LDADD = libgtest.la  $(VERBS_LIBS)
+gtest_LDADD = libgtest.la  $(VERBS_LIBS) -ldl
 
 gtest_CPPFLAGS = \
 	-I$(top_srcdir)/ \
@@ -102,6 +102,7 @@ gtest_SOURCES = \
 	output/tuning_report.cc \
 	\
 	tcp/tcp_accept.cc \
+	tcp/tcp_accept_shutdown.cc \
 	tcp/tcp_bind.cc \
 	tcp/tcp_cc.cc \
 	tcp/tcp_connect.cc \
@@ -127,6 +128,7 @@ gtest_SOURCES = \
 	udp/udp_rfs.cc \
 	\
 	core/sigaction.cc \
+	core/iomux_wakeup.cc \
 	core/xlio_base.cc \
 	core/xlio_sockopt.cc \
 	core/blocking_wait_test.cc \
@@ -163,10 +165,15 @@ noinst_HEADERS = \
 	core/xlio_base.h
 
 gtest_DEPENDENCIES = \
-	libgtest.la
+	libgtest.la libiomux_wait_hook.la
 
 # Helper binary for Ultra API connect tests that require a fresh XLIO process
 ultra_api_connect_helper_SOURCES = xlio_ultra_api/ultra_api_connect_helper.c
 ultra_api_connect_helper_CPPFLAGS = -I$(top_srcdir)/src/core
 ultra_api_connect_helper_CFLAGS = -Wall
 ultra_api_connect_helper_LDFLAGS = -no-install
+
+# Test-only interposer, loaded AFTER XLIO to schedule work at the OS-wait boundary.
+libiomux_wait_hook_la_SOURCES = core/iomux_wait_hook.cc
+libiomux_wait_hook_la_LDFLAGS = -module -avoid-version -rpath $(abs_builddir)
+libiomux_wait_hook_la_LIBADD = -ldl
