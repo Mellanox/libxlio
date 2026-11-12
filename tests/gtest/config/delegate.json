@@ -1,0 +1,19 @@
+{
+    "network": {
+        "protocols": {
+            "tcp": {
+                "linger_0": true
+            }
+        }
+    },
+    "performance": {
+        "polling": {
+            "rx_poll_on_tx_tcp": true
+        },
+        "threading": {
+            "internal_handler": {
+                "behavior": "delegate"
+            }
+        }
+    }
+}
