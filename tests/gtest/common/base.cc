@@ -247,6 +247,19 @@ err:
     return rc;
 }
 
+pid_t test_base::fork_child(const std::function<void()> &body)
+{
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Keep the body in a separate function so ASSERT_* can return early
+        // without bypassing _exit() and letting the child run following tests.
+        body();
+        fflush(nullptr);
+        _exit(testing::Test::HasFailure() ? 1 : 0);
+    }
+    return pid;
+}
+
 int test_base::wait_fork(int pid)
 {
     int status = 0;

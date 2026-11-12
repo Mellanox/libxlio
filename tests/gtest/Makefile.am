@@ -102,6 +102,7 @@ gtest_SOURCES = \
 	output/tuning_report.cc \
 	\
 	tcp/tcp_accept.cc \
+	tcp/tcp_accept_shutdown.cc \
 	tcp/tcp_bind.cc \
 	tcp/tcp_cc.cc \
 	tcp/tcp_connect.cc \
