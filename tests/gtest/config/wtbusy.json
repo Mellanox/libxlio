@@ -1,0 +1,12 @@
+{
+    "performance": {
+        "threading": {
+            "worker_threads": 1
+        },
+        "polling": {
+            "iomux": {
+                "poll_usec": -1
+            }
+        }
+    }
+}
