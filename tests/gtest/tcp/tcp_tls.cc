@@ -11,7 +11,9 @@
 #include "common/cmn.h"
 
 #ifdef HAVE_LINUX_TLS_H
+#include <algorithm>
 #include <linux/tls.h>
+#include <vector>
 
 #include "tcp_base.h"
 
@@ -40,6 +42,57 @@ public:
             fsync(fd);
         }
         return fd;
+    }
+
+    static ssize_t send_all(int fd, const uint8_t *buffer, size_t length)
+    {
+        size_t offset = 0;
+
+        while (offset < length) {
+            ssize_t rc = send(fd, buffer + offset, length - offset, 0);
+            if (rc < 0 && errno == EINTR) {
+                continue;
+            }
+            if (rc <= 0) {
+                return rc;
+            }
+            offset += static_cast<size_t>(rc);
+        }
+        return static_cast<ssize_t>(offset);
+    }
+
+    static ssize_t recv_all(int fd, uint8_t *buffer, size_t length)
+    {
+        size_t offset = 0;
+
+        while (offset < length) {
+            ssize_t rc = recv(fd, buffer + offset, length - offset, 0);
+            if (rc < 0 && errno == EINTR) {
+                continue;
+            }
+            if (rc <= 0) {
+                break;
+            }
+            offset += static_cast<size_t>(rc);
+        }
+        return static_cast<ssize_t>(offset);
+    }
+
+    static int wait_for_queued_bytes(int fd, size_t minimum)
+    {
+        for (int attempt = 0; attempt < 500; ++attempt) {
+            int available = 0;
+            if (ioctl(fd, FIONREAD, &available) < 0) {
+                return -1;
+            }
+            if (static_cast<size_t>(available) >= minimum) {
+                return available;
+            }
+            usleep(10000);
+        }
+
+        errno = ETIMEDOUT;
+        return -1;
     }
 
 protected:
@@ -109,7 +162,7 @@ TEST_F(tcp_tls, DISABLED_ti_1)
  *    Exchange data without TLS key
  * @details
  */
-TEST_F(tcp_tls, DISABLED_ti_2)
+TEST_F(tcp_tls, ti_2)
 {
     int rc = EOK;
     char test_msg[] = "Hello test";
@@ -195,7 +248,7 @@ TEST_F(tcp_tls, DISABLED_ti_2)
  *
  * @details
  */
-TEST_F(tcp_tls, DISABLED_ti_3_12_gcm_send_small)
+TEST_F(tcp_tls, ti_3_12_gcm_send_small)
 {
     int rc = EOK;
     char test_msg[] = "Hello test";
@@ -389,7 +442,7 @@ TEST_F(tcp_tls, DISABLED_ti_4_12_gcm_send_max)
  *
  * @details
  */
-TEST_F(tcp_tls, DISABLED_ti_5_12_gcm_send_more)
+TEST_F(tcp_tls, ti_5_12_gcm_send_more)
 {
     int rc = EOK;
     char test_msg[] = "Test check";
@@ -721,6 +774,7 @@ TEST_F(tcp_tls, DISABLED_ti_7_12_gcm_sendfile_chunk)
  *
  * @details
  */
+// failed in CI, passes on lab machine
 TEST_F(tcp_tls, DISABLED_ti_8_12_gcm_sendmsg)
 {
     int rc = EOK;
@@ -841,7 +895,7 @@ TEST_F(tcp_tls, DISABLED_ti_8_12_gcm_sendmsg)
  *
  * @details
  */
-TEST_F(tcp_tls, DISABLED_ti_9_12_gcm_send_bidirect)
+TEST_F(tcp_tls, ti_9_12_gcm_send_bidirect)
 {
     int rc = EOK;
     char test_msg[] = "Hello test";
@@ -1078,6 +1132,95 @@ TEST_F(tcp_tls, DISABLED_ti_10_12_gcm_control_msg)
 
         close(fd);
 
+        ASSERT_EQ(0, wait_fork(pid));
+    }
+}
+
+/**
+ * @test tcp_tls.ti_11_12_gcm_late_rx_key
+ * @brief
+ *    Install TLS_RX after encrypted data is already queued and verify stream integrity
+ *    across TLS record boundaries.
+ */
+TEST_F(tcp_tls, ti_11_12_gcm_late_rx_key)
+{
+    const size_t test_sizes[] = {
+        1U,
+        TLS_PAYLOAD_MAX_LEN - 1U,
+        TLS_PAYLOAD_MAX_LEN,
+        TLS_PAYLOAD_MAX_LEN + 1U,
+        4U * TLS_PAYLOAD_MAX_LEN,
+        8U * TLS_PAYLOAD_MAX_LEN,
+        16U * TLS_PAYLOAD_MAX_LEN,
+    };
+    struct tls12_crypto_info_aes_gcm_128 crypto_info;
+
+    memset(&crypto_info, 0, sizeof(crypto_info));
+    crypto_info.info.version = TLS_1_2_VERSION;
+    crypto_info.info.cipher_type = TLS_CIPHER_AES_GCM_128;
+
+    for (size_t test_size : test_sizes) {
+        SCOPED_TRACE(testing::Message() << "test_size=" << test_size);
+
+        std::vector<uint8_t> expected(test_size);
+        std::vector<uint8_t> actual(test_size);
+        for (size_t i = 0; i < test_size; ++i) {
+            expected[i] = static_cast<uint8_t>(i % 251U);
+        }
+
+        int pid = fork();
+        ASSERT_LE(0, pid);
+
+        if (pid == 0) {
+            barrier_fork(pid);
+
+            fd = tcp_base::sock_create();
+            ASSERT_LE(0, fd);
+            ASSERT_EQ(0, bind(fd, (struct sockaddr *)&client_addr, sizeof(client_addr)));
+            ASSERT_EQ(0, connect(fd, (struct sockaddr *)&server_addr, sizeof(server_addr)));
+            ASSERT_EQ(0, setsockopt(fd, SOL_TCP, TCP_ULP, "tls", sizeof("tls")));
+            ASSERT_EQ(0, setsockopt(fd, SOL_TLS, TLS_TX, &crypto_info, sizeof(crypto_info)));
+
+            EXPECT_EQ(static_cast<ssize_t>(test_size),
+                      send_all(fd, expected.data(), expected.size()));
+
+            /* Tell the receiver that all encrypted data has been submitted before TLS_RX. */
+            barrier_fork(pid, true);
+            peer_wait(fd);
+            close(fd);
+            exit(testing::Test::HasFailure());
+        }
+
+        int receive_buffer = 65536;
+        int l_fd = sock_create_fa(m_family, true);
+        ASSERT_LE(0, l_fd);
+        ASSERT_EQ(0,
+                  setsockopt(l_fd, SOL_SOCKET, SO_RCVBUF, &receive_buffer, sizeof(receive_buffer)));
+        ASSERT_EQ(0, bind(l_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)));
+        ASSERT_EQ(0, listen(l_fd, 5));
+
+        barrier_fork(pid);
+        fd = accept(l_fd, nullptr, nullptr);
+        ASSERT_LE(0, fd);
+        close(l_fd);
+
+        /* Wait until ciphertext is pending, then switch the established socket to TLS_RX. */
+        barrier_fork(pid, true);
+        size_t queued_target = std::min(test_size, static_cast<size_t>(7U * TLS_PAYLOAD_MAX_LEN));
+        int queued_bytes = wait_for_queued_bytes(fd, queued_target);
+        ASSERT_LE(0, queued_bytes);
+        ASSERT_LE(queued_target, static_cast<size_t>(queued_bytes));
+        ASSERT_EQ(0, setsockopt(fd, SOL_TCP, TCP_ULP, "tls", sizeof("tls")));
+        ASSERT_EQ(0, setsockopt(fd, SOL_TLS, TLS_RX, &crypto_info, sizeof(crypto_info)));
+        ASSERT_EQ(0, set_socket_rcv_timeout(fd, 5));
+
+        ssize_t received = recv_all(fd, actual.data(), actual.size());
+        EXPECT_EQ(static_cast<ssize_t>(test_size), received);
+        if (received == static_cast<ssize_t>(test_size)) {
+            EXPECT_EQ(0, memcmp(expected.data(), actual.data(), test_size));
+        }
+
+        close(fd);
         ASSERT_EQ(0, wait_fork(pid));
     }
 }

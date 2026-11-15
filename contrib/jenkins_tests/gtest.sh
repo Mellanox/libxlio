@@ -61,6 +61,17 @@ function do_get_addrs()
 gtest_opt="--addr=$(ip -f inet addr show net1 | awk '/inet / {print $2}' | cut -d/ -f1),$(ip -f inet addr show net2 | awk '/inet / {print $2}' | cut -d/ -f1)"
 gtest_opt_ipv6="--addr=$(ip -f inet6 addr show net1 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1),$(ip -f inet6 addr show net2 | grep global | awk '/inet6 / {print $2}' | cut -d/ -f1) -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" #
 
+# TLS RX uses the local TX queue to program its RX context, so both rings must
+# belong to the same IB context. Use one offloadable NIC address for both peers.
+tls_ip=${gtest_opt#--addr=}
+tls_ip=${tls_ip%%,*}
+tls_ip_ipv6=${gtest_opt_ipv6#--addr=}
+tls_ip_ipv6=${tls_ip_ipv6%%,*}
+gtest_tls_opt="--addr=$tls_ip,$tls_ip"
+gtest_tls_opt_ipv6="--addr=$tls_ip_ipv6,$tls_ip_ipv6"
+# XLIO resolves OpenSSL EVP symbols with dlsym(RTLD_DEFAULT).
+tls_preload="libcrypto.so.3:$gtest_lib"
+
 set +eE
 
 if [[ -z "${MANUAL_RUN}" ]]; then
@@ -73,7 +84,7 @@ fi
 eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_USE_NEW_CONFIG=1 \
 XLIO_CONFIG_FILE=${WORKSPACE}/tests/gtest/xlio_config_full_coverage.json \
 GTEST_TAP=2 LD_PRELOAD=$gtest_lib \
-$gtest_app $gtest_opt --gtest_filter=-xlio_*:-ultra* \
+$gtest_app $gtest_opt --gtest_filter=-xlio_*:-ultra*:tcp_tls.* \
 --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic.xml"
 rc=$(($rc+$?))
 
@@ -88,16 +99,31 @@ $gtest_app $gtest_opt --gtest_filter=tcp_sockopt.ti_1b_tcp_info_low_rtt_us \
 rc=$(($rc+$?))
 
 # Exclude EXTRA API tests IPv6
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio_*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio_*:-ultra*:tcp_tls.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-basic-ipv6.xml"
 rc=$(($rc+$?))
 
 # Verify Delegated TCP Timers tests
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
+eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=-xlio*:-ultra*:tcp_tls.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate.xml"
 rc=$(($rc+$?))
 
 # Verify Delegated TCP Timers tests IPv6
-eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio*:-ultra* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate-ipv6.xml"
+eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=-xlio*:-ultra*:tcp_tls.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-delegate-ipv6.xml"
 rc=$(($rc+$?))
+
+# TLS tests use the same NIC address for both endpoints in R2C and delegated modes.
+for tls_family in ipv4 ipv6
+do
+	tls_opt=$gtest_tls_opt
+	if [[ "$tls_family" == ipv6 ]]; then
+		tls_opt=$gtest_tls_opt_ipv6
+	fi
+
+	eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_UTLS_RX=1 GTEST_TAP=2 LD_PRELOAD=$tls_preload $gtest_app $tls_opt --gtest_filter=tcp_tls.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-tls-${tls_family}.xml"
+	rc=$(($rc+$?))
+
+	eval "${sudo_cmd} $timeout_exe env WORKSPACE=${WORKSPACE} XLIO_RX_POLL_ON_TX_TCP=1 XLIO_TCP_ABORT_ON_CLOSE=1 XLIO_TCP_CTL_THREAD=delegate XLIO_UTLS_RX=1 GTEST_TAP=2 LD_PRELOAD=$tls_preload $gtest_app $tls_opt --gtest_filter=tcp_tls.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-tls-delegate-${tls_family}.xml"
+	rc=$(($rc+$?))
+done
 
 if [[ -z "${MANUAL_RUN}" ]]; then
 	make -C tests/gtest clean
@@ -157,14 +183,26 @@ do
 	run_worker_threads_test "$poll_mode/ipv4/1-worker" \
 		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}.xml"
 
+	run_worker_threads_test "$poll_mode/tls/ipv4/1-worker" \
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll XLIO_UTLS_RX=1 GTEST_TAP=2 LD_PRELOAD=$tls_preload $gtest_app $gtest_tls_opt --gtest_filter=tcp_tls.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-tls-${poll_mode}.xml"
+
 	run_worker_threads_test "$poll_mode/ipv6/1-worker" \
 		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-ipv6.xml"
+
+	run_worker_threads_test "$poll_mode/tls/ipv6/1-worker" \
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll XLIO_UTLS_RX=1 GTEST_TAP=2 LD_PRELOAD=$tls_preload $gtest_app $gtest_tls_opt_ipv6 --gtest_filter=tcp_tls.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-tls-${poll_mode}-ipv6.xml"
 
 	run_worker_threads_test "$poll_mode/ipv4/2-workers" \
 		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-pow2.xml"
 
+	run_worker_threads_test "$poll_mode/tls/ipv4/2-workers" \
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 XLIO_SELECT_POLL=$select_poll XLIO_UTLS_RX=1 GTEST_TAP=2 LD_PRELOAD=$tls_preload $gtest_app $gtest_tls_opt --gtest_filter=tcp_tls.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-tls-${poll_mode}-pow2.xml"
+
 	run_worker_threads_test "$poll_mode/ipv4/3-workers" \
 		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-not-pow2.xml"
+
+	run_worker_threads_test "$poll_mode/tls/ipv4/3-workers" \
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 XLIO_SELECT_POLL=$select_poll XLIO_UTLS_RX=1 GTEST_TAP=2 LD_PRELOAD=$tls_preload $gtest_app $gtest_tls_opt --gtest_filter=tcp_tls.* --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-tls-${poll_mode}-not-pow2.xml"
 done
 
 echo "Worker Threads Mode tests: $worker_threads_samples samples, ${#worker_threads_failures[@]} failures"
