@@ -163,7 +163,7 @@ static int json_pointer_set_single_path(struct json_object *parent, const char *
 		return doca_third_party_json_object_object_add(parent, path, value);
 
 	/* Getting here means that we tried to "dereference" a primitive JSON type
-	 * (like string, int, bool).i.e. add a sub-object to it
+	 * (like string, int, bool). i.e. add a sub-object to it
 	 */
 	errno = ENOENT;
 	return -1;

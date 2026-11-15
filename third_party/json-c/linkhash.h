@@ -179,7 +179,7 @@ typedef struct lh_table lh_table;
 /**
  * Convenience list iterator.
  */
-#define lh_foreach(table, entry) for (entry = doca_third_party_lh_table_head(table); entry; entry = doca_third_party_lh_entry_next(entry))
+#define lh_foreach(table, entry) for (entry = lh_table_head(table); entry; entry = lh_entry_next(entry))
 
 /**
  * lh_foreach_safe allows calling of deletion routine while iterating.
@@ -189,7 +189,7 @@ typedef struct lh_table lh_table;
  * @param tmp a struct lh_entry * variable to hold a temporary pointer to the next element
  */
 #define lh_foreach_safe(table, entry, tmp) \
-	for (entry = doca_third_party_lh_table_head(table); entry && ((tmp = doca_third_party_lh_entry_next(entry)) || 1); entry = tmp)
+	for (entry = lh_table_head(table); entry && ((tmp = lh_entry_next(entry)) || 1); entry = tmp)
 
 /**
  * Create a new linkhash table.

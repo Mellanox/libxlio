@@ -28,6 +28,10 @@ config.h.in~
 config.log
 config.status
 third_party/json-c/json_config.h
+third_party/json-c/config.h
+third_party/json-c/stamp-h2
+third_party/json-c/json-c.pc
+third_party/json-c/json-c-uninstalled.pc
 config/aux/config.guess
 config/aux/config.sub
 config/aux/install-sh

@@ -972,8 +972,6 @@ int doca_third_party_json_c_set_serialization_double_format(const char *double_f
 			tls_serialization_float_format = NULL;
 		}
 #endif
-		if (global_serialization_float_format)
-			free(global_serialization_float_format);
 		if (double_format)
 		{
 			char *p = strdup(double_format);
@@ -983,10 +981,12 @@ int doca_third_party_json_c_set_serialization_double_format(const char *double_f
 				                     "out of memory\n");
 				return -1;
 			}
+			free(global_serialization_float_format);
 			global_serialization_float_format = p;
 		}
 		else
 		{
+			free(global_serialization_float_format);
 			global_serialization_float_format = NULL;
 		}
 	}

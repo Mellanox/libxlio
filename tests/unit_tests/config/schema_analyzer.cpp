@@ -102,6 +102,15 @@ protected:
         doca_third_party_json_object_object_add(array_property, "items", items);
         doca_third_party_json_object_object_add(array_property, "default",
                                                 doca_third_party_json_object_new_array());
+
+        simple_property_no_title = doca_third_party_json_object_new_object();
+        doca_third_party_json_object_object_add(simple_property_no_title, "type",
+                                                doca_third_party_json_object_new_string("integer"));
+        doca_third_party_json_object_object_add(
+            simple_property_no_title, "description",
+            doca_third_party_json_object_new_string("A test property"));
+        doca_third_party_json_object_object_add(simple_property_no_title, "default",
+                                                doca_third_party_json_object_new_int(42));
     }
 
     void TearDown() override
@@ -111,6 +120,7 @@ protected:
         doca_third_party_json_object_put(one_of_property);
         doca_third_party_json_object_put(object_property);
         doca_third_party_json_object_put(array_property);
+        doca_third_party_json_object_put(simple_property_no_title);
     }
 
     json_object *simple_property;
