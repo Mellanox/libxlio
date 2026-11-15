@@ -113,7 +113,7 @@ key: value
 ```
 The `reason` field tells you **why** the value differs from the default:
 - `User-configured` — the customer explicitly set this in their JSON config or `XLIO_INLINE_CONFIG`
-- `Profile` — set by the active built-in profile (e.g., `latency`, `nginx`)
+- `Profile` — set by the active built-in profile; the parenthetical description names it (e.g., `Profile (Latency profile)`, `Profile (Nginx profile)`)
 - `Auto-corrected` — the system adjusted the value due to a constraint (e.g., "Capped by CQ size", "Forced when TSO enabled"). The parenthetical description explains the specific constraint.
 
 The `reason` field is omitted when the parameter has no recorded change reason
@@ -122,17 +122,17 @@ The `reason` field is omitted when the parameter has no recorded change reason
 Example — user-configured value:
 ```text
 core.resources.memory_limit: 8 GB
-  # default: 2 GB | reason: User-configured | Memory limit for XLIO resources
+  # default: 2 GB | reason: User-configured | Memory limit (bytes)
 ```
 Example — profile-set value:
 ```text
 performance.polling.iomux.poll_usec: -1
-  # default: 100000 | reason: Profile | Polling RX duration (µsec)
+  # default: 10000 | reason: Profile (Latency profile) | Select/poll duration (µsec)
 ```
 Example — auto-corrected value:
 ```text
-performance.rings.rx.spare_buffers: 1024
-  # default: 64 (striding RQ runtime default) | reason: Auto-corrected (Raised to post_batch_size) | Spare RX buffers
+performance.rings.rx.spare_buffers: 1 KB
+  # default: 32 KB | reason: Auto-corrected (Min value is performance.rings.rx.post_batch_size) | Spare RX buffers
 ```
 If you see `# All parameters at default values`, no config has been customized.
 If you see `# Config registry not available`, the config registry was not
@@ -881,7 +881,7 @@ If memory is sufficient but throughput is below expectations:
   absorbs send bursts without stalling.
 - `performance.rings.rx.ring_elements_count` (default: `32768`, but **`128` when
   striding RQ is enabled, which is the default**): Larger RX ring absorbs receive bursts.
-- `performance.rings.rx.spare_buffers` (default: `32768`, but **`128` when striding
+- `performance.rings.rx.spare_buffers` (default: `32768`, but **`64` when striding
   RQ is enabled, which is the default**): Extra buffers for burst absorption.
 
 #### Checklist: CPU Affinity & Isolation
@@ -929,7 +929,7 @@ If the workload is throughput-sensitive:
   buffer_pool_tx_alloc_failures: 0
 ## Effective Config (non-default only)
   core.resources.memory_limit: 1 GB
-    # default: 2 GB | reason: User-configured | Memory limit for XLIO resources
+    # default: 2 GB | reason: User-configured | Memory limit (bytes)
 ```
 
 **Analysis:** TX errors exactly match dropped WQEs, confirming WQE exhaustion is the

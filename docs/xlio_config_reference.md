@@ -1148,9 +1148,9 @@ Output path for the tuning report.
 The first '%d' in the path is replaced with the process
 ID at library initialization time. Use '%d' in multi-process
 deployments (nginx, gunicorn) so each worker writes its own
-file. Post-fork children inherit the parent's substituted
-path, so use pre-fork worker models where each worker
-initializes the library independently.
+file. A forked child reinitializes the library and
+substitutes its own process ID into the path.
+
 The default is suitable for most deployments.
 See [Tuning Report Reference](xlio_tuning_report_reference.md)
 for field definitions and troubleshooting guidance.
