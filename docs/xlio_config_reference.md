@@ -1629,24 +1629,36 @@ Maximum data queued for transmission before sender receives ACKs. Memory is allo
 **Tradeoffs:**
 
 - *Higher (2MB+):* Better throughput on high bandwidth-delay product
-  networks. Fewer EAGAIN on non-blocking sockets. Risk: higher memory
-  per socket, bufferbloat, and Send Queue exhaustion at high connection
-  counts (see below).
+  networks and at small connection counts. Fewer EAGAIN on non-blocking
+  sockets. Risk: higher memory per socket, bufferbloat, and Send Queue
+  exhaustion at high connection counts (see below).
 - *Lower (64KB-256KB):* Smaller memory footprint, faster flow control
-  feedback, better latency. Risk: may limit throughput on high-latency
-  networks, more frequent EAGAIN on non-blocking sockets.
+  feedback, fairer Send Queue sharing across many connections. Risk:
+  caps throughput regardless of the TCP window, even for a single
+  connection, since a socket cannot keep more than wmem bytes in
+  flight. With TSO the whole buffer can leave in one Work Queue
+  Element; the sender then waits one RTT plus IOMUX latency before it
+  can send the next portion. More frequent EAGAIN on non-blocking
+  sockets.
 
 **Send Queue sizing constraint:** With per-interface ring allocation
 (nginx profile), all connections on a worker share one Send Queue.
 Larger buffers let each connection post more Work Queue Elements
 simultaneously. At high connection counts the aggregate demand can
 exceed the hardware Send Queue capacity, causing TX drops
-(`ring_tx_dropped_wqes` in the tuning report). Reduce wmem until
-drops reach zero.
+(`ring_tx_dropped_wqes` in the tuning report). wmem bounds un-ACKed
+bytes per socket, not Send Queue slots; the saturation point depends
+on Send Queue depth, segment layout, and completion timing, so no
+fixed connection count predicts drops. Reduce wmem until drops reach
+zero.
 
 **When to change:** Increase for bulk transfers over high-latency
-links. Decrease for high connection counts or latency-sensitive apps.
-Default 1MB suits most datacenter and LAN environments.
+links, and at very small connection counts (even one) to raise
+throughput. Decrease to improve fairness across a large number of
+connections. A latency-sensitive application that sends messages
+larger than wmem gets higher latency: the transfer splits into
+several portions, each costing one RTT plus IOMUX latency. Default
+1MB suits most datacenter and LAN environments.
 
 **Override:** Per-socket via setsockopt(SO_SNDBUF). XLIO doubles the
 requested value (matching Linux kernel behavior), but counts only
@@ -1654,9 +1666,9 @@ payload bytes (kernel includes metadata overhead). Ultra API ignores
 this buffer.
 
 **Auto-modified:** set to 2MB by the nginx and
-nginx_dpu profiles ([`profiles.spec`](#profilesspec)). At 2MB the Send
-Queue saturates at ~512 concurrent senders per ring — override for
-high connection counts.
+nginx_dpu profiles ([`profiles.spec`](#profilesspec)). At high connection counts this
+size can exhaust the shared Send Queue (see the Send Queue sizing
+constraint above); lower it until `ring_tx_dropped_wqes` stays zero.
 
 **Default:** `1MB`
 
