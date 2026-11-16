@@ -85,7 +85,12 @@ protected:
         int control[2];
         ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM, 0, control));
         m_child = fork();
-        ASSERT_GE(m_child, 0);
+        if (m_child < 0) {
+            const int fork_errno = errno;
+            close(control[0]);
+            close(control[1]);
+            FAIL() << "fork errno=" << fork_errno << " (" << strerror(fork_errno) << ")";
+        }
         if (m_child == 0) {
             close(control[0]);
             peer(control[1]);
@@ -107,7 +112,8 @@ protected:
         m_epfd = track(epoll_create1(0));
         ASSERT_GE(m_epfd, 0);
         ASSERT_NO_FATAL_FAILURE(interest(EPOLL_CTL_ADD, EPOLLOUT));
-        ASSERT_NO_FATAL_FAILURE(expect_events(EPOLLOUT));
+        // Allow slow connection setup; established-connection checks keep the default timeout.
+        ASSERT_NO_FATAL_FAILURE(expect_events(EPOLLOUT, 1, 10000));
         int error = -1;
         socklen_t len = sizeof(error);
         ASSERT_EQ(0, getsockopt(m_socket, SOL_SOCKET, SO_ERROR, &error, &len));
@@ -132,10 +138,10 @@ protected:
         ASSERT_EQ(0, epoll_ctl(m_epfd, operation, m_socket, &event));
     }
 
-    void expect_events(uint32_t expected, uint64_t data = 1)
+    void expect_events(uint32_t expected, uint64_t data = 1, int timeout_ms = 1000)
     {
         epoll_event event = {};
-        int rc = epoll_wait(m_epfd, &event, 1, 1000);
+        int rc = epoll_wait(m_epfd, &event, 1, timeout_ms);
         if (rc != 1) {
             const int wait_errno = rc < 0 ? errno : 0;
             tcp_info info = {};

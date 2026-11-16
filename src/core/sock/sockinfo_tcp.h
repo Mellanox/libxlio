@@ -289,7 +289,7 @@ public:
     bool is_readable(bool do_poll = true, fd_array_t *p_fd_array = NULL) override;
     bool is_writeable() override;
     bool is_errorable(int *errors) override;
-    bool is_read_hup() const override { return m_rx_shutdown.load(std::memory_order_acquire); }
+    bool is_read_hup() const override { return m_rx_shutdown.load(std::memory_order_relaxed); }
     bool is_closable() override
     {
         return get_tcp_state(&m_pcb) == CLOSED && m_syn_received.empty() &&
