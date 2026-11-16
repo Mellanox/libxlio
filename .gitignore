@@ -78,6 +78,8 @@ contrib/scripts/libxlio.spec
 docs/doxygen
 docs/man/xlio.7
 docs/man/xlio_stats.8
-
 tests/unit_tests/unit_tests
 *.pyc
+
+# Install dir
+install/
