@@ -187,22 +187,11 @@ specific applications or processes.
 >
 > **Maps to:** `XLIO_ENVOY_WORKERS_NUM`
 
-Number of Envoy worker processes. **Must be > 0 to enable XLIO offloading for Envoy.**
+Number of Envoy worker threads. **Must be > 0 to enable XLIO offloading for Envoy.**
 
-**Behavior:** When set to a value greater than 0, XLIO creates hardware flow steering
-rules per worker so that incoming connections are steered to the correct Envoy worker
-process (Envoy spreads its listeners across workers with SO_REUSEPORT).
+**Behavior:** When set to a value greater than 0, XLIO activates the envoy profile ([`profiles.spec`](#profilesspec)=envoy) and creates a ring plus hardware flow steering rules per worker. Set to match Envoy's `concurrency` value.
 
-**Sizing:** Set to match your Envoy `--concurrency` value exactly.
-
-*Power-of-2 values (2, 4, 8, 16, ...):* Optimal. Equal traffic distribution per worker.
-
-*Non-power-of-2 values:* XLIO rounds up to the next power of 2 internally. The extra flow
-steering slots are distributed as secondary rules to the lowest-numbered workers, so those
-workers handle more traffic.
-
-**Memory:** Unlike the Nginx integration, enabling Envoy workers does not auto-apply a
-profile; size [`core.resources.memory_limit`](#coreresourcesmemory_limit) explicitly for your deployment.
+**Precedence:** Positive values for both this and [`applications.nginx.workers_num`](#applicationsnginxworkers_num) are mutually exclusive and cause configuration to fail. An explicit non-`none` [`profiles.spec`](#profilesspec) is respected over the auto-selected envoy profile.
 
 **Default:** `0`
 
@@ -4044,7 +4033,7 @@ counters.
 
 > **Type:** integer or string
 >
-> **Values:** 0/"none", 1/"ultra_latency", 2/"latency", 3/"nginx", 4/"nginx_dpu", 5/"nvme_bf3"
+> **Values:** 0/"none", 1/"ultra_latency", 2/"latency", 3/"nginx", 4/"nginx_dpu", 5/"nvme_bf3", 6/"envoy"
 >
 > **Maps to:** `XLIO_SPEC`
 
@@ -4098,6 +4087,16 @@ profile are noted in each parameter's own documentation.
   8192 strides per receive element, RST on close. For
   NVMe over Fabrics / SPDK on BlueField-3.
 
+- *"envoy" (6):* Envoy proxy profile. Targets a
+  multi-threaded L4/L7 proxy: each worker thread owns
+  its own ring and receive path, and the TCP and
+  polling settings favour throughput and low CPU
+  overhead on connection-heavy proxy traffic.
+  Auto-enabled when
+  [`applications.envoy.workers_num`](#applicationsenvoyworkers_num) > 0. Memory is not
+  preset -- size [`core.resources.memory_limit`](#coreresourcesmemory_limit) for the
+  deployment.
+
 | Workload           | Profile           | CPU  | Latency | Thru |
 |--------------------|-------------------|------|---------|------|
 | Trading / mkt data | ultra_latency (1) | 100% | Lowest  | Low  |
@@ -4106,6 +4105,7 @@ profile are noted in each parameter's own documentation.
 | HTTP proxy / nginx | nginx (3)         | Med  | Higher  | High |
 | nginx on BlueField | nginx_dpu (4)     | Med  | Higher  | High |
 | NVMe-oF on BF3     | nvme_bf3 (5)      | Med  | Med     | High |
+| Envoy proxy        | envoy (6)         | Med  | Higher  | High |
 | General purpose    | none (0)          | Med  | Med     | Good |
 
 **Default:** `"none" (0)`

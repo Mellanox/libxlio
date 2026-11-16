@@ -541,27 +541,31 @@ TEST_F(output, config_periodic_drain_max_cqes_zero)
 /**
  * @test output.config_envoy_workers_num
  * @brief
- *    Tests that applications.envoy.workers_num selects the Envoy application type
- *    through the new configuration system and does not auto-apply the Nginx profile.
+ *    Tests that configuring Envoy workers selects the Envoy application and profile.
  *
  * @details
- *    Exercises the configurator wiring, not just the schema entry:
- *    print_envoy_workers_num emits the worker count, at INFO level, only when the
- *    application type is APP_ENVOY and the value is non-default. So the banner line
- *    appears iff detect_application_profile() read applications.envoy.workers_num and
- *    set APP_ENVOY. Envoy, unlike Nginx, must not auto-apply a spec profile.
+ *    The configuration supplies only the worker count. Verify that the startup header
+ *    reports the active worker count, automatic profile selection, and effective
+ *    settings applied by the Envoy profile, without applying the Nginx profile.
  */
 TEST_F(output, config_envoy_workers_num)
 {
-    check_file("config-envoy-workers.json",
-               {
-                   // clang-format off
+    check_file(
+        "config-envoy-workers.json",
+        {
+            // clang-format off
             "Number of Envoy workers        4",
-            "[applications.envoy.workers_num, Reason: User-configured]"
-                   // clang-format on
-               },
-               {// Envoy must not inherit the Nginx spec profile
-                "Nginx profile"});
+            "[applications.envoy.workers_num, Reason: User-configured]",
+            "Application spec profile       envoy",
+            "[profiles.spec, Reason: Auto-corrected (applications.envoy.workers_num > 0)]",
+            "Timer resolution (msec)        32                         [performance.threading.internal_handler.timer_msec, Reason: Profile (Envoy profile)]",
+            "TCP timer interval (msec)      256                        [network.protocols.tcp.timer_msec, Reason: Profile (Envoy profile)]",
+            "Write buffer size (bytes)      2M                         [network.protocols.tcp.wmem, Reason: Profile (Envoy profile)]",
+            "Max RX buffers per poll        128                        [performance.polling.max_rx_poll_batch, Reason: Profile (Envoy profile)]",
+            "Periodic drain interval (msec) 0 (Disabled)               [performance.completion_queue.periodic_drain_msec, Reason: Profile (Envoy profile)]"
+            // clang-format on
+        },
+        {"Nginx profile"});
 }
 
 /**
@@ -608,7 +612,7 @@ TEST_F(output, config_nginx_workers_num)
                    // clang-format off
             "Number of Nginx workers        4",
             "[applications.nginx.workers_num, Reason: User-configured]",
-            "Reason: Profile (applications.nginx.workers_num > 0)"
+            "Reason: Auto-corrected (applications.nginx.workers_num > 0)"
                    // clang-format on
                });
 }

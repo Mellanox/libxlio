@@ -15,6 +15,7 @@ typedef enum {
     MCE_SPEC_NGINX,
     MCE_SPEC_NGINX_DPU,
     MCE_SPEC_NVME_BF3,
+    MCE_SPEC_ENVOY,
     MCE_SPEC_ALL /* last element */
 } xlio_spec_t;
 
