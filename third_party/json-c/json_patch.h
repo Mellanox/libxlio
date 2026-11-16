@@ -71,7 +71,7 @@ struct json_patch_error {
  * The json_object at *base will be modified in place.
  * Exactly one of *base or copy_from must be non-NULL.
  * If *base is NULL, a new copy of copy_from will allocated and populated
- * using json_object_deep_copy().  In this case json_object_put() _must_ be
+ * using json_object_deep_copy().  In this case json_object_put() _must_ be 
  * used to free *base even if the overall patching operation fails.
  *
  * If anything fails during patching a negative value will be returned,

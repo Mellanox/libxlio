@@ -23,12 +23,12 @@
 
 #include "config.h"
 
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
-#include "json_object_private.h"
 #include "json_patch.h"
+#include "json_object_private.h"
 #include "json_pointer_private.h"
 
 #include <limits.h>
@@ -44,37 +44,32 @@
 #endif
 #endif
 
-#define _set_err(_errval, _errmsg)                   \
-	do                                           \
-	{                                            \
-		patch_error->errno_code = (_errval); \
-		patch_error->errmsg = (_errmsg);     \
-		errno = 0; /* To avoid confusion */  \
-	} while (0)
+#define _set_err(_errval, _errmsg) do { \
+	patch_error->errno_code = (_errval); \
+	patch_error->errmsg = (_errmsg); \
+	errno = 0;  /* To avoid confusion */ \
+} while (0)
 
-#define _set_err_from_ptrget(_errval, _fieldname)                                            \
-	do                                                                                   \
-	{                                                                                    \
-		patch_error->errno_code = (_errval);                                         \
-		patch_error->errmsg = (_errval) == ENOENT                                    \
-		                          ? "Did not find element referenced by " _fieldname \
-		                            " field"                                         \
-		                          : "Invalid " _fieldname " field";                  \
-		errno = 0; /* To avoid confusion */                                          \
-	} while (0)
+#define _set_err_from_ptrget(_errval, _fieldname) do { \
+	patch_error->errno_code = (_errval); \
+	patch_error->errmsg = (_errval) == ENOENT ? \
+		"Did not find element referenced by " _fieldname " field" : \
+		"Invalid " _fieldname " field"; \
+	errno = 0;  /* To avoid confusion */ \
+} while(0)
 
 /**
  * JavaScript Object Notation (JSON) Patch
  *   RFC 6902 - https://tools.ietf.org/html/rfc6902
  */
 
-static int json_patch_apply_test(struct json_object **res, struct json_object *patch_elem,
+static int json_patch_apply_test(struct json_object **res,
+                                 struct json_object *patch_elem,
                                  const char *path, struct json_patch_error *patch_error)
 {
 	struct json_object *value1, *value2;
 
-	if (!doca_third_party_json_object_object_get_ex(patch_elem, "value", &value1))
-	{
+	if (!doca_third_party_json_object_object_get_ex(patch_elem, "value", &value1)) {
 		_set_err(EINVAL, "Patch object does not contain a 'value' field");
 		return -1;
 	}
@@ -85,10 +80,8 @@ static int json_patch_apply_test(struct json_object **res, struct json_object *p
 		return -1;
 	}
 
-	if (!doca_third_party_json_object_equal(value1, value2))
-	{
-		_set_err(ENOENT,
-		         "Value of element referenced by 'path' field did not match 'value' field");
+	if (!doca_third_party_json_object_equal(value1, value2)) {
+		_set_err(ENOENT, "Value of element referenced by 'path' field did not match 'value' field");
 		return -1;
 	}
 
@@ -97,18 +90,12 @@ static int json_patch_apply_test(struct json_object **res, struct json_object *p
 
 static int __json_patch_apply_remove(struct json_pointer_get_result *jpres)
 {
-	if (doca_third_party_json_object_is_type(jpres->parent, json_type_array))
-	{
-		return doca_third_party_json_object_array_del_idx(jpres->parent,
-		                                                  jpres->index_in_parent, 1);
-	}
-	else if (jpres->parent && jpres->key_in_parent)
-	{
+	if (doca_third_party_json_object_is_type(jpres->parent, json_type_array)) {
+		return doca_third_party_json_object_array_del_idx(jpres->parent, jpres->index_in_parent, 1);
+	} else if (jpres->parent && jpres->key_in_parent) {
 		doca_third_party_json_object_object_del(jpres->parent, jpres->key_in_parent);
 		return 0;
-	}
-	else
-	{
+	} else {
 		// We're removing the root object
 		(void)doca_third_party_json_object_put(jpres->obj);
 		jpres->obj = NULL;
@@ -116,8 +103,7 @@ static int __json_patch_apply_remove(struct json_pointer_get_result *jpres)
 	}
 }
 
-static int json_patch_apply_remove(struct json_object **res, const char *path,
-                                   struct json_patch_error *patch_error)
+static int json_patch_apply_remove(struct json_object **res, const char *path, struct json_patch_error *patch_error)
 {
 	struct json_pointer_get_result jpres;
 	int rc;
@@ -160,28 +146,25 @@ static int json_object_array_insert_idx_cb(struct json_object *parent, size_t id
 	return rc;
 }
 
-static int json_patch_apply_add_replace(struct json_object **res, struct json_object *patch_elem,
-                                        const char *path, int add,
-                                        struct json_patch_error *patch_error)
+static int json_patch_apply_add_replace(struct json_object **res,
+                                        struct json_object *patch_elem,
+                                        const char *path, int add, struct json_patch_error *patch_error)
 {
 	struct json_object *value;
 	int rc;
 
-	if (!doca_third_party_json_object_object_get_ex(patch_elem, "value", &value))
-	{
+	if (!doca_third_party_json_object_object_get_ex(patch_elem, "value", &value)) {
 		_set_err(EINVAL, "Patch object does not contain a 'value' field");
 		return -1;
 	}
 	/* if this is a replace op, then we need to make sure it exists before replacing */
-	if (!add && doca_third_party_json_pointer_get(*res, path, NULL))
-	{
+	if (!add && doca_third_party_json_pointer_get(*res, path, NULL)) {
 		_set_err_from_ptrget(errno, "path");
 		return -1;
 	}
 
-	rc = doca_third_party_json_pointer_set_with_array_cb(
-	    res, path, doca_third_party_json_object_get(value), json_object_array_insert_idx_cb,
-	    &add);
+	rc = doca_third_party_json_pointer_set_with_array_cb(res, path, doca_third_party_json_object_get(value),
+					    json_object_array_insert_idx_cb, &add);
 	if (rc)
 	{
 		_set_err(errno, "Failed to set value at path referenced by 'path' field");
@@ -221,9 +204,9 @@ static int json_object_array_move_cb(struct json_object *parent, size_t idx,
 	return rc;
 }
 
-static int json_patch_apply_move_copy(struct json_object **res, struct json_object *patch_elem,
-                                      const char *path, int move,
-                                      struct json_patch_error *patch_error)
+static int json_patch_apply_move_copy(struct json_object **res,
+                                      struct json_object *patch_elem,
+                                      const char *path, int move, struct json_patch_error *patch_error)
 {
 	json_pointer_array_set_cb array_set_cb;
 	struct json_pointer_get_result from;
@@ -232,8 +215,7 @@ static int json_patch_apply_move_copy(struct json_object **res, struct json_obje
 	size_t from_s_len;
 	int rc;
 
-	if (!doca_third_party_json_object_object_get_ex(patch_elem, "from", &jfrom))
-	{
+	if (!doca_third_party_json_object_object_get_ex(patch_elem, "from", &jfrom)) {
 		_set_err(EINVAL, "Patch does not contain a 'from' field");
 		return -1;
 	}
@@ -241,8 +223,7 @@ static int json_patch_apply_move_copy(struct json_object **res, struct json_obje
 	from_s = doca_third_party_json_object_get_string(jfrom);
 
 	from_s_len = strlen(from_s);
-	if (strncmp(from_s, path, from_s_len) == 0)
-	{
+	if (strncmp(from_s, path, from_s_len) == 0) {
 		/**
 		 * If lengths match, it's a noop, if they don't,
 		 * then we're trying to move a parent under a child
@@ -267,23 +248,18 @@ static int json_patch_apply_move_copy(struct json_object **res, struct json_obje
 	// to the path check above, so from.parent is guaranteed non-NULL
 	doca_third_party_json_object_get(from.obj);
 
-	if (!move)
-	{
+	if (!move) {
 		array_set_cb = json_object_array_insert_idx_cb;
-	}
-	else
-	{
+	} else {
 		rc = __json_patch_apply_remove(&from);
-		if (rc < 0)
-		{
+		if (rc < 0) {
 			doca_third_party_json_object_put(from.obj);
 			return rc;
 		}
 		array_set_cb = json_object_array_move_cb;
 	}
 
-	rc =doca_third_party_json_pointer_set_with_array_cb(res, path, from.obj, array_set_cb,
-	                                                     &from);
+	rc = doca_third_party_json_pointer_set_with_array_cb(res, path, from.obj, array_set_cb, &from);
 	if (rc)
 	{
 		_set_err(errno, "Failed to set value at path referenced by 'path' field");
@@ -294,8 +270,7 @@ static int json_patch_apply_move_copy(struct json_object **res, struct json_obje
 }
 
 int doca_third_party_json_patch_apply(struct json_object *copy_from, struct json_object *patch,
-                                      struct json_object **base,
-                                      struct json_patch_error *patch_error)
+                     struct json_object **base, struct json_patch_error *patch_error)
 {
 	size_t ii;
 	int rc = 0;
@@ -307,15 +282,15 @@ int doca_third_party_json_patch_apply(struct json_object *copy_from, struct json
 	patch_error->patch_failure_idx = SIZE_T_MAX;
 	patch_error->errno_code = 0;
 
-	if (base == NULL || (*base == NULL && copy_from == NULL) ||
+	if (base == NULL|| 
+	    (*base == NULL && copy_from == NULL) ||
 	    (*base != NULL && copy_from != NULL))
 	{
 		_set_err(EFAULT, "Exactly one of *base or copy_from must be non-NULL");
 		return -1;
 	}
-
-	if (!doca_third_party_json_object_is_type(patch, json_type_array))
-	{
+	    
+	if (!doca_third_party_json_object_is_type(patch, json_type_array)) {
 		_set_err(EFAULT, "Patch object is not of type json_type_array");
 		return -1;
 	}
@@ -330,23 +305,19 @@ int doca_third_party_json_patch_apply(struct json_object *copy_from, struct json
 	}
 
 	/* Go through all operations ; apply them on res */
-	for (ii = 0; ii < doca_third_party_json_object_array_length(patch); ii++)
-	{
+	for (ii = 0; ii < doca_third_party_json_object_array_length(patch); ii++) {
 		struct json_object *jop, *jpath;
-		struct json_object *patch_elem =
-		    doca_third_party_json_object_array_get_idx(patch, ii);
+		struct json_object *patch_elem = doca_third_party_json_object_array_get_idx(patch, ii);
 		const char *op, *path;
 
 		patch_error->patch_failure_idx = ii;
 
-		if (!doca_third_party_json_object_object_get_ex(patch_elem, "op", &jop))
-		{
+		if (!doca_third_party_json_object_object_get_ex(patch_elem, "op", &jop)) {
 			_set_err(EINVAL, "Patch object does not contain 'op' field");
 			return -1;
 		}
 		op = doca_third_party_json_object_get_string(jop);
-		if (!doca_third_party_json_object_object_get_ex(patch_elem, "path", &jpath))
-		{
+		if (!doca_third_party_json_object_object_get_ex(patch_elem, "path", &jpath)) {
 			_set_err(EINVAL, "Patch object does not contain 'path' field");
 			return -1;
 		}
@@ -364,8 +335,7 @@ int doca_third_party_json_patch_apply(struct json_object *copy_from, struct json
 			rc = json_patch_apply_move_copy(base, patch_elem, path, 1, patch_error);
 		else if (!strcmp(op, "copy"))
 			rc = json_patch_apply_move_copy(base, patch_elem, path, 0, patch_error);
-		else
-		{
+		else {
 			_set_err(EINVAL, "Patch object has invalid 'op' field");
 			return -1;
 		}

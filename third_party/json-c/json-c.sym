@@ -65,10 +65,10 @@ JSONC_PRIVATE {
 
 JSONC_0.14 {
   global:
-    doca_third_party_doca_third_party_array_list_bsearch;
-    doca_third_party_doca_third_party_array_list_get_idx;
-    doca_third_party_doca_third_party_array_list_length;
-    doca_third_party_doca_third_party_json_c_get_random_seed;
+    doca_third_party_array_list_bsearch;
+    doca_third_party_array_list_get_idx;
+    doca_third_party_array_list_length;
+    doca_third_party_json_c_get_random_seed;
     doca_third_party_json_c_object_sizeof;
     doca_third_party_json_c_set_serialization_double_format;
     doca_third_party_json_c_shallow_copy_default;

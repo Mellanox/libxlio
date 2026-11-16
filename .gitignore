@@ -25,6 +25,7 @@ xlio_config_schema.h
 /config.h
 config.h.in
 config.h.in~
+!third_party/json-c/cmake/config.h.in
 config.log
 config.status
 third_party/json-c/json_config.h

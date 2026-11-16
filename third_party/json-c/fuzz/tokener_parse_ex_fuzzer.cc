@@ -26,13 +26,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	const char *data1 = reinterpret_cast<const char *>(data);
 	json_tokener *tok = doca_third_party_json_tokener_new();
 	json_object *obj = doca_third_party_json_tokener_parse_ex(tok, data1, size);
-
+	
 	doca_third_party_json_object_object_foreach(jobj, key, val) {
 		(void)doca_third_party_json_object_get_type(val);
 		(void)doca_third_party_json_object_get_string(val);
 	}
 	(void)doca_third_party_json_object_to_json_string(obj, JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_SPACED);
-
+	
 	doca_third_party_json_object_put(obj);
 	doca_third_party_json_tokener_free(tok);
 	return 0;
