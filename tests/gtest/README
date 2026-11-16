@@ -98,3 +98,11 @@ Profiles are independent of address family. Pass IPv4 or IPv6 endpoints using
 arguments can follow --, for example:
 
    tests/gtest/run --profiles r2c-default --addr 2001:db8::1,2001:db8::2 -- -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+
+Use --kernel to run without XLIO, for example:
+
+   tests/gtest/run --kernel --addr client_ip,server_ip
+
+--kernel is mutually exclusive with --xlio-lib. It removes inherited LD_PRELOAD
+and XLIO_* settings from the test environment and skips XLIO configuration
+rendering. Profile filters still apply.

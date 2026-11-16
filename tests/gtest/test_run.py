@@ -51,10 +51,41 @@ sys.exit(7 if os.environ.get('FAIL_R2C') and
     def invoke(self, *args, **extra_env):
         self.assertTrue(RUN.exists(), "shared gtest runner is missing")
         return subprocess.run(
-            [str(RUN), '--gtest-bin=' + str(self.app), '--xlio-lib=' + str(self.lib),
+            [str(RUN), '--gtest-bin=' + str(self.app),
+             *([] if '--kernel' in args else ['--xlio-lib=' + str(self.lib)]),
              '--output-dir=' + str(self.root / 'results'), *args],
             cwd=self.root, env=dict(os.environ, RECORD=str(self.record), **extra_env),
             text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def test_kernel_clears_xlio_environment_and_skips_configs(self):
+        result = self.invoke('--kernel', '--profiles=rto-floor-max',
+                             '--addr=192.0.2.1,192.0.2.2',
+                             LD_PRELOAD=str(self.lib), XLIO_CONFIG_FILE='/missing/config',
+                             XLIO_TRACELEVEL='4')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        call, = self.calls()
+        self.assertNotIn('LD_PRELOAD', call['env'])
+        self.assertFalse(any(key.startswith('XLIO_') for key in call['env']))
+        self.assertIsNone(call['config'])
+        self.assertFalse(list((self.root / 'results').rglob('*.json')))
+        self.assertIn('--addr=192.0.2.1,192.0.2.2', call['args'])
+        self.assertIn('--gtest_filter=tcp_sockopt.ti_1b_tcp_info_low_rtt_us', call['args'])
+        self.assertIn('Total: 1 passed, 0 failed.', result.stdout)
+
+    def test_kernel_rejects_explicit_xlio_library(self):
+        for option in (['--xlio-lib=' + str(self.lib)], ['--xlio-lib', str(self.lib)]):
+            result = self.invoke('--kernel', *option, '--addr=192.0.2.1,192.0.2.2')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('not allowed with argument', result.stderr)
+            self.assertFalse(self.record.exists())
+
+    def test_kernel_dry_run_has_no_xlio_configuration(self):
+        result = self.invoke('--kernel', '--dry-run', '--addr=192.0.2.1,192.0.2.2')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('LD_PRELOAD=', result.stdout)
+        self.assertNotIn('XLIO_', result.stdout)
+        self.assertNotIn('render ', result.stdout)
+        self.assertFalse((self.root / 'results').exists())
 
     def test_workspace_defaults_and_ci_environment_is_preserved(self):
         for name in ('WORKSPACE', 'GTEST_TAP'):

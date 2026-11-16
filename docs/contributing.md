@@ -168,11 +168,11 @@ All tests can be launched on single node that has two interfaces.
 
 Run tests under OS:
 ```shell
-$ ./tests/gtest/gtest --addr=1.1.3.6,1.1.4.6
+$ ./tests/gtest/run --kernel --addr=1.1.3.6,1.1.4.6
 ```
 or
 ```shell
-$ ./tests/gtest/gtest --if=ens2f0,ens2f1 --gtest_filter=tcp_sendfile.*
+$ ./tests/gtest/run --kernel --addr=1.1.3.6,1.1.4.6 --filter=tcp_sendfile.*
 ```
 
 Run tests under XLIO:

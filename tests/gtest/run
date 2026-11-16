@@ -105,7 +105,9 @@ and offloadable networking beforehand; this script never invokes sudo.
     parser.add_argument('--addr', default='', metavar='CLIENT,SERVER', help='client and server endpoints on offloadable interfaces')
     parser.add_argument('--filter', metavar='PATTERN', help="override every selected profile's gtest filter")
     parser.add_argument('--gtest-bin', type=Path, default=SOURCE_ROOT / 'tests/gtest/gtest', help='gtest executable')
-    parser.add_argument('--xlio-lib', type=Path, default=SOURCE_ROOT / 'src/core/.libs/libxlio.so', help='XLIO library')
+    backend = parser.add_mutually_exclusive_group()
+    backend.add_argument('--kernel', action='store_true', help='run using the kernel without XLIO')
+    backend.add_argument('--xlio-lib', type=Path, default=SOURCE_ROOT / 'src/core/.libs/libxlio.so', help='XLIO library')
     parser.add_argument('--output-dir', type=Path, default=Path.cwd() / 'gtest-results',
                         help='parent for timestamped run directories (default: ./gtest-results)')
     parser.add_argument('--timeout', default='20m', help='per-run GNU timeout duration (default: %(default)s; 0 disables)')
@@ -124,7 +126,7 @@ and offloadable networking beforehand; this script never invokes sudo.
     if not args.dry_run:
         if not args.gtest_bin.is_file() or not os.access(str(args.gtest_bin), os.X_OK):
             parser.error('executable not found: ' + str(args.gtest_bin))
-        if not args.xlio_lib.is_file() or not os.access(str(args.xlio_lib), os.R_OK):
+        if not args.kernel and (not args.xlio_lib.is_file() or not os.access(str(args.xlio_lib), os.R_OK)):
             parser.error('library not found: ' + str(args.xlio_lib))
     if not args.timeout:
         parser.error('empty timeout')
@@ -220,7 +222,7 @@ def main():
         if not all(selected):
             raise ValueError('empty profile')
         descriptions = [describe_profile(name, args) for name in selected]
-        rendered_configs = [render_config(description[4], description[5])
+        rendered_configs = [None if args.kernel else render_config(description[4], description[5])
                             for description in descriptions]
     except (OSError, ValueError) as error:
         parser.error(str(error))
@@ -234,6 +236,9 @@ def main():
     # Work on a copy: only gtest children see the profile's environment.
     child_env = {key: value for key, value in os.environ.items()
                  if key not in ('GTEST_FILTER', 'GTEST_OUTPUT')}
+    if args.kernel:
+        child_env = {key: value for key, value in child_env.items()
+                     if key != 'LD_PRELOAD' and not key.startswith('XLIO_')}
     child_env.setdefault('WORKSPACE', str(SOURCE_ROOT))
     failures = []
     summaries = []
@@ -241,7 +246,7 @@ def main():
         env, network_args, test_filter, xml_name, config_source, substitutions = description
         if args.filter is not None:
             test_filter = args.filter
-        env = dict(LD_PRELOAD=str(args.xlio_lib), **env)
+        env = {} if args.kernel else dict(LD_PRELOAD=str(args.xlio_lib), **env)
         run_dir = args.output_dir / name
         xml_path = args.output_dir / (xml_name + '.xml')
         command = ([] if args.timeout == '0' else ['timeout', '-s', 'SIGKILL', '--', args.timeout])
@@ -254,7 +259,8 @@ def main():
         command_text = ' '.join(shlex.quote(arg) for arg in command)
         print('[{}] {}'.format(name, command_text), flush=True)
         if args.dry_run:
-            print('  render {} -> {}'.format(config_source, env['XLIO_CONFIG_FILE']))
+            if not args.kernel:
+                print('  render {} -> {}'.format(config_source, env['XLIO_CONFIG_FILE']))
             continue
         report = None
         report_error = ''
@@ -263,7 +269,8 @@ def main():
             run_dir.mkdir(parents=True, exist_ok=True)
             (run_dir / 'command.txt').write_text(
                 'cd ' + shlex.quote(str(run_dir)) + '\n' + command_text + '\n')
-            Path(env['XLIO_CONFIG_FILE']).write_text(rendered_config)
+            if not args.kernel:
+                Path(env['XLIO_CONFIG_FILE']).write_text(rendered_config)
             rc = execute(command, run_dir, child_env)
             report = read_report(xml_path)
         except (OSError, ET.ParseError, ValueError) as error:
