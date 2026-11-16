@@ -291,8 +291,10 @@ void sys_var_configurator::configure()
     // Scans config registry for all user settings and sets
     // run-time variables accordingly
     m_runtime_registry.set_all_configured_values();
-    m_runtime_registry.set_value(CONFIG_VAR_SPEC, selected_spec, selection_reason,
-                                 selection_description);
+    if (selection_reason != change_reason::NotChanged) {
+        m_runtime_registry.set_value(CONFIG_VAR_SPEC, selected_spec, selection_reason,
+                                     selection_description);
+    }
 
     // Check and overrides some run-time variables
     configure_after_user_settings();
