@@ -281,9 +281,18 @@ void sys_var_configurator::configure()
 
     configure_before_user_settings();
 
+    // Profile selection is already resolved. Preserve it and its reason when an explicit
+    // "none" is reloaded below, while allowing user overrides of individual profile settings.
+    const auto selected_spec = static_cast<int64_t>(m_sys_vars.mce_spec);
+    const auto selection_reason = m_runtime_registry.get_last_change_reason(CONFIG_VAR_SPEC.name);
+    const std::string selection_description =
+        m_runtime_registry.get_last_change_description(CONFIG_VAR_SPEC.name);
+
     // Scans config registry for all user settings and sets
     // run-time variables accordingly
     m_runtime_registry.set_all_configured_values();
+    m_runtime_registry.set_value(CONFIG_VAR_SPEC, selected_spec, selection_reason,
+                                 selection_description);
 
     // Check and overrides some run-time variables
     configure_after_user_settings();

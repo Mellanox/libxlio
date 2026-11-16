@@ -544,9 +544,9 @@ TEST_F(output, config_periodic_drain_max_cqes_zero)
  *    Tests that configuring Envoy workers selects the Envoy application and profile.
  *
  * @details
- *    The configuration supplies only the worker count. Verify that the startup header
- *    reports the active worker count, automatic profile selection, and effective
- *    settings applied by the Envoy profile, without applying the Nginx profile.
+ *    The configuration supplies the worker count and explicitly sets the profile to none.
+ *    Verify that automatic Envoy profile selection and its change reason survive the
+ *    user-settings pass, and that effective settings come from the Envoy profile.
  */
 TEST_F(output, config_envoy_workers_num)
 {
