@@ -5,6 +5,7 @@
  */
 
 #include "tcp_base.h"
+#include "core/xlio_extra.h"
 #include <vector>
 #include <chrono>
 
@@ -15,6 +16,7 @@ protected:
     int m_control = -1;
     int m_socket = -1;
     int m_epfd = -1;
+    bool m_peer_stopped = false;
 
     int track(int fd)
     {
@@ -26,6 +28,9 @@ protected:
 
     void TearDown() override
     {
+        if (m_peer_stopped) {
+            EXPECT_EQ(0, kill(m_child, SIGCONT));
+        }
         // Closing the control channel releases the peer even after a fatal
         // assertion.
         for (auto it = m_fds.rbegin(); it != m_fds.rend(); ++it) {
@@ -199,6 +204,88 @@ protected:
             ASSERT_TRUE(errno == EAGAIN || errno == EWOULDBLOCK);
         } while (std::chrono::steady_clock::now() < deadline);
         ASSERT_EQ(0, received);
+    }
+
+    void expect_rdhup_persistent(int operation)
+    {
+        ASSERT_NO_FATAL_FAILURE(interest(operation, EPOLLRDHUP | EPOLLONESHOT, 10));
+        epoll_event event = {};
+        ASSERT_EQ(1, epoll_wait(m_epfd, &event, 1, 10000));
+        ASSERT_NE(0U, event.events & EPOLLRDHUP);
+        EXPECT_EQ(10U, event.data.u64);
+        // MOD must reconstruct shutdown after the one-shot RDHUP was consumed.
+        ASSERT_NO_FATAL_FAILURE(interest(EPOLL_CTL_MOD, EPOLLRDHUP | EPOLLONESHOT, 11));
+        event = {};
+        ASSERT_EQ(1, epoll_wait(m_epfd, &event, 1, 1000));
+        ASSERT_NE(0U, event.events & EPOLLRDHUP);
+        EXPECT_EQ(11U, event.data.u64);
+        ASSERT_EQ(0, epoll_ctl(m_epfd, EPOLL_CTL_DEL, m_socket, nullptr));
+        ASSERT_NO_FATAL_FAILURE(interest(EPOLL_CTL_ADD, EPOLLRDHUP, 12));
+        event = {};
+        ASSERT_EQ(1, epoll_wait(m_epfd, &event, 1, 1000));
+        ASSERT_NE(0U, event.events & EPOLLRDHUP);
+        EXPECT_EQ(12U, event.data.u64);
+    }
+
+    int wait_for_timeout_event(epoll_event &event)
+    {
+        // Delegate mode advances TCP timers on entry to epoll_wait(). Use short
+        // waits so the TCP timeout can fire within the overall 10-second deadline.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        for (;;) {
+            const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       deadline - std::chrono::steady_clock::now())
+                                       .count();
+            if (remaining <= 0) {
+                return 0;
+            }
+            int rc = epoll_wait(m_epfd, &event, 1, remaining < 50 ? remaining : 50);
+            if (rc != 0 && !(rc < 0 && errno == EINTR)) {
+                return rc;
+            }
+        }
+    }
+
+    void handshake_timeout(bool nonblocking)
+    {
+        SKIP_TRUE(xlio_get_api(), "Requires XLIO external VLAN tagging");
+        // As in tcp_sockopt.ti_4_ext_vlan_tag_connect_fail, send a tagged SYN
+        // to an untagged listener. No firewall changes or unreachable IP guesses.
+        int listener = track(sock_create());
+        ASSERT_GE(listener, 0);
+        ASSERT_EQ(0, bind(listener, &server_addr.addr, sizeof(server_addr)));
+        ASSERT_EQ(0, listen(listener, SOMAXCONN));
+        m_socket = track(nonblocking ? sock_create_nb() : sock_create());
+        ASSERT_GE(m_socket, 0);
+        sockaddr_store_t local = client_addr;
+        sys_set_port(&local.addr, 0);
+        ASSERT_EQ(0, bind(m_socket, &local.addr, sizeof(local)));
+        int vlan = 1;
+        ASSERT_EQ(0, setsockopt(m_socket, SOL_SOCKET, SO_XLIO_EXT_VLAN_TAG, &vlan, sizeof(vlan)));
+        unsigned int timeout_ms = 1000;
+        ASSERT_EQ(
+            0,
+            setsockopt(m_socket, IPPROTO_TCP, TCP_USER_TIMEOUT, &timeout_ms, sizeof(timeout_ms)));
+        timeval limit = {10, 0};
+        ASSERT_EQ(0, setsockopt(m_socket, SOL_SOCKET, SO_SNDTIMEO, &limit, sizeof(limit)));
+        m_epfd = track(epoll_create1(0));
+        ASSERT_GE(m_epfd, 0);
+        if (nonblocking) {
+            ASSERT_NO_FATAL_FAILURE(interest(EPOLL_CTL_ADD, EPOLLRDHUP));
+        }
+        ASSERT_EQ(-1, connect(m_socket, &server_addr.addr, sizeof(server_addr)));
+        ASSERT_EQ(nonblocking ? EINPROGRESS : ETIMEDOUT, errno);
+        if (nonblocking) {
+            epoll_event event = {};
+            ASSERT_EQ(1, wait_for_timeout_event(event));
+            ASSERT_NE(0U, event.events & EPOLLRDHUP);
+            int error = 0;
+            socklen_t len = sizeof(error);
+            ASSERT_EQ(0, getsockopt(m_socket, SOL_SOCKET, SO_ERROR, &error, &len));
+            ASSERT_EQ(ETIMEDOUT, error);
+        }
+        ASSERT_NO_FATAL_FAILURE(
+            expect_rdhup_persistent(nonblocking ? EPOLL_CTL_MOD : EPOLL_CTL_ADD));
     }
 
     void refused_connection(uint32_t requested)
@@ -473,6 +560,26 @@ TEST_F(tcp_event, rdhup_mod_after_reset)
     EXPECT_EQ(2U, event.data.u64);
 }
 
+TEST_F(tcp_event, reset_mod_in_out_notifies)
+{
+    SKIP_TRUE(xlio_get_api(), "Checks XLIO's current reset event mask");
+    ASSERT_NO_FATAL_FAILURE(connected_pair());
+    ASSERT_NO_FATAL_FAILURE(interest(EPOLL_CTL_MOD, EPOLLRDHUP | EPOLLET | EPOLLONESHOT));
+    ASSERT_NO_FATAL_FAILURE(command('R'));
+    epoll_event event = {};
+    ASSERT_EQ(1, epoll_wait(m_epfd, &event, 1, 10000));
+    ASSERT_NE(0U, event.events & EPOLLRDHUP);
+    // ET consumes the queued terminal flags; leave the socket error pending.
+    ASSERT_NO_FATAL_FAILURE(interest(EPOLL_CTL_MOD, EPOLLIN | EPOLLOUT, 2));
+    // This exact mask verifies the current implementation. Once MR#5431605 is
+    // fixed, update the expected mask to include the reconstructed terminal events
+    // so this test passes with the corrected behavior.
+    ASSERT_NO_FATAL_FAILURE(expect_events(EPOLLIN | EPOLLOUT, 2));
+    char byte = 0;
+    ASSERT_EQ(-1, recv(m_socket, &byte, 1, MSG_DONTWAIT));
+    EXPECT_EQ(ECONNRESET, errno);
+}
+
 TEST_F(tcp_event, rdhup_worker_rejected_reconnect)
 {
     // Run this test only in worker-thread mode. After SHUT_RDWR, worker mode
@@ -489,4 +596,40 @@ TEST_F(tcp_event, rdhup_worker_rejected_reconnect)
     epoll_event event = {};
     ASSERT_EQ(1, epoll_wait(m_epfd, &event, 1, 1000));
     EXPECT_NE(0U, event.events & EPOLLRDHUP);
+}
+
+TEST_F(tcp_event, rdhup_nonblocking_handshake_timeout)
+{
+    ASSERT_NO_FATAL_FAILURE(handshake_timeout(true));
+}
+
+TEST_F(tcp_event, rdhup_blocking_handshake_timeout)
+{
+    ASSERT_NO_FATAL_FAILURE(handshake_timeout(false));
+}
+
+TEST_F(tcp_event, rdhup_established_timeout)
+{
+    SKIP_TRUE(xlio_get_api(), "Requires an XLIO peer whose TCP progress can be paused");
+    ASSERT_NO_FATAL_FAILURE(connected_pair());
+    unsigned int timeout_ms = 1000;
+    ASSERT_EQ(0,
+              setsockopt(m_socket, IPPROTO_TCP, TCP_USER_TIMEOUT, &timeout_ms, sizeof(timeout_ms)));
+    ASSERT_NO_FATAL_FAILURE(interest(EPOLL_CTL_MOD, EPOLLRDHUP));
+    // Stop every peer thread so the next byte remains unacknowledged.
+    // TearDown resumes the peer even on assertion failure.
+    ASSERT_EQ(0, kill(m_child, SIGSTOP));
+    m_peer_stopped = true;
+    int status = 0;
+    ASSERT_EQ(m_child, waitpid(m_child, &status, WUNTRACED));
+    ASSERT_TRUE(WIFSTOPPED(status));
+    ASSERT_EQ(1, send(m_socket, "x", 1, MSG_NOSIGNAL));
+    epoll_event event = {};
+    ASSERT_EQ(1, wait_for_timeout_event(event));
+    ASSERT_NE(0U, event.events & EPOLLRDHUP);
+    int error = 0;
+    socklen_t len = sizeof(error);
+    ASSERT_EQ(0, getsockopt(m_socket, SOL_SOCKET, SO_ERROR, &error, &len));
+    ASSERT_EQ(ETIMEDOUT, error);
+    ASSERT_NO_FATAL_FAILURE(expect_rdhup_persistent(EPOLL_CTL_MOD));
 }

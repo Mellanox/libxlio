@@ -549,10 +549,9 @@ int epfd_info::mod_fd(int fd, epoll_event *event)
         remove_socket_from_ready_list(temp_sock_fd_api);
     }
 
-    // Query persistent shutdown AFTER removing stale readiness. A worker may
-    // publish FIN between the initial IN/OUT checks and that removal; querying
-    // before removal could discard its only RDHUP notification. FIN publishes
-    // the state before notifying, so either this check or its callback queues it.
+    // Restore persistent receive-shutdown readiness after clearing stale events.
+    // RDHUP callbacks take the same epoll lock as MOD, so a concurrent shutdown
+    // is either observed here or queued by its callback after MOD unlocks.
     if (is_offloaded && (event->events & EPOLLRDHUP) && temp_sock_fd_api->is_read_hup()) {
         events |= EPOLLRDHUP;
     }

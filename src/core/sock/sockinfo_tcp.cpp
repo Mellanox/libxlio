@@ -1939,6 +1939,12 @@ void sockinfo_tcp::tcp_state_observer(void *pcb_container, enum tcp_state new_st
 {
     sockinfo_tcp *p_si_tcp = (sockinfo_tcp *)pcb_container;
     IF_STATS_O(p_si_tcp, p_si_tcp->m_p_socket_stats->tcp_state = new_state);
+    if (new_state == SYN_SENT) {
+        // A new outgoing handshake starts only after the SYN is enqueued.
+        // Rejected connect attempts must preserve receive-shutdown state.
+        // This is why we reset this flag here and not before.
+        p_si_tcp->m_rx_shutdown.store(false, std::memory_order_relaxed);
+    }
     if (p_si_tcp->is_xlio_socket()) {
         if (new_state == CLOSE_WAIT) {
             p_si_tcp->xlio_socket_event(XLIO_SOCKET_EVENT_CLOSED, 0);
@@ -2010,28 +2016,23 @@ void sockinfo_tcp::err_lwip_cb(void *pcb_container, err_t err)
 
     ASSERT_LOCKED(conn->m_tcp_con_lock);
 
-    /*
-     * In case we got RST from the other end we need to marked this socket as ready to read for
-     * epoll
-     */
+    // Report terminal TCP errors to epoll while the PCB is still active.
     if ((conn->m_sock_state == TCP_SOCK_CONNECTED_RD ||
          conn->m_sock_state == TCP_SOCK_CONNECTED_RDWR ||
          conn->m_sock_state == TCP_SOCK_ASYNC_CONNECT ||
          conn->m_conn_state == TCP_CONN_CONNECTING) &&
         PCB_IN_ACTIVE_STATE(&conn->m_pcb)) {
+        // RST, timeout and other terminal errors end receive activity even
+        // during a handshake, regardless of whether connect() is blocking.
+        conn->m_rx_shutdown.store(true, std::memory_order_relaxed);
+        uint32_t events = EPOLLIN | EPOLLHUP | EPOLLRDHUP;
         if (err == ERR_RST) {
-            if (conn->m_sock_state == TCP_SOCK_ASYNC_CONNECT) {
-                NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLERR | EPOLLHUP));
-            } else {
-                conn->m_rx_shutdown.store(true, std::memory_order_relaxed);
-                NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP));
-            }
+            events |= EPOLLERR;
             /* TODO what about no route to host type of errors, need to add EPOLLERR in this
              * case ?
              */
-        } else { // ERR_TIMEOUT
-            NOTIFY_ON_EVENTS(conn, (EPOLLIN | EPOLLHUP));
         }
+        NOTIFY_ON_EVENTS(conn, events);
 
         io_mux_call::update_fd_array(conn->m_iomux_ready_fd_array, conn->m_fd);
     }
