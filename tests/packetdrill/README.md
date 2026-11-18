@@ -188,6 +188,27 @@ Exit codes are 0 for passing/skipped cases, 1 for test or offload failures,
 per-test timeout is 30 seconds; `--timeout SECONDS` changes it. Investigate a
 failure using the case logs before changing packet expectations or timing.
 
+### Passing Packetdrill options
+
+Put extra Packetdrill options after `--`. Keep all `pd` options before it:
+
+```sh
+sudo tests/packetdrill/pd run --interface ens2f0np0 \
+    --client-ip 192.0.2.1 --server-ip 192.0.2.2 \
+    --tolerance-usecs 5000 -- --tolerance_percent=0
+```
+
+This example selects a 5 ms fixed tolerance and disables percentage-based
+slack. Forwarding works in all three run modes. Arguments are passed unchanged
+to each Packetdrill client, after the runner's generated options and before the
+test filename, without shell evaluation. Later options can override generated
+defaults; use the runner's interface/IP options for topology configuration.
+Packetdrill sends its client arguments to the wire worker as part of its normal
+protocol. Extra arguments are recorded in `metadata.json`.
+
+The separator is supported only with `run`. Unknown options before `--` remain
+errors. Quote values containing spaces as a single shell argument.
+
 ## Optional files beside each test
 
 For `example.pkt`, the runner recognizes these optional files in the same

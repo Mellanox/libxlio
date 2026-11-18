@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for the runner's failure and offload-evidence contracts (no NIC needed)."""
+import argparse
 import contextlib
 import importlib.util
 import io
@@ -73,7 +74,8 @@ class RunnerTests(unittest.TestCase):
                     mod = runner_module()
                     output = root / ('run-' + str(index))
                     argv = ['pd', 'run'] + options + [
-                        '--client-ip', '192.0.2.1', '--server-ip', '192.0.2.2', '--output', str(output)]
+                        '--client-ip', '192.0.2.1', '--server-ip', '192.0.2.2', '--output', str(output),
+                        '--', '--tolerance_percent=0', '--define', 'label=a b;$(false)']
                     stdout, stderr = io.StringIO(), io.StringIO()
                     # Capture dispatch at the hardware boundary; no NIC setup is performed.
                     with (mock.patch.object(mod, 'CASES', root / 'cases'),
@@ -89,6 +91,8 @@ class RunnerTests(unittest.TestCase):
                     self.assertEqual(status, 0, stdout.getvalue() + stderr.getvalue())
                     execute.assert_called_once()
                     args = execute.call_args.args[0]
+                    self.assertEqual(args.packetdrill_args,
+                                     ['--tolerance_percent=0', '--define', 'label=a b;$(false)'])
                     self.assertEqual(args.vf, expected_vf)
                     self.assertEqual(args.server_host, server_host)
                     if expected_vf:
@@ -96,6 +100,55 @@ class RunnerTests(unittest.TestCase):
                     else:
                         self.assertEqual(args.client_interface, options[1])
                         self.assertEqual(args.server_interface, options[3])
+
+    def test_packetdrill_options_require_run_and_separator(self):
+        for options in (['list', '--', '--tolerance_percent=0'],
+                        ['prepare', '--', '--tolerance_percent=0'],
+                        ['run', '--tolerance_percent=0']):
+            with self.subTest(options=options):
+                result = subprocess.run([sys.executable, str(ROOT / 'pd')] + options,
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn('error:', result.stderr)
+
+    def test_packetdrill_options_reach_client_after_defaults(self):
+        mod = runner_module()
+        with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:
+            root = Path(directory)
+            test = root / 'case.pkt'
+            test.write_text('// test fixture\n')
+            binary = Path(sys.executable).resolve()
+            extras = ['--tolerance_usecs=5000', '--tolerance_percent=0',
+                      '--define', 'label=a b;$(false)']
+            args = argparse.Namespace(xlio=str(binary), packetdrill=str(binary), vf=False,
+                             server_host=None, client_interface='net1', server_interface='net2',
+                             client_ip='192.0.2.1', server_ip='192.0.2.2', tolerance_usecs=60000,
+                             timeout=30, packetdrill_args=extras)
+            wire = mock.Mock()
+            wire.start.return_value = 123
+            wire.finish.return_value = b''
+            # Isolate hardware and process boundaries while running real command construction.
+            for name, value in [('CASES', root), ('command', mock.Mock(return_value=mock.Mock(stdout=b''))),
+                                ('client_command', mock.Mock(return_value=[str(binary)])),
+                                ('setup_network', mock.Mock(return_value=('test-ns', '255.255.255.0'))),
+                                ('save_sysctls', mock.Mock()),
+                                ('WireServer', mock.Mock(return_value=wire)),
+                                ('stop_process', mock.Mock()), ('test_offloaded', mock.Mock(return_value=True))]:
+                stack.enter_context(mock.patch.object(mod, name, value))
+            stack.enter_context(mock.patch.object(mod.shutil, 'which', return_value='/stub'))
+            stack.enter_context(mock.patch.object(mod.resource, 'setrlimit'))
+            process = stack.enter_context(mock.patch.object(mod.subprocess, 'Popen'))
+            process.return_value.wait.return_value = 0
+            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+            cleanup = mod.Cleanup()
+            try:
+                mod.execute(args, [(test, {})], root, cleanup, [])
+            finally:
+                cleanup.close()
+            argv = process.call_args.args[0]
+            self.assertEqual(argv[-len(extras)-1:-1], extras)
+            self.assertEqual(argv[-1], str(test))
+            self.assertLess(argv.index('--tolerance_usecs=60000'), argv.index('--tolerance_usecs=5000'))
 
     def test_interface_mode_rejects_conflicting_network_options(self):
         variants = [['--interface', 'pf0', '--client-interface', 'net1'],

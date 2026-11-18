@@ -902,7 +902,7 @@ def execute(args, tests, out, cleanup, results):
                         '--wire_server_dev=' + args.server_interface, '--local_ip=' + args.client_ip,
                         '--netmask_ip=' + netmask, '--gateway_ip=' + args.server_ip,
                         '--remote_ip=' + args.server_ip, '--tolerance_usecs=' + str(args.tolerance_usecs),
-                        '--verbose', '--debug', str(prepared)]
+                        '--verbose', '--debug'] + args.packetdrill_args + [str(prepared)]
                 # Own the client's private process group before handling interruption.
                 progress('[{}/{}] Running XLIO client on {} ({}); config: {}'.format(
                     index, len(tests), args.client_interface, args.client_ip, env['XLIO_CONFIG_FILE']))
@@ -1016,6 +1016,7 @@ Runs require root, data interfaces with MTU 1500, and distinct IPv4 addresses
 in the same subnet. Substitute your hostnames, interface names and addresses.
 Use pd prepare to build Packetdrill and pd list to discover tests.
 Append --filter REGEXP to select cases; --include-disabled also runs disabled cases.
+Pass Packetdrill options after --, for example: pd run ... -- --tolerance_percent=0.
 """
     parser = argparse.ArgumentParser(
         description='Run XLIO Packetdrill tests in Local mode, Two-interfaces mode or Remote mode.',
@@ -1048,7 +1049,13 @@ Append --filter REGEXP to select cases; --include-disabled also runs disabled ca
                         help='Wire IPv4: unused with --interface, already assigned in other modes')
     parser.add_argument('--timeout', type=float, default=30)
     parser.add_argument('--tolerance-usecs', type=int, default=60000)
-    args = parser.parse_args()
+    # Split explicitly: unknown pd options must still fail before the separator.
+    argv = sys.argv[1:]
+    separator = argv.index('--') if '--' in argv else len(argv)
+    args = parser.parse_args(argv[:separator])
+    args.packetdrill_args = argv[separator + 1:]
+    if separator < len(argv) and args.action != 'run':
+        parser.error('Packetdrill options after -- require the run action')
     # Detect ambiguous modes before output creation or any privileged operation.
     args.vf = args.interface is not None
     if args.vf and (args.client_interface or args.server_interface or args.server_host):
