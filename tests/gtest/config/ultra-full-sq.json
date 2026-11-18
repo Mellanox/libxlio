@@ -1,0 +1,12 @@
+{
+    "network": {
+        "protocols": {
+            "tcp": {
+                "congestion_control": 1,
+                "nodelay": {
+                    "enable": true
+                }
+            }
+        }
+    }
+}
