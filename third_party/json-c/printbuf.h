@@ -1,4 +1,6 @@
 /*
+ * Original work:
+ *
  * $Id: printbuf.h,v 1.4 2006/01/26 02:16:28 mclark Exp $
  *
  * Copyright (c) 2004, 2005 Metaparadigm Pte. Ltd.
@@ -10,32 +12,53 @@
  *
  * Copyright (c) 2008-2009 Yahoo! Inc.  All rights reserved.
  * The copyrights to the contents of this file are licensed under the MIT License
- * (http://www.opensource.org/licenses/mit-license.php)
+ * (https://www.opensource.org/licenses/mit-license.php)
+ *
+ * Modified Work:
+ *
+ * Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES, ALL RIGHTS RESERVED.
+ *
+ * This software product is a proprietary product of NVIDIA CORPORATION &
+ * AFFILIATES (the "Company") and all right, title, and interest in and to the
+ * software product, including all associated intellectual property rights, are
+ * and shall remain exclusively with the Company.
+ *
+ * This software product is governed by the End User License Agreement
+ * provided with the software product.
+ *
  */
 
 /**
  * @file
- * @brief Internal string buffer handing.  Unless you're writing a 
+ * @brief Internal string buffer handling.  Unless you're writing a
  *        json_object_to_json_string_fn implementation for use with
  *        json_object_set_serializer() direct use of this is not
  *        recommended.
  */
-#ifndef _printbuf_h_
-#define _printbuf_h_
+#ifndef _json_c_printbuf_h_
+#define _json_c_printbuf_h_
+
+#ifndef JSON_EXPORT
+#if defined(_MSC_VER) && defined(JSON_C_DLL)
+#define JSON_EXPORT __declspec(dllexport)
+#else
+#define JSON_EXPORT extern
+#endif
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct printbuf {
-  char *buf;
-  int bpos;
-  int size;
+struct printbuf
+{
+	char *buf;
+	int bpos;
+	int size;
 };
 typedef struct printbuf printbuf;
 
-extern struct printbuf*
-printbuf_new(void);
+JSON_EXPORT struct printbuf *doca_third_party_printbuf_new(void);
 
 /* As an optimization, printbuf_memappend_fast() is defined as a macro
  * that handles copying data if the buffer is large enough; otherwise
@@ -45,17 +68,22 @@ printbuf_new(void);
  * Your code should not use printbuf_memappend() directly unless it
  * checks the return code. Use printbuf_memappend_fast() instead.
  */
-extern int
-printbuf_memappend(struct printbuf *p, const char *buf, int size);
+JSON_EXPORT int doca_third_party_printbuf_memappend(struct printbuf *p, const char *buf, int size);
 
-#define printbuf_memappend_fast(p, bufptr, bufsize)          \
-do {                                                         \
-  if ((p->size - p->bpos) > bufsize) {                       \
-    memcpy(p->buf + p->bpos, (bufptr), bufsize);             \
-    p->bpos += bufsize;                                      \
-    p->buf[p->bpos]= '\0';                                   \
-  } else {  printbuf_memappend(p, (bufptr), bufsize); }      \
-} while (0)
+#define printbuf_memappend_fast(p, bufptr, bufsize)                  \
+	do                                                           \
+	{                                                            \
+		if ((p->size - p->bpos) > bufsize)                   \
+		{                                                    \
+			memcpy(p->buf + p->bpos, (bufptr), bufsize); \
+			p->bpos += bufsize;                          \
+			p->buf[p->bpos] = '\0';                      \
+		}                                                    \
+		else                                                 \
+		{                                                    \
+			doca_third_party_printbuf_memappend(p, (bufptr), bufsize);    \
+		}                                                    \
+	} while (0)
 
 #define printbuf_length(p) ((p)->bpos)
 
@@ -79,7 +107,7 @@ do {                                                         \
  *   sprintbuf()
  */
 #define printbuf_strappend(pb, str) \
-   printbuf_memappend ((pb), _printbuf_check_literal(str), sizeof(str) - 1)
+	doca_third_party_printbuf_memappend((pb), _printbuf_check_literal(str), sizeof(str) - 1)
 
 /**
  * Set len bytes of the buffer to charvalue, starting at offset offset.
@@ -89,8 +117,7 @@ do {                                                         \
  *
  * If offset is -1, this starts at the end of the current data in the buffer.
  */
-extern int
-printbuf_memset(struct printbuf *pb, int offset, int charvalue, int len);
+JSON_EXPORT int doca_third_party_printbuf_memset(struct printbuf *pb, int offset, int charvalue, int len);
 
 /**
  * Formatted print to printbuf.
@@ -106,14 +133,11 @@ printbuf_memset(struct printbuf *pb, int offset, int charvalue, int len);
  *   printbuf_memappend()
  *   printbuf_strappend()
  */
-extern int
-sprintbuf(struct printbuf *p, const char *msg, ...);
+JSON_EXPORT int doca_third_party_sprintbuf(struct printbuf *p, const char *msg, ...);
 
-extern void
-printbuf_reset(struct printbuf *p);
+JSON_EXPORT void doca_third_party_printbuf_reset(struct printbuf *p);
 
-extern void
-printbuf_free(struct printbuf *p);
+JSON_EXPORT void doca_third_party_printbuf_free(struct printbuf *p);
 
 #ifdef __cplusplus
 }
