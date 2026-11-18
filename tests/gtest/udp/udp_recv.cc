@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
  */
 
+#include <set>
 #include <sys/mman.h>
 #include "common/def.h"
 #include "common/log.h"
@@ -119,5 +120,69 @@ TEST_F(udp_recv, mapped_ipv4_recv)
         }
 
         EXPECT_EQ(0, wait_fork(pid));
+    }
+}
+
+/**
+ * @test udp_recv.lt_maxevents_round_robin
+ * @brief
+ *    With more level-triggered ready sockets than maxevents, successive epoll_wait()
+ *    calls report every ready socket in turn, as epoll_wait(2) describes.
+ */
+TEST_F(udp_recv, lt_maxevents_round_robin)
+{
+    const int N = 8;
+    const int M = 2;
+    int fds[N];
+    int efd = epoll_create1(0);
+    sockaddr_store_t addr = server_addr;
+
+    for (int k = 0; k < N; ++k) { // N receivers, level-triggered EPOLLIN, never read
+        fds[k] = udp_base::sock_create();
+        sys_set_port(&addr.addr, m_port + k);
+        EXPECT_EQ(0, bind(fds[k], &addr.addr, sizeof(addr)));
+        struct epoll_event ev = {};
+        ev.events = EPOLLIN;
+        ev.data.u32 = k;
+        EXPECT_EQ(0, epoll_ctl(efd, EPOLL_CTL_ADD, fds[k], &ev));
+    }
+
+    int tx = udp_base::sock_create(); // One sender, one datagram to each receiver
+    EXPECT_EQ(0, bind(tx, &client_addr.addr, sizeof(client_addr)));
+    for (int k = 0; k < N; ++k) {
+        sys_set_port(&addr.addr, m_port + k);
+        EXPECT_EQ(1, sendto(tx, "x", 1, 0, &addr.addr, sizeof(addr)));
+    }
+
+    // Wait until one call reports all N sockets. Room for 2 * N events also checks that no
+    // socket is reported twice in one call. FIONREAD makes XLIO poll for the datagrams and
+    // does not consume them.
+    struct epoll_event evs[2 * N];
+    int n = 0;
+    for (int t = 0; n < N && t < 10000; ++t) {
+        int bytes;
+        for (int k = 0; k < N; ++k) {
+            ioctl(fds[k], FIONREAD, &bytes);
+        }
+        n = epoll_wait(efd, evs, 2 * N, 1);
+    }
+    EXPECT_EQ(N, n);
+
+    // Nothing is read, so N / M calls of M events must report all N sockets.
+    std::set<uint32_t> reported;
+    for (int call = 0; call < N / M; ++call) {
+        n = epoll_wait(efd, evs, M, 0);
+        EXPECT_EQ(M, n);
+        for (int e = 0; e < n; ++e) {
+            reported.insert(evs[e].data.u32);
+        }
+    }
+    EXPECT_EQ(static_cast<size_t>(N), reported.size())
+        << "ready sockets reported in " << N / M << " calls of maxevents " << M;
+
+    close(tx);
+    close(efd);
+    for (int k = 0; k < N; ++k) {
+        close(fds[k]);
     }
 }
