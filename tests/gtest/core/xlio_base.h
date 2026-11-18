@@ -21,6 +21,10 @@
 
 #define SEC_TO_NSEC(sec) ((sec)*1000000000L)
 
+// Some devices accept relaxed ordering memory keys only, so the send buffer that an
+// Ultra API test registers requests relaxed ordering.
+#define ULTRA_API_MR_ACCESS (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_RELAXED_ORDERING)
+
 /**
  * XLIO Base class for tests
  */

@@ -12,6 +12,8 @@
 #include "utils/bullseye.h"
 #include "vlogger/vlogger.h"
 #include <util/sys_vars.h>
+#include "config/config_var_definitions.h"
+#include "util/relaxed_ordering.h"
 #include "dev/ib_ctx_handler.h"
 #include "ib/base/verbs_extra.h"
 #include "dev/time_converter_ib_ctx.h"
@@ -314,8 +316,35 @@ err:
     return m_p_adapter;
 }
 
+// Only a verdict where the device changes the effect of the configuration value has a text.
+static void log_relaxed_ordering_verdict(vlog_levels_t log_level, ro_decision verdict,
+                                         const char *ibname)
+{
+    switch (verdict) {
+    case ro_decision::RO_WRITE_CAP_NOT_REPORTED:
+        VLOG_PRINTF(log_level,
+                    "Device %s does not report the relaxed ordering write capability. "
+                    "%s=true (%s) does not control write ordering on this device. "
+                    "Offloaded traffic on the device continues.",
+                    ibname, CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING);
+        break;
+    case ro_decision::RO_REQUIRED_BY_DEVICE:
+        VLOG_PRINTF(log_level,
+                    "Device %s accepts relaxed ordering memory keys only. XLIO ignores "
+                    "%s=false (%s) on this device and requests relaxed ordering. Offloaded "
+                    "traffic on the device continues.",
+                    ibname, CONFIG_VAR_RELAXED_ORDERING.name, SYS_VAR_RELAXED_ORDERING);
+        break;
+    case ro_decision::RO:
+    case ro_decision::NOT_REQUESTED:
+        break;
+    }
+}
+
 void ib_ctx_handler::check_capabilities()
 {
+    const bool ro_requested = safe_mce_sys().enable_relaxed_ordering;
+
     dpcp::adapter_hca_capabilities caps;
     dpcp::status rc = m_p_adapter->get_hca_capabilities(caps);
     if (rc == dpcp::DPCP_OK) {
@@ -324,7 +353,42 @@ void ib_ctx_handler::check_capabilities()
 
         m_max_sq_wqebbs = (1U << caps.log_max_qp_sz);
         ibch_logdbg("Max SQ WQEBBs: %" PRIu32, m_max_sq_wqebbs);
+
+        m_relaxed_ordering_only = caps.relaxed_ordering_only;
+        ibch_logdbg("Relaxed Ordering caps: write: %s, read: %s, read_pci_enabled: %s, "
+                    "relaxed ordering only: %s",
+                    caps.relaxed_ordering_write ? "Yes" : "No",
+                    caps.relaxed_ordering_read ? "Yes" : "No",
+                    caps.relaxed_ordering_read_pci_enabled ? "Yes" : "No",
+                    m_relaxed_ordering_only ? "Yes" : "No");
+
+        m_relaxed_ordering_verdict = decide_relaxed_ordering(
+            ro_requested, caps.relaxed_ordering_write, caps.relaxed_ordering_only);
+        // XLIO opens every device. Only a device that gets a ring reports above debug level.
+        log_relaxed_ordering_verdict(VLOG_DEBUG, m_relaxed_ordering_verdict, get_ibname());
+    } else {
+        m_relaxed_ordering_verdict =
+            decide_relaxed_ordering(ro_requested, /*caps_ro_write=*/true, /*caps_ro_only=*/false);
+        ibch_logwarn("could not read HCA capabilities for device %s (dpcp status %d); "
+                     "memory ordering on this device follows %s (%s) alone",
+                     get_ibname(), static_cast<int>(rc), CONFIG_VAR_RELAXED_ORDERING.name,
+                     SYS_VAR_RELAXED_ORDERING);
     }
+}
+
+void ib_ctx_handler::report_relaxed_ordering_verdict_once()
+{
+    if (m_relaxed_ordering_verdict != ro_decision::RO_WRITE_CAP_NOT_REPORTED &&
+        m_relaxed_ordering_verdict != ro_decision::RO_REQUIRED_BY_DEVICE) {
+        return;
+    }
+    if (m_relaxed_ordering_reported.exchange(true)) {
+        return;
+    }
+    const vlog_levels_t log_level =
+        (m_relaxed_ordering_verdict == ro_decision::RO_REQUIRED_BY_DEVICE) ? VLOG_WARNING
+                                                                           : VLOG_INFO;
+    log_relaxed_ordering_verdict(log_level, m_relaxed_ordering_verdict, get_ibname());
 }
 
 void ib_ctx_handler::set_ctx_time_converter_status(ts_conversion_mode_t conversion_mode)
@@ -400,7 +464,7 @@ uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
     struct ibv_mr *mr = nullptr;
     uint32_t lkey = LKEY_ERROR;
 
-    if (safe_mce_sys().enable_relaxed_ordering) {
+    if (ro_decision_passes_flag(m_relaxed_ordering_verdict)) {
 #ifndef DEFINED_IBV_ACCESS_RELAXED_ORDERING
         VLOG_PRINTF_ONCE_THEN_DEBUG(VLOG_WARNING,
                                     "Relaxed Ordering was requested but "
@@ -413,7 +477,15 @@ uint32_t ib_ctx_handler::mem_reg(void *addr, size_t length, uint64_t access)
     mr = ibv_reg_mr(m_p_ibv_pd, addr, length, access);
     VALGRIND_MAKE_MEM_DEFINED(mr, sizeof(ibv_mr));
     if (!mr) {
-        print_warning_rlimit_memlock(length, errno);
+        int reg_errno = errno;
+        print_warning_rlimit_memlock(length, reg_errno);
+        if (m_relaxed_ordering_only) {
+            ibch_logerr("ibv_reg_mr failed (errno=%d %s) on device %s, which accepts relaxed "
+                        "ordering memory keys only. Memory ordering is a possible cause: "
+                        "libibverbs can mask IBV_ACCESS_RELAXED_ORDERING when paired with a "
+                        "kernel that does not support it.",
+                        reg_errno, strerror(reg_errno), get_ibname());
+        }
     } else {
         m_mr_map_lkey[mr->lkey] = mr;
         lkey = mr->lkey;

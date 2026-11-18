@@ -785,35 +785,30 @@ working set = 10GB → default 10GB is appropriate.
 >
 > **Maps to:** `XLIO_RELAXED_ORDERING`
 
-Controls whether XLIO asks the network adapter to relax PCIe write ordering for host memory
-registered by XLIO. Relaxed Ordering can improve I/O performance on supported systems.
+Controls whether XLIO requests PCIe Relaxed Ordering for the memory it registers. Relaxed
+Ordering lets NIC DMA writes reach host memory out of order and can improve I/O performance.
+Completion and final data visibility semantics are unchanged.
 
 **Values:**
 
-- false (default): Do not request Relaxed Ordering for XLIO-created memory keys. This does not
-  force strict ordering; the NIC can still use Relaxed Ordering when its device-wide configuration
-  forces it.
-- true: Request Relaxed Ordering for XLIO-created memory keys. This allows NIC DMA writes to reach
-  memory out of order. Completion and final data visibility semantics are unchanged, but
-  intermediate write-after-write ordering is not guaranteed.
+- true (default): Request Relaxed Ordering for XLIO-created memory keys.
+- false: Do not request it.
 
-**Hardware configuration:**
+**Devices that accept only relaxed-ordering memory keys:** XLIO requests Relaxed Ordering
+there even when the value is false, and logs a warning when it creates the first ring on the
+device. If libibverbs masks the request (the kernel does not support it), registration fails
+and XLIO start-up fails with an ERROR that names memory ordering as a possible cause. The
+call that starts XLIO (for example the first `socket()`) returns -1, and no socket is
+offloaded.
 
-This setting controls behavior when the NIC's `PCI_WR_ORDERING` mode is `per_mkey`. If the NIC is
-in `force_relaxed` mode, Relaxed Ordering remains active regardless of this setting. XLIO does not
+**Hardware configuration:** The setting matters when the NIC's `PCI_WR_ORDERING` mode is
+`per_mkey`; in `force_relaxed` mode Relaxed Ordering stays active regardless. XLIO does not
 change the NIC's `mlxconfig` setting.
 
-**Support notes:**
+This setting does not affect memory the application registers itself, including through the
+Ultra API.
 
-When requested, XLIO passes `IBV_ACCESS_RELAXED_ORDERING` to libibverbs. If the build's verbs
-headers do not provide this flag, XLIO logs a warning and continues without applying the request.
-A modern libibverbs can also mask optional access flags when paired with a kernel that does not
-support them, without reporting that decision to XLIO. Startup output therefore reports whether
-XLIO requested Relaxed Ordering, not the effective hardware ordering mode.
-
-This setting does not affect memory regions registered directly by the application.
-
-**Default:** `false`
+**Default:** `true`
 
 ### `hardware_features.striding_rq.enable`
 
