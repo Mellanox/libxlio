@@ -1590,6 +1590,115 @@ TEST(tcp_slowtmr, keepalive_in_close_wait_restarts_idle_time_on_reply)
     EXPECT_GE(probes, (int)(2 * (total_ticks / (idle_ticks + 1 + intvl_ticks))));
 }
 
+namespace {
+
+/* ESTABLISHED pcb with one data segment in flight and an elapsed RTO deadline,
+ * at the TCP_MAXRTX retransmission count. */
+static void init_pcb_at_max_data_retries(tcp_pcb &pcb, test_segment_storage &storage)
+{
+    init_pcb_for_output(pcb);
+    pcb.ip_output = succeed_always;
+    init_unsent_segment(storage, pcb.snd_nxt, 4);
+    pcb.unacked = &storage.seg;
+    pcb.last_unacked = &storage.seg;
+    pcb.snd_nxt += 4;
+    pcb.ticks_since_data_sent = 0;
+    pcb.rtime = 0;
+    pcb.nrtx = TCP_MAXRTX;
+    pcb.rto_us = (s32_t)slow_tmr_interval * 1000;
+    pcb.rto_deadline_us = 1;
+}
+
+} // namespace
+
+/* With TCP_USER_TIMEOUT armed in ESTABLISHED, the TCP_MAXRTX cap must not abort
+ * the connection. Retransmissions continue and the user timeout owns the abort. */
+TEST(tcp_slowtmr, rto_user_timeout_overrides_max_data_retries)
+{
+    timer_resolution_guard timer_guard(100);
+    slowtmr_test_guard test_guard;
+    output_hooks_guard hooks_guard;
+    tcp_pcb pcb;
+    test_segment_storage storage;
+    init_pcb_at_max_data_retries(pcb, storage);
+    pcb.user_timeout_ms = 3000;
+
+    const u32_t timeout_ticks = tcp_ms_to_ticks(pcb.user_timeout_ms);
+    u32_t abort_tick = 0;
+    for (u32_t tick = 1; tick <= 2 * timeout_ticks && abort_tick == 0; ++tick) {
+        slowtmr_tick(pcb);
+        if (g_error_calls > 0) {
+            abort_tick = tick;
+        }
+    }
+
+    EXPECT_EQ(timeout_ticks + 1, abort_tick) << "abort must come from the user timeout";
+    EXPECT_EQ(ERR_TIMEOUT, g_last_error);
+    EXPECT_GE(g_ip_output_calls, 2) << "retransmissions must continue past TCP_MAXRTX";
+    EXPECT_GT(pcb.nrtx, TCP_MAXRTX);
+    EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
+}
+
+/* Without a user timeout the TCP_MAXRTX cap keeps the abort. */
+TEST(tcp_slowtmr, rto_max_data_retries_abort_without_user_timeout)
+{
+    timer_resolution_guard timer_guard(100);
+    slowtmr_test_guard test_guard;
+    output_hooks_guard hooks_guard;
+    tcp_pcb pcb;
+    test_segment_storage storage;
+    init_pcb_at_max_data_retries(pcb, storage);
+
+    slowtmr_tick(pcb);
+
+    EXPECT_EQ(1, g_error_calls);
+    EXPECT_EQ(ERR_ABRT, g_last_error);
+    EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
+}
+
+/* A stopped send clock (ticks_since_data_sent == -1) keeps the TCP_MAXRTX abort
+ * even with a user timeout armed in ESTABLISHED. The user timeout needs the
+ * clock, so without it the retransmission count must stay the bound. */
+TEST(tcp_slowtmr, rto_max_data_retries_abort_with_user_timeout_and_stopped_clock)
+{
+    timer_resolution_guard timer_guard(100);
+    slowtmr_test_guard test_guard;
+    output_hooks_guard hooks_guard;
+    tcp_pcb pcb;
+    test_segment_storage storage;
+    init_pcb_at_max_data_retries(pcb, storage);
+    pcb.user_timeout_ms = 3000;
+    pcb.ticks_since_data_sent = -1;
+    pcb.rto_deadline_us = INT64_MAX;
+
+    slowtmr_tick(pcb);
+
+    EXPECT_EQ(1, g_error_calls);
+    EXPECT_EQ(ERR_ABRT, g_last_error);
+    EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
+}
+
+/* tcp_user_timeout_occured() cannot fire outside ESTABLISHED and SYN_SENT, so
+ * with a user timeout armed in FIN_WAIT_1 the TCP_MAXRTX cap keeps the abort.
+ * Otherwise the retransmissions would have no bound. */
+TEST(tcp_slowtmr, rto_max_data_retries_abort_in_fin_wait_1_with_user_timeout)
+{
+    timer_resolution_guard timer_guard(100);
+    slowtmr_test_guard test_guard;
+    output_hooks_guard hooks_guard;
+    tcp_pcb pcb;
+    test_segment_storage storage;
+    init_pcb_at_max_data_retries(pcb, storage);
+    pcb.private_state = FIN_WAIT_1;
+    pcb.user_timeout_ms = 3000;
+
+    slowtmr_tick(pcb);
+
+    EXPECT_EQ(1, g_error_calls);
+    EXPECT_EQ(ERR_ABRT, g_last_error);
+    EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
+}
+
 #ifdef XLIO_TIME_DEBUG_COUNTERS
 /* Clock-read counters for debug/test builds. */
 

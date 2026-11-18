@@ -576,6 +576,7 @@ err_t tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool
     return ret;
 }
 
+/* tcp_user_timeout_overrides_maxrtx() must stay a subset of these conditions. */
 static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
 {
     u32_t user_timeout_ticks = tcp_ms_to_ticks(pcb->user_timeout_ms);
@@ -583,6 +584,17 @@ static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
     return pcb->user_timeout_ms != 0 && pcb->ticks_since_data_sent > 0 &&
         (u32_t)pcb->ticks_since_data_sent > user_timeout_ticks &&
         (get_tcp_state(pcb) == ESTABLISHED || get_tcp_state(pcb) == SYN_SENT);
+}
+
+/* RFC 5482: an armed TCP_USER_TIMEOUT owns the abort of a data retransmission
+ * episode, so the TCP_MAXRTX limit must not cut the episode short. Restricted
+ * to ESTABLISHED with a running send clock: there tcp_user_timeout_occured()
+ * bounds the retransmissions. In every other case the retransmission-count
+ * limits stay the bound. */
+static inline bool tcp_user_timeout_overrides_maxrtx(struct tcp_pcb *pcb)
+{
+    return pcb->user_timeout_ms != 0 && pcb->ticks_since_data_sent >= 0 &&
+        get_tcp_state(pcb) == ESTABLISHED;
 }
 
 /**
@@ -627,7 +639,7 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max SYN retries reached\n"));
             /* >= not ==: retransmission paths can advance nrtx between timer
              * passes, so the counter can step past the exact limit. */
-        } else if (pcb->nrtx >= TCP_MAXRTX) {
+        } else if (pcb->nrtx >= TCP_MAXRTX && !tcp_user_timeout_overrides_maxrtx(pcb)) {
             ++pcb_remove;
             err = ERR_ABRT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max DATA retries reached\n"));
