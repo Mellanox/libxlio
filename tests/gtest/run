@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-2.0-only or BSD-2-Clause
 """Run the shared developer/CI gtest profiles without configuring the host."""
 import argparse
+import codecs
 from datetime import datetime, timezone
 from dataclasses import dataclass
 import json
@@ -11,6 +12,9 @@ import os
 from pathlib import Path
 import re
 import shlex
+import selectors
+import signal
+import time
 import shutil
 import subprocess
 import sys
@@ -196,14 +200,55 @@ def read_report(path):
 
 
 def execute(command, directory, env):
-    """Stream test output to the terminal and preserve it alongside the results."""
+    """Stream output while monitoring exit; clean up descendants before returning."""
     with (directory / 'gtest.log').open('w') as log:
         with subprocess.Popen(command, cwd=str(directory), env=env, stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT, text=True, errors='replace') as process:
-            for line in process.stdout:
-                print(line, end='', flush=True)
-                log.write(line)
-            return process.wait()
+                              stderr=subprocess.STDOUT, start_new_session=True) as process:
+            def stop_group():
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+            decoder = codecs.getincrementaldecoder('utf-8')(errors='replace')
+
+            def emit(data, final=False):
+                text = decoder.decode(data, final=final)
+                print(text, end='', flush=True)
+                log.write(text)
+
+            try:
+                os.set_blocking(process.stdout.fileno(), False)
+                with selectors.DefaultSelector() as selector:
+                    selector.register(process.stdout, selectors.EVENT_READ)
+                    drain_deadline = None
+                    while True:
+                        if process.poll() is not None and drain_deadline is None:
+                            stop_group()
+                            # A descendant may have escaped the group via setsid().
+                            drain_deadline = time.monotonic() + 1.0
+                        if drain_deadline is not None:
+                            if not selector.get_map():
+                                break
+                            if time.monotonic() >= drain_deadline:
+                                print('WARNING: output pipe remained open after process exit; '
+                                      'stopping output collection.', file=sys.stderr)
+                                break
+                        for key, _ in selector.select(timeout=0.1):
+                            try:
+                                data = os.read(key.fileobj.fileno(), 65536)
+                            except BlockingIOError:
+                                continue
+                            if data:
+                                emit(data)
+                            else:
+                                selector.unregister(key.fileobj)
+                    emit(b'', final=True)
+                return process.wait()
+            finally:
+                stop_group()
+                process.stdout.close()
+                process.wait()
 
 
 def main():

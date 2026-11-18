@@ -163,7 +163,6 @@ Build Extra API tests:
 $ make -C tests/gtest CPPFLAGS="-DEXTRA_API_ENABLED=1"
 ```
 
-Run tests from the repository root:
 All tests can be launched on single node that has two interfaces.
 
 Run tests under OS:
@@ -181,7 +180,7 @@ $ ./tests/gtest/run --addr=1.1.3.6,1.1.4.6
 ```
 or
 ```shell
-$ ./tests/gtest/run --addr=1.1.3.6,1.1.4.6 --filter=tcp_sendfile.* 
+$ ./tests/gtest/run --addr=1.1.3.6,1.1.4.6 --filter=tcp_sendfile.*
 ```
 
 See [tests/gtest/README](../tests/gtest/README) for profiles, filters, and further

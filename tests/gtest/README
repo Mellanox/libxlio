@@ -1,7 +1,7 @@
 XLIO Testing Environment
 =======================
 
-This set of tests is based on Google Test C++ environment 
+This set of tests is based on Google Test C++ environment
 https://github.com/google/googletest
 
 Testing XLIO Extended API
@@ -20,9 +20,9 @@ client.
 
 Running the runner
 ------------------------------
-The 'run' script allows running the tests with various XLIO configurations. 
+The 'run' script allows running the tests with various XLIO configurations.
 Each profile selects a set of the tests to run and the XLIO configuration file
-to use when running these tests. For each selected profile, the 'gtest' 
+to use when running these tests. For each selected profile, the 'gtest'
 executable is run exactly once, with the results written to a separate directory.
 
 After building XLIO and the gtest executable, run from the source root:
@@ -37,13 +37,13 @@ List every profile's config and filter without addresses or a build:
 
    tests/gtest/run --list-profiles
 
-Profiles use JSON template files in config/ for XLIO runtime settings. 
-Every file is translated to a file written to the profile run directory, 
+Profiles use JSON template files in config/ for XLIO runtime settings.
+Every file is translated to a file written to the profile run directory,
 substituting special fields marked by @xxx@. JSON string
 values (including nested objects and arrays) can use @CLIENT_IP@, @SERVER_IP@,
 @PROFILE@, @RUN_DIR@, and @SOURCE_ROOT@. Addresses are those selected for the
-profile, including IPv6 or loopback when applicable. Unknown placeholders fail 
-before any tests run. Templates are validated in --dry-run too, without writing files. 
+profile, including IPv6 or loopback when applicable. Unknown placeholders fail
+before any tests run. Templates are validated in --dry-run too, without writing files.
 
 Select profiles explicitly, or inspect the gtest commands without executing them:
 
@@ -77,15 +77,15 @@ it. See --help for all profiles.
 Each invocation creates a unique UTC timestamped directory under --output-dir
 (default ./gtest-results), for example 20261108-123456.123456Z-a1b2c3d4.
 
---dry-run creates no directories or files. 
+--dry-run creates no directories or files.
 
 The summary reports passed, failed, runtime-skipped, and disabled tests
 separately. DISABLED_ tests are excluded unless --gtest_also_run_disabled_tests
 is passed after --; GTEST_SKIP() stops a selected test at runtime.
 
-LD_PRELOAD points to the selected library, including for test subprocesses. 
-The caller's environment is unchanged. The runner defaults WORKSPACE to the 
-source tree only when it is not set, preserving any caller-provided value. 
+LD_PRELOAD points to the selected library, including for test subprocesses.
+The caller's environment is unchanged. The runner defaults WORKSPACE to the
+source tree only when it is not set, preserving any caller-provided value.
 Other environment variables are inherited without assigning defaults
 
 Hardware-free runner contract checks:
@@ -94,10 +94,7 @@ Hardware-free runner contract checks:
 
 
 Profiles are independent of address family. Pass IPv4 or IPv6 endpoints using
---addr. CI uses r2c-full for IPv4 and r2c-default for IPv6. Additional gtest
-arguments can follow --, for example:
-
-   tests/gtest/run --profiles r2c-default --addr 2001:db8::1,2001:db8::2 -- -r fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+--addr.
 
 Use --kernel to run without XLIO, for example:
 

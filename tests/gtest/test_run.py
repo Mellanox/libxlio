@@ -10,6 +10,7 @@ import subprocess
 import runpy
 import shutil
 import tempfile
+import time
 import unittest
 
 
@@ -56,6 +57,45 @@ sys.exit(7 if os.environ.get('FAIL_R2C') and
              '--output-dir=' + str(self.root / 'results'), *args],
             cwd=self.root, env=dict(os.environ, RECORD=str(self.record), **extra_env),
             text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def test_process_exit_does_not_wait_for_descendant_stdout(self):
+        self.app.write_text("""#!/usr/bin/env python3
+import os, time
+if os.fork() == 0:
+    time.sleep(25)
+    os._exit(0)
+os._exit(1)
+""")
+        started = time.monotonic()
+        result = self.invoke('--kernel', '--profiles=r2c-full',
+                             '--addr=192.0.2.1,192.0.2.2', '--timeout=5s')
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('rc=1', result.stdout)
+
+    def test_timeout_cleans_up_descendants(self):
+        self.app.write_text("""#!/usr/bin/env python3
+import os, time
+os.fork()
+time.sleep(25)
+""")
+        started = time.monotonic()
+        result = self.invoke('--kernel', '--profiles=r2c-full',
+                             '--addr=192.0.2.1,192.0.2.2', '--timeout=1s')
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_large_output_is_drained_without_deadlock(self):
+        self.app.write_text(self.app.read_text().replace(
+            "print('test stdout')", "print('x' * (1024 * 1024), end=''); print('tail-marker')"))
+        result = self.invoke('--kernel', '--profiles=r2c-full',
+                             '--addr=192.0.2.1,192.0.2.2', '--timeout=5s')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        log = next((self.root / 'results').rglob('gtest.log')).read_text()
+        # Merged stderr may appear between stdout's payload and buffered marker.
+        self.assertIn('x' * (1024 * 1024), log)
+        self.assertIn('tail-marker', log)
+        self.assertIn('test stderr', log)
 
     def test_kernel_clears_xlio_environment_and_skips_configs(self):
         result = self.invoke('--kernel', '--profiles=rto-floor-max',

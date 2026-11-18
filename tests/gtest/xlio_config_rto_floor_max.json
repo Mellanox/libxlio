@@ -1,9 +1,0 @@
-{
-    "network": {
-        "protocols": {
-            "tcp": {
-                "rto_floor_msec": 120000
-            }
-        }
-    }
-}
