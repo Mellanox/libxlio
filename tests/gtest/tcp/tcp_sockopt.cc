@@ -5,6 +5,7 @@
  */
 
 #include <fstream>
+#include <chrono>
 #include <limits>
 #include <stdexcept>
 #include <tuple>
@@ -1193,4 +1194,331 @@ TEST_F(tcp_keepalive_e2e, answered_probes_keep_user_timeout_connection_alive)
     } else {
         FAIL() << "Fork failed";
     }
+}
+
+/* The fork+SIGSTOP tests need both endpoints offloaded: a stopped kernel-backed
+ * peer would continue answering probes. */
+static bool offloadable_address(const sockaddr_store_t &address)
+{
+    if (address.addr.sa_family == AF_INET) {
+        const uint32_t ip = ntohl(address.addr4.sin_addr.s_addr);
+        return ip != INADDR_ANY && (ip >> 24) != 127;
+    }
+    return !IN6_IS_ADDR_UNSPECIFIED(&address.addr6.sin6_addr) &&
+        !IN6_IS_ADDR_LOOPBACK(&address.addr6.sin6_addr);
+}
+
+/* A SIGCHLD handler from an earlier test can interrupt a blocking recv() with SO_RCVTIMEO
+ * when the peer stops. Retry on EINTR. */
+static ssize_t recv_retry_eintr(int fd, void *buf, size_t len)
+{
+    ssize_t ret;
+    do {
+        ret = recv(fd, buf, len, 0);
+    } while (ret < 0 && errno == EINTR);
+    return ret;
+}
+
+/* SIGSTOP freezes the peer's userspace TCP stack without sending FIN or RST.
+ * Both endpoints must be offloaded: a stopped kernel-backed peer would continue
+ * answering probes, and this test would correctly fail rather than pass silently.
+ */
+TEST_F(tcp_sockopt, keepalive_detects_unresponsive_peer)
+{
+    SKIP_TRUE(xlio_get_api(), "Requires XLIO and two offloadable --addr addresses");
+    SKIP_TRUE(offloadable_address(client_addr) && offloadable_address(server_addr),
+              "Requires non-loopback --addr addresses for both offloaded endpoints");
+    int ready[2];
+    ASSERT_EQ(0, pipe(ready));
+    const pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        close(ready[0]);
+        alarm(20);
+        const int listener = sock_create();
+        if (listener < 0 ||
+            bind(listener, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) ||
+            listen(listener, 1) || write(ready[1], "R", 1) != 1) {
+            _exit(1);
+        }
+        const int peer = accept(listener, nullptr, nullptr);
+        if (peer < 0 || send(peer, "R", 1, MSG_NOSIGNAL) != 1) {
+            _exit(1);
+        }
+        raise(SIGSTOP);
+        _exit(0);
+    }
+
+    close(ready[1]);
+    // Clean up the stopped child even if a fatal assertion returns early.
+    struct child_guard {
+        pid_t pid;
+        int pipe_fd;
+        ~child_guard()
+        {
+            kill(pid, SIGKILL);
+            waitpid(pid, nullptr, 0);
+            close(pipe_fd);
+        }
+    } child {pid, ready[0]};
+    pollfd readiness {ready[0], POLLIN, 0};
+    ASSERT_EQ(1, poll(&readiness, 1, 3000));
+    char byte;
+    ASSERT_EQ(1, read(ready[0], &byte, 1));
+
+    reusable_cleanable_test_socket fd {sock_create()};
+    ASSERT_GE(fd, 0);
+    timeval timeout {3, 0};
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, bind(fd, reinterpret_cast<sockaddr *>(&client_addr), sizeof(client_addr)));
+    ASSERT_EQ(0, connect(fd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)));
+    ASSERT_EQ(1, recv_retry_eintr(fd, &byte, 1)) << "errno=" << errno;
+    // The keepalive abort clock starts at the last received segment: the "R" byte above.
+    const auto start = std::chrono::steady_clock::now();
+    int status = 0;
+    const auto stop_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    pid_t stopped = 0;
+    do {
+        stopped = waitpid(pid, &status, WUNTRACED | WNOHANG);
+        if (stopped != 0) {
+            break;
+        }
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() < stop_deadline);
+    ASSERT_EQ(pid, stopped);
+    ASSERT_TRUE(WIFSTOPPED(status));
+
+    const int idle = 2, interval = 1, count = 3, enabled = 1;
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)));
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval)));
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count)));
+    // Exercise validation on an established socket and ensure failed setters are atomic.
+    for (const auto &option : {std::make_tuple(TCP_KEEPINTVL, interval, 32768),
+                               std::make_tuple(TCP_KEEPCNT, count, 128)}) {
+        const int name = std::get<0>(option);
+        const int invalid = std::get<2>(option);
+        EXPECT_EQ(-1, setsockopt(fd, IPPROTO_TCP, name, &invalid, sizeof(invalid)));
+        EXPECT_EQ(EINVAL, errno);
+        int actual = 0;
+        socklen_t length = sizeof(actual);
+        ASSERT_EQ(0, getsockopt(fd, IPPROTO_TCP, name, &actual, &length));
+        EXPECT_EQ(sizeof(actual), length);
+        ASSERT_EQ(std::get<1>(option), actual);
+    }
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof(enabled)));
+
+    // In delegate mode (XLIO_TCP_CTL_THREAD=delegate) the 10 ms recv polling drives the timers.
+    int error = 0;
+    do {
+        const ssize_t result = recv(fd, &byte, 1, MSG_DONTWAIT);
+        if (result < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            error = errno;
+            break;
+        }
+        ASSERT_NE(0, result) << "Peer closed gracefully instead of timing out";
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() - start < std::chrono::seconds(9));
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    EXPECT_EQ(ETIMEDOUT, error);
+    EXPECT_GE(elapsed, std::chrono::seconds(4));
+    EXPECT_LT(elapsed, std::chrono::seconds(9));
+}
+
+/* With unacknowledged data in flight, keepalive stays dormant and the
+ * retransmission path measures TCP_USER_TIMEOUT from the send. The abort must
+ * come ~user_timeout after the unacknowledged send, not earlier through the
+ * keepalive clock that runs from the last receive.
+ */
+TEST_F(tcp_sockopt, keepalive_user_timeout_waits_for_new_data)
+{
+    SKIP_TRUE(xlio_get_api(), "Requires XLIO and two offloadable --addr addresses");
+    SKIP_TRUE(offloadable_address(client_addr) && offloadable_address(server_addr),
+              "Requires non-loopback --addr addresses for both offloaded endpoints");
+    int ready[2];
+    ASSERT_EQ(0, pipe(ready));
+    const pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        close(ready[0]);
+        alarm(30);
+        const int listener = sock_create();
+        if (listener < 0 ||
+            bind(listener, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) ||
+            listen(listener, 1) || write(ready[1], "R", 1) != 1) {
+            _exit(1);
+        }
+        const int peer = accept(listener, nullptr, nullptr);
+        if (peer < 0 || send(peer, "R", 1, MSG_NOSIGNAL) != 1) {
+            _exit(1);
+        }
+        raise(SIGSTOP);
+        _exit(0);
+    }
+
+    close(ready[1]);
+    // Clean up the stopped child even if a fatal assertion returns early.
+    struct child_guard {
+        pid_t pid;
+        int pipe_fd;
+        ~child_guard()
+        {
+            kill(pid, SIGKILL);
+            waitpid(pid, nullptr, 0);
+            close(pipe_fd);
+        }
+    } child {pid, ready[0]};
+    pollfd readiness {ready[0], POLLIN, 0};
+    ASSERT_EQ(1, poll(&readiness, 1, 3000));
+    char byte;
+    ASSERT_EQ(1, read(ready[0], &byte, 1));
+
+    reusable_cleanable_test_socket fd {sock_create()};
+    ASSERT_GE(fd, 0);
+    timeval timeout {3, 0};
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, bind(fd, reinterpret_cast<sockaddr *>(&client_addr), sizeof(client_addr)));
+    ASSERT_EQ(0, connect(fd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)));
+    ASSERT_EQ(1, recv_retry_eintr(fd, &byte, 1)) << "errno=" << errno;
+    int status = 0;
+    const auto stop_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    pid_t stopped = 0;
+    do {
+        stopped = waitpid(pid, &status, WUNTRACED | WNOHANG);
+        if (stopped != 0) {
+            break;
+        }
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() < stop_deadline);
+    ASSERT_EQ(pid, stopped);
+    ASSERT_TRUE(WIFSTOPPED(status));
+
+    const int idle = 2, interval = 1, enabled = 1;
+    const unsigned int user_timeout_ms = 10000;
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)));
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval)));
+    ASSERT_EQ(
+        0,
+        setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms, sizeof(user_timeout_ms)));
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof(enabled)));
+
+    // Send one byte just before keep_idle expires; the frozen peer never ACKs it.
+    usleep(1800000);
+    ASSERT_EQ(1, send(fd, "x", 1, MSG_NOSIGNAL));
+
+    // In delegate mode (XLIO_TCP_CTL_THREAD=delegate) the 10 ms recv polling drives the timers.
+    const auto start = std::chrono::steady_clock::now();
+    int error = 0;
+    do {
+        const ssize_t result = recv(fd, &byte, 1, MSG_DONTWAIT);
+        if (result < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            error = errno;
+            break;
+        }
+        ASSERT_NE(0, result) << "Peer closed gracefully instead of timing out";
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() - start < std::chrono::seconds(15));
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    EXPECT_EQ(ETIMEDOUT, error);
+    EXPECT_GE(elapsed, std::chrono::seconds(9));
+    EXPECT_LT(elapsed, std::chrono::seconds(15));
+}
+
+/* With SO_KEEPALIVE + TCP_USER_TIMEOUT on an idle connection, the abort must
+ * wait for a probe plus one full keep_intvl, not fire on the first timer tick
+ * after user_timeout once a probe is out. Timeline with KEEPIDLE=2, KEEPINTVL=5,
+ * TCP_USER_TIMEOUT=3000: first probe at ~2s after the last receive, abort at
+ * ~7s (probe + full keep_intvl). The 6s lower bound rejects an abort at ~3s.
+ */
+TEST_F(tcp_sockopt, keepalive_user_timeout_waits_probe_interval)
+{
+    SKIP_TRUE(xlio_get_api(), "Requires XLIO and two offloadable --addr addresses");
+    SKIP_TRUE(offloadable_address(client_addr) && offloadable_address(server_addr),
+              "Requires non-loopback --addr addresses for both offloaded endpoints");
+    int ready[2];
+    ASSERT_EQ(0, pipe(ready));
+    const pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        close(ready[0]);
+        alarm(30);
+        const int listener = sock_create();
+        if (listener < 0 ||
+            bind(listener, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) ||
+            listen(listener, 1) || write(ready[1], "R", 1) != 1) {
+            _exit(1);
+        }
+        const int peer = accept(listener, nullptr, nullptr);
+        if (peer < 0 || send(peer, "R", 1, MSG_NOSIGNAL) != 1) {
+            _exit(1);
+        }
+        raise(SIGSTOP);
+        _exit(0);
+    }
+
+    close(ready[1]);
+    // Clean up the stopped child even if a fatal assertion returns early.
+    struct child_guard {
+        pid_t pid;
+        int pipe_fd;
+        ~child_guard()
+        {
+            kill(pid, SIGKILL);
+            waitpid(pid, nullptr, 0);
+            close(pipe_fd);
+        }
+    } child {pid, ready[0]};
+    pollfd readiness {ready[0], POLLIN, 0};
+    ASSERT_EQ(1, poll(&readiness, 1, 3000));
+    char byte;
+    ASSERT_EQ(1, read(ready[0], &byte, 1));
+
+    reusable_cleanable_test_socket fd {sock_create()};
+    ASSERT_GE(fd, 0);
+    timeval timeout {3, 0};
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, bind(fd, reinterpret_cast<sockaddr *>(&client_addr), sizeof(client_addr)));
+    ASSERT_EQ(0, connect(fd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)));
+    ASSERT_EQ(1, recv_retry_eintr(fd, &byte, 1)) << "errno=" << errno;
+    // The keepalive abort clock starts at the last received segment: the "R" byte above.
+    const auto start = std::chrono::steady_clock::now();
+    int status = 0;
+    const auto stop_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    pid_t stopped = 0;
+    do {
+        stopped = waitpid(pid, &status, WUNTRACED | WNOHANG);
+        if (stopped != 0) {
+            break;
+        }
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() < stop_deadline);
+    ASSERT_EQ(pid, stopped);
+    ASSERT_TRUE(WIFSTOPPED(status));
+
+    const int idle = 2, interval = 5, enabled = 1;
+    const unsigned int user_timeout_ms = 3000;
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)));
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval)));
+    ASSERT_EQ(
+        0,
+        setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms, sizeof(user_timeout_ms)));
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof(enabled)));
+
+    // In delegate mode (XLIO_TCP_CTL_THREAD=delegate) the 10 ms recv polling drives the timers.
+    int error = 0;
+    do {
+        const ssize_t result = recv(fd, &byte, 1, MSG_DONTWAIT);
+        if (result < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            error = errno;
+            break;
+        }
+        ASSERT_NE(0, result) << "Peer closed gracefully instead of timing out";
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() - start < std::chrono::seconds(12));
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    EXPECT_EQ(ETIMEDOUT, error);
+    EXPECT_GE(elapsed, std::chrono::seconds(6));
+    EXPECT_LT(elapsed, std::chrono::seconds(12));
 }
