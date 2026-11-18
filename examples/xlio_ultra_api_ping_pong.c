@@ -135,6 +135,12 @@ static struct app_state g_state = {0};
 #define TX_BUFFER_SIZE  1024 /* Size of each TX buffer in bytes */
 #define TX_POOL_EMPTY   -1 /* Sentinel value indicating empty pool */
 
+/*
+ * Some devices accept relaxed ordering memory keys only, so the TX buffer registration
+ * requests relaxed ordering.
+ */
+#define TX_BUFFER_MR_ACCESS (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_RELAXED_ORDERING)
+
 /* RX accumulator configuration */
 #define RX_ACCUMULATOR_INITIAL_SIZE 1024 /* Initial size for RX accumulator buffer */
 
@@ -1024,7 +1030,7 @@ static int register_tx_buffer_pool(xlio_socket_t sock)
     }
 
     /* Register the entire memory block */
-    g_state.mr_buf = ibv_reg_mr(g_state.pd, g_state.tx_buffers, total_size, IBV_ACCESS_LOCAL_WRITE);
+    g_state.mr_buf = ibv_reg_mr(g_state.pd, g_state.tx_buffers, total_size, TX_BUFFER_MR_ACCESS);
     if (!g_state.mr_buf) {
         fprintf(stderr, "Failed to register TX buffer memory\n");
         return -1;

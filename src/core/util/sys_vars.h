@@ -578,7 +578,7 @@ extern const mce_sys_var &safe_mce_sys();
 #define MCE_DEFAULT_STRQ_NUM_WRE                    (128)
 #define MCE_DEFAULT_STRQ_NUM_WRE_TO_POST_RECV       (1)
 #define MCE_DEFAULT_STRQ_STRIDES_COMPENSATION_LEVEL (32768)
-#define MCE_DEFAULT_RELAXED_ORDERING                (false)
+#define MCE_DEFAULT_RELAXED_ORDERING                (true)
 
 #define MCE_DEFAULT_RX_BUF_SIZE                   (0)
 #define MCE_DEFAULT_RX_BUFS_BATCH                 (64)

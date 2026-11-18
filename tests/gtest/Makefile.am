@@ -131,6 +131,7 @@ gtest_SOURCES = \
 	core/xlio_sockopt.cc \
 	core/blocking_wait_test.cc \
 	core/blocking_wait_results_test.cc \
+	core/relaxed_ordering_decision_test.cc \
 	\
 	xlio_ultra_api/xlio_socket.cc \
 	xlio_ultra_api/xlio_socket_listen_connect.cc \

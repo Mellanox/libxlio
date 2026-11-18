@@ -23,6 +23,12 @@
 #define TEST_USERDATA_MAGIC 0xfeedbeef
 #define FAKE_PORT           65535
 
+/*
+ * Some devices accept relaxed ordering memory keys only, so the send buffer registration
+ * requests relaxed ordering.
+ */
+#define SNDBUF_MR_ACCESS (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_RELAXED_ORDERING)
+
 static bool quit = false;
 static bool terminated = false;
 static int g_test_events;
@@ -292,7 +298,7 @@ int main(int argc, char **argv)
 
     struct ibv_pd *pd = xlio_socket_get_pd(sock);
     assert(pd != NULL);
-    mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), IBV_ACCESS_LOCAL_WRITE);
+    mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), SNDBUF_MR_ACCESS);
     assert(mr_buf != NULL);
 
     printf("Starting polling loop.\n");

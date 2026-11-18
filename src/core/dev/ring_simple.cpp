@@ -89,6 +89,8 @@ ring_simple::ring_simple(int if_index, ring *parent, bool use_locks)
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
+    m_p_ib_ctx->report_relaxed_ordering_verdict_once();
+
     /* initialization basing on ndev information */
     m_mtu = p_ndev->get_mtu();
 

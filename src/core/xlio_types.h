@@ -413,6 +413,7 @@ struct xlio_socket_attr {
  * - mkey: Memory key for registered memory regions
  * - userdata_op: User data provided to completion callback
  * - For zero-copy, memory must be registered with ibv_pd from xlio_socket_get_pd()
+ * - See the note at xlio_socket_get_pd() about relaxed ordering memory keys
  *
  * @par Inline vs Zero-Copy:
  * - INLINE flag: Data copied to internal buffers, no completion callback

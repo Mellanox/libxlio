@@ -77,6 +77,8 @@ bool dm_mgr::allocate_resources(ib_ctx_handler *ib_ctx, ring_stats_t *ring_stats
     xlio_ibv_init_dm_mr(mr_in, ib_ctx->get_ibv_pd(), allocation_size, m_p_ibv_dm);
 
     // Register On Device Memory MR
+    // The kernel rejects a device memory registration with the relaxed ordering
+    // access flag, so the registration does not pass it.
     m_p_dm_mr = xlio_ibv_reg_dm_mr(&mr_in);
     if (!m_p_dm_mr) {
         xlio_ibv_free_dm(m_p_ibv_dm);
