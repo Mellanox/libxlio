@@ -415,15 +415,21 @@ int io_mux_call::call()
         // 1st scenario
         timer_update();
         wait_os(false);
-        if (g_b_exit || is_sig_pending()) {
-            errno = EINTR;
-            xlio_throw_object(io_mux_call::io_error);
-        }
         m_p_stats->n_iomux_os_rx_ready += m_n_ready_rfds; // TODO: check
 
         // wake up mechanism can bring up events of later joined offloaded sockets
         if (*m_p_num_all_offloaded_fds) {
             check_all_offloaded_sockets();
+        }
+
+        // Deliver OS and newly joined offloaded readiness before EINTR. A returned
+        // edge (including libevent's shutdown signal pipe) may not be reported again.
+        if (!m_n_all_ready_fds && (g_b_exit || is_sig_pending())) {
+            errno = EINTR;
+            xlio_throw_object(io_mux_call::io_error);
+        }
+
+        if (*m_p_num_all_offloaded_fds) {
             if (m_n_all_ready_fds) {
                 goto done;
             } else { // false wake-up, and we already discovered that we should be in 2nd
