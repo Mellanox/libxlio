@@ -6,6 +6,7 @@ As a contributor, here are the guidelines we would like you to follow:
  - [Commit Message Guidelines](#commit)
  - [Coding Rules](#rules)
  - [Unit tests](#tests)
+ - [Packetdrill tests](#packetdrill)
  - [Continuous Integration](#ci)
 
 
@@ -187,6 +188,25 @@ or
 ```shell
 $ LD_PRELOAD=libxlio.so ./tests/gtest --if=ens2f0,ens2f1 --gtest_filter=tcp_sendfile.*
 ```
+
+
+## <a name="packetdrill"></a> Packetdrill tests
+
+The [Packetdrill suite](../tests/packetdrill/README.md) under
+`tests/packetdrill/` tests XLIO's TCP behavior using scripted socket calls and
+packet injection and capture. The `pd` runner preloads XLIO into the client
+and checks that the tested flow is offloaded.
+
+Add Packetdrill tests for features and bug fixes best verified at the
+packet level, such as packet transmission timing, IP/TCP header options,
+and payload segmentation.
+
+Every XLIO build must pass the Packetdrill suite in Local mode
+(`tests/packetdrill/pd run --interface PF ...`).
+
+See the suite's [README](../tests/packetdrill/README.md) for prerequisites, tool
+preparation, run commands, configuration and result logs, and
+[TESTS.md](../tests/packetdrill/TESTS.md) for test coverage and compatibility notes.
 
 
 ## <a name="ci"></a> Continuous Integration
