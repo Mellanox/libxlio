@@ -722,25 +722,25 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
             }
         }
 
-        /* Check if KEEPALIVE should be sent */
+        /* Check if KEEPALIVE should be sent. With TCP_USER_TIMEOUT in ESTABLISHED, skip it
+         * while data is on unacked or an RTO retransmission waits on unsent (rtime >= 0).
+         * tcp_user_timeout_occured() then measures the user timeout from the send. */
         if ((pcb->so_options & SOF_KEEPALIVE) &&
-            ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT))) {
+            ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT)) &&
+            !(pcb->user_timeout_ms != 0 && get_tcp_state(pcb) == ESTABLISHED &&
+              (pcb->unacked != NULL || tcp_rexmit_timer_running(pcb)))) {
             u32_t ka_elapsed = (u32_t)(tcp_ticks - pcb->tmr);
             u8_t ka_abort = 0;
 
             if (pcb->user_timeout_ms != 0) {
-                /* TCP_USER_TIMEOUT: abort once user_timeout has elapsed since the
-                 * last segment was received from the peer (pcb->tmr), with at
-                 * least one keepalive probe outstanding (keep_cnt_sent > 0). This
-                 * matches Linux tcp_keepalive_timer(), which aborts when
-                 * elapsed >= user_timeout && icsk_probes_out > 0, where elapsed
-                 * is measured from the last receive (rcv_tstamp / lrcvtime). A
-                 * keepalive-probe reply (a bare ACK) resets both pcb->tmr and
-                 * keep_cnt_sent (tcp_in.c), so a peer that answers probes keeps
-                 * the connection alive (RFC 1122 4.2.2.17); only unanswered
-                 * probes advance it toward the abort. */
+                /* TCP_USER_TIMEOUT: abort once user_timeout has elapsed since
+                 * the last received segment (pcb->tmr), at least one probe is
+                 * out, and a full keep_intvl has passed since the last probe.
+                 * A probe reply resets pcb->tmr and keep_cnt_sent (tcp_in.c). */
                 ka_abort = (ka_elapsed >= tcp_ms_to_ticks(pcb->user_timeout_ms)) &&
-                    (pcb->keep_cnt_sent > 0);
+                    (pcb->keep_cnt_sent > 0) &&
+                    ((u32_t)(tcp_ticks - pcb->last_keepalive_tmr) >=
+                     tcp_ms_to_ticks(pcb->keep_intvl));
             } else {
                 /* No TCP_USER_TIMEOUT: abort once keep_cnt probes have been sent
                  * and the final probe's keep_intvl has elapsed without a reply,
