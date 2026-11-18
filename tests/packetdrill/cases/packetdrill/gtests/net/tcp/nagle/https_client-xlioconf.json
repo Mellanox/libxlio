@@ -1,0 +1,16 @@
+{
+    "network": {
+        "protocols": {
+            "tcp": {
+                "quickack": true
+            }
+        }
+    },
+    "hardware_features": {
+        "tcp": {
+            "tso": {
+                "enable": "disable"
+            }
+        }
+    }
+}
