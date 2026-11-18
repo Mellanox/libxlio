@@ -74,12 +74,24 @@ public:
         map_listen_fd.erase(fd);
     }
 
-    /* dup() intercept: remember dup->original and original->itself */
-    void record_dup(int dup_fd, int orig_fd)
+    /* dup() intercept: remember dup->original and original->itself. Skips a
+     * failed dup and an original init_worker() cannot resolve as a clone
+     * parent; such self-entries inflate count_original_listeners(). */
+    void record_dup(int dup_fd, int orig_fd, bool orig_can_be_parent)
     {
+        if (dup_fd < 0 || !orig_can_be_parent) {
+            return;
+        }
         std::lock_guard<decltype(m_lock)> lock(m_lock);
         map_dup_fd[dup_fd] = orig_fd;
         map_dup_fd[orig_fd] = orig_fd;
+    }
+
+    /* close() teardown: a dup record must not outlive its fd */
+    void erase_dup_fd(int fd)
+    {
+        std::lock_guard<decltype(m_lock)> lock(m_lock);
+        map_dup_fd.erase(fd);
     }
 
     void publish_thread_worker(pid_t tid, int worker_id)
