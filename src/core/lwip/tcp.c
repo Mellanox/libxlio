@@ -645,15 +645,8 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
                      * update without sending any data (which will force us to split the segment).
                      * tcp_zero_window_probe(pcb); */
                     tcp_keepalive(pcb);
-                    /* Anchor the TCP_USER_TIMEOUT clock for this zero-window /
-                     * persist probe: there is pending send data that cannot be
-                     * delivered because the peer's advertised window is closed.
-                     * This preserves the pre-existing behavior of aborting a
-                     * persist-stuck connection after user_timeout via
-                     * tcp_user_timeout_occured(). Pure keepalive probes (the
-                     * SOF_KEEPALIVE branch below) intentionally do NOT anchor
-                     * this - an idle connection has no unacknowledged data, so
-                     * its user_timeout is measured from pcb->tmr (last receive). */
+                    /* Zero-window data starts the TCP_USER_TIMEOUT clock. The keepalive
+                     * block measures idle time from pcb->keepalive_rx_tmr. */
                     if (pcb->ticks_since_data_sent == -1) {
                         pcb->ticks_since_data_sent = 0;
                     }
@@ -729,14 +722,14 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
             ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT)) &&
             !(pcb->user_timeout_ms != 0 && get_tcp_state(pcb) == ESTABLISHED &&
               (pcb->unacked != NULL || tcp_rexmit_timer_running(pcb)))) {
-            u32_t ka_elapsed = (u32_t)(tcp_ticks - pcb->tmr);
+            u32_t ka_elapsed = (u32_t)(tcp_ticks - pcb->keepalive_rx_tmr);
             u8_t ka_abort = 0;
 
             if (pcb->user_timeout_ms != 0) {
                 /* TCP_USER_TIMEOUT: abort once user_timeout has elapsed since
-                 * the last received segment (pcb->tmr), at least one probe is
-                 * out, and a full keep_intvl has passed since the last probe.
-                 * A probe reply resets pcb->tmr and keep_cnt_sent (tcp_in.c). */
+                 * the last received segment (keepalive_rx_tmr), at least one probe
+                 * is out, and a full keep_intvl has passed since the last probe. A
+                 * probe reply resets keepalive_rx_tmr and keep_cnt_sent (tcp_in.c). */
                 ka_abort = (ka_elapsed >= tcp_ms_to_ticks(pcb->user_timeout_ms)) &&
                     (pcb->keep_cnt_sent > 0) &&
                     ((u32_t)(tcp_ticks - pcb->last_keepalive_tmr) >=
@@ -1014,6 +1007,7 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
 
     pcb->keep_cnt_sent = 0;
     pcb->last_keepalive_tmr = tcp_ticks;
+    pcb->keepalive_rx_tmr = tcp_ticks;
     pcb->quickack = 0;
     pcb->is_in_input = 0;
     pcb->enable_ts_opt = enable_ts_option;
@@ -1053,6 +1047,7 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     pcb->recv = tcp_recv_null;
     pcb->keep_cnt_sent = 0;
     pcb->last_keepalive_tmr = tcp_ticks;
+    pcb->keepalive_rx_tmr = tcp_ticks;
     pcb->quickack = 0;
     pcb->is_in_input = 0;
     pcb->snd_scale = 0;

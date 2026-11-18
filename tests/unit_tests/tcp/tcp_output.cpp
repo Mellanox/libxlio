@@ -987,6 +987,7 @@ static void init_zero_window_pcb(tcp_pcb &pcb, enum tcp_state state)
     pcb.snd_wnd = 0;
     pcb.tmr = tcp_ticks;
     pcb.last_keepalive_tmr = tcp_ticks;
+    pcb.keepalive_rx_tmr = tcp_ticks;
 }
 
 /* One slow-timer pass: tcp_ticks advances once per pass, as in xlio_lwip. */
@@ -1008,7 +1009,7 @@ static u32_t keepalive_abort_tick_with_unsent_data(bool persist_armed)
     pcb.keep_cnt = 3;
     pcb.persist_backoff = persist_armed ? 1 : 0;
     /* Last receive is older than keep_idle. */
-    pcb.tmr = tcp_ticks - tcp_ms_to_ticks(pcb.keep_idle) - 1;
+    pcb.keepalive_rx_tmr = tcp_ticks - tcp_ms_to_ticks(pcb.keep_idle) - 1;
 
     test_segment_storage storage;
     init_unsent_segment(storage, pcb.snd_nxt, 4);
@@ -1077,7 +1078,7 @@ TEST(tcp_slowtmr, keepalive_skips_connection_with_unacked_data)
     pcb.keep_cnt = 3;
     pcb.user_timeout_ms = 5000;
     const u32_t timeout_ticks = tcp_ms_to_ticks(pcb.user_timeout_ms);
-    pcb.tmr = tcp_ticks - 2 * timeout_ticks;
+    pcb.keepalive_rx_tmr = tcp_ticks - 2 * timeout_ticks;
     pcb.last_keepalive_tmr = tcp_ticks - 2 * timeout_ticks;
     pcb.keep_cnt_sent = 1;
 
@@ -1119,7 +1120,7 @@ TEST(tcp_slowtmr, keepalive_user_timeout_waits_keep_intvl_after_probe)
     pcb.keep_intvl = 5000;
     pcb.keep_cnt = 9;
     pcb.user_timeout_ms = 3000;
-    pcb.tmr = tcp_ticks;
+    pcb.keepalive_rx_tmr = tcp_ticks;
     pcb.last_keepalive_tmr = tcp_ticks;
 
     const u32_t idle_ticks = tcp_ms_to_ticks(pcb.keep_idle);
@@ -1205,7 +1206,7 @@ TEST(tcp_slowtmr, keepalive_skips_parked_rto_retransmission)
     pcb.keep_cnt = 3;
     pcb.user_timeout_ms = 5000;
     const u32_t timeout_ticks = tcp_ms_to_ticks(pcb.user_timeout_ms);
-    pcb.tmr = tcp_ticks - 2 * timeout_ticks;
+    pcb.keepalive_rx_tmr = tcp_ticks - 2 * timeout_ticks;
     pcb.last_keepalive_tmr = tcp_ticks - 2 * timeout_ticks;
     pcb.keep_cnt_sent = 1;
 
@@ -1253,7 +1254,7 @@ TEST(tcp_slowtmr, keepalive_aborts_unacked_data_without_user_timeout)
     pcb.keep_idle = 2000;
     pcb.keep_intvl = TCP_KEEPINTVL_DEFAULT;
     pcb.keep_cnt = TCP_KEEPCNT_DEFAULT;
-    pcb.tmr = tcp_ticks;
+    pcb.keepalive_rx_tmr = tcp_ticks;
     pcb.last_keepalive_tmr = tcp_ticks;
 
     test_segment_storage storage;
@@ -1307,7 +1308,7 @@ TEST(tcp_slowtmr, keepalive_aborts_close_wait_with_unacked_data)
     pcb.keep_intvl = slow_tmr_interval;
     pcb.keep_cnt = 100;
     pcb.user_timeout_ms = 5000;
-    pcb.tmr = tcp_ticks;
+    pcb.keepalive_rx_tmr = tcp_ticks;
     pcb.last_keepalive_tmr = tcp_ticks;
 
     test_segment_storage storage;
@@ -1387,6 +1388,7 @@ static void set_keepalive_with_user_timeout(tcp_pcb &pcb)
     pcb.user_timeout_ms = 8000;
     pcb.tmr = tcp_ticks;
     pcb.last_keepalive_tmr = tcp_ticks;
+    pcb.keepalive_rx_tmr = tcp_ticks;
 }
 
 /* A keepalive pcb that accepts segments from L3_level_tcp_input(). */
@@ -1523,6 +1525,69 @@ TEST(tcp_slowtmr, keepalive_probes_after_zero_window_ack_arms_persist)
     EXPECT_EQ(1, pcb.persist_backoff);
 
     expect_keepalive_probe_after_keep_idle(pcb);
+}
+
+namespace {
+
+/* sockinfo_tcp::handle_fin() shuts down the receive side on a FIN. */
+static err_t shutdown_rx_on_fin(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+{
+    (void)arg;
+    (void)err;
+    if (p == NULL) {
+        tcp_shutdown(tpcb, 1, 0);
+    }
+    return ERR_OK;
+}
+
+} // namespace
+
+/* A received FIN sets TF_RXCLOSED and pcb->tmr stops. Keepalive must still
+ * measure idle time from the last received segment. The peer answers every
+ * second probe only. Each reply must restart keep_idle, and no abort occurs. */
+TEST(tcp_slowtmr, keepalive_in_close_wait_restarts_idle_time_on_reply)
+{
+    timer_resolution_guard timer_guard(100);
+    slowtmr_test_guard test_guard;
+    output_hooks_guard hooks_guard;
+    tcp_pcb pcb;
+    init_keepalive_input_pcb(pcb, ESTABLISHED);
+    pcb.recv = shutdown_rx_on_fin;
+
+    inject_segment(pcb, pcb.rcv_nxt, pcb.snd_nxt, TCP_FIN | TCP_ACK);
+    ASSERT_EQ(CLOSE_WAIT, get_tcp_state(&pcb));
+    ASSERT_NE(0, pcb.flags & TF_RXCLOSED);
+    g_probe_calls = 0;
+
+    const u32_t idle_ticks = tcp_ms_to_ticks(pcb.keep_idle);
+    const u32_t intvl_ticks = tcp_ms_to_ticks(pcb.keep_intvl);
+    const u32_t total_ticks = tcp_ms_to_ticks(40000);
+    u32_t last_event_tick = 0; /* The FIN, then each probe. */
+    bool last_probe_answered = true; /* The FIN counts as a received segment. */
+    int probes = 0;
+    for (u32_t tick = 1; tick <= total_ticks; ++tick) {
+        slowtmr_tick(pcb);
+        ASSERT_EQ(0, g_error_calls) << "aborted at tick " << tick << " after " << probes
+                                    << " probes with err " << (int)g_last_error;
+        if (g_probe_calls == probes) {
+            continue;
+        }
+        ASSERT_EQ(probes + 1, g_probe_calls) << "more than one probe at tick " << tick;
+        ++probes;
+        const u32_t gap = tick - last_event_tick;
+        const u32_t expected_gap = last_probe_answered ? idle_ticks : intvl_ticks;
+        EXPECT_GE(gap, expected_gap) << "probe " << probes << " at tick " << tick;
+        EXPECT_LE(gap, expected_gap + 1) << "probe " << probes << " at tick " << tick;
+        last_event_tick = tick;
+        last_probe_answered = (probes % 2) == 0;
+        if (last_probe_answered) {
+            inject_segment(pcb, pcb.rcv_nxt, pcb.snd_nxt, TCP_ACK);
+        }
+    }
+
+    EXPECT_EQ(CLOSE_WAIT, get_tcp_state(&pcb));
+    EXPECT_EQ(0, g_rst_calls);
+    EXPECT_GE(probes, (int)(2 * (total_ticks / (idle_ticks + 1 + intvl_ticks))));
 }
 
 #ifdef XLIO_TIME_DEBUG_COUNTERS

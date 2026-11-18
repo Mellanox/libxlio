@@ -602,6 +602,8 @@ static err_t tcp_process(struct tcp_pcb *pcb, tcp_in_data *in_data)
         /* Update the PCB (in)activity timer unless rx is closed (see tcp_shutdown) */
         pcb->tmr = tcp_ticks;
     }
+    /* Keepalive idle time runs from every received segment, also after TF_RXCLOSED. */
+    pcb->keepalive_rx_tmr = tcp_ticks;
     pcb->keep_cnt_sent = 0;
 
     tcp_parseopt(pcb, in_data);

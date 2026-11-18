@@ -1800,9 +1800,9 @@ void tcp_keepalive(struct tcp_pcb *pcb)
                         pcb->is_ipv6);
 
     LWIP_DEBUGF(TCP_DEBUG,
-                ("tcp_keepalive: tcp_ticks %" U32_F "   pcb->tmr %" U32_F
+                ("tcp_keepalive: tcp_ticks %" U32_F "   pcb->keepalive_rx_tmr %" U32_F
                  " pcb->keep_cnt_sent %" U16_F "\n",
-                 tcp_ticks, pcb->tmr, pcb->keep_cnt_sent));
+                 tcp_ticks, pcb->keepalive_rx_tmr, pcb->keep_cnt_sent));
 
 #if LWIP_TCP_TIMESTAMPS
     if (pcb->flags & TF_TIMESTAMP) {
@@ -1830,13 +1830,8 @@ void tcp_keepalive(struct tcp_pcb *pcb)
     pcb->ip_output(p, NULL, pcb, 0);
     tcp_tx_pbuf_free(pcb, p);
 
-    /* NOTE: a keepalive probe does NOT anchor pcb->ticks_since_data_sent. That
-     * counter drives tcp_user_timeout_occured() (the unacknowledged-data
-     * TCP_USER_TIMEOUT path); anchoring it here would make an idle keepalive
-     * connection abort at keep_idle + user_timeout instead of user_timeout.
-     * The zero-window/persist caller in tcp_slowtmr() anchors it explicitly
-     * (it has real pending data), and the idle keepalive user_timeout is
-     * handled in tcp_slowtmr() via pcb->tmr (the last-receive timestamp). */
+    /* A keepalive probe does not start pcb->ticks_since_data_sent. The keepalive
+     * block measures the idle user timeout from pcb->keepalive_rx_tmr. */
 
     LWIP_DEBUGF(
         TCP_DEBUG,

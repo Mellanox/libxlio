@@ -435,6 +435,10 @@ struct tcp_pcb {
     /* tcp_ticks of the last keepalive probe sent; decouples probe spacing from
      * the u8 keep_cnt_sent counter (which saturates at 255). */
     u32_t last_keepalive_tmr;
+
+    /* tcp_ticks of the last received segment. Keepalive measures idle time from
+     * it. Unlike pcb->tmr, it also advances after TF_RXCLOSED. */
+    u32_t keepalive_rx_tmr;
 };
 
 /* The four TX queue heads form one traversal unit in tcp_output(), ACK
