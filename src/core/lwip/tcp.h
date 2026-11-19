@@ -266,6 +266,8 @@ struct tcp_pcb {
 
     enum tcp_state private_state; /* TCP state - should only be touched thru get/set functions */
     u8_t nrtx; /* number of retransmissions */
+    u8_t syn_max_rtx; /* SYN retransmit budget: TCP_SYNCNT. 0 = never set, the
+                       * build default TCP_SYNMAXRTX applies. */
     u8_t prio;
     /* Local-send retry marker: the sole unacked segment did not reach the
      * wire and must be moved back to unsent before the next attempt. */

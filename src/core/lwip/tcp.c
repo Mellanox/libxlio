@@ -576,6 +576,13 @@ err_t tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool
     return ret;
 }
 
+/* The SYN(-ACK) retransmit budget. 0 = the socket option was never set, use
+ * the build default, as Linux treats icsk_syn_retries. */
+static inline u8_t tcp_syn_rtx_budget(const struct tcp_pcb *pcb)
+{
+    return pcb->syn_max_rtx != 0 ? pcb->syn_max_rtx : TCP_SYNMAXRTX;
+}
+
 static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
 {
     u32_t user_timeout_ticks = tcp_ms_to_ticks(pcb->user_timeout_ms);
@@ -621,13 +628,16 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
             err = ERR_TIMEOUT;
             pcb_reset += (pcb->so_options & SOF_KEEPALIVE);
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: user timeout occurred\n"));
-        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= TCP_SYNMAXRTX) {
+        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= tcp_syn_rtx_budget(pcb)) {
             ++pcb_remove;
             err = ERR_TIMEOUT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max SYN retries reached\n"));
             /* >= not ==: retransmission paths can advance nrtx between timer
-             * passes, so the counter can step past the exact limit. */
-        } else if (pcb->nrtx >= TCP_MAXRTX) {
+             * passes, so the counter can step past the exact limit. The SYN
+             * states are bounded by tcp_syn_rtx_budget() above (up to 127, past
+             * TCP_MAXRTX), so the data-retry limit must not steal their abort. */
+        } else if (get_tcp_state(pcb) != SYN_SENT && get_tcp_state(pcb) != SYN_RCVD &&
+                   pcb->nrtx >= TCP_MAXRTX) {
             ++pcb_remove;
             err = ERR_ABRT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max DATA retries reached\n"));
@@ -1001,6 +1011,7 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     pcb->is_last_seg_dropped = false;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
+    pcb->syn_max_rtx = 0;
     tcp_rto_pcb_seed(pcb);
     pcb->nrtx = 0;
     pcb->dupacks = 0;
