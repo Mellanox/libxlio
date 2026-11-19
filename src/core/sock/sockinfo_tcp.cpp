@@ -102,6 +102,7 @@ static bool is_inherited_option(int __level, int __optname)
         case TCP_KEEPCNT:
 #endif
         case TCP_USER_TIMEOUT:
+        case TCP_SYNCNT:
             ret = true;
         }
     } else if (__level == IPPROTO_IP) {
@@ -3538,6 +3539,12 @@ int sockinfo_tcp::listen(int backlog)
 {
     si_tcp_logfuncall("");
 
+    /* The kernel reads net.ipv4.tcp_synack_retries live for every SYN-ACK.
+     * Refresh it per listen() call, so a process that tunes the sysctl before
+     * listen() gets the tuned SYN-ACK budget for this listener's children. */
+    set_tcp_synack_rtx(
+        (u8_t)safe_mce_sys().sysctl_reader.read_net_ipv4_tcp_synack_retries_now());
+
     int orig_backlog = backlog;
 
     /* Linux manual doesn't describe negative backlog value, however, kernel implementation treats
@@ -5148,6 +5155,17 @@ int sockinfo_tcp::tcp_setsockopt(int __level, int __optname, __const void *__opt
             si_tcp_logdbg("TCP_USER_TIMEOUT value: %u", user_timeout_ms);
             m_pcb.user_timeout_ms = user_timeout_ms;
         } break;
+        case TCP_SYNCNT: {
+            auto *int_ptr = reinterpret_cast<const int *>(__optval);
+            /* Linux range: 1..MAX_TCP_SYNCNT (127). */
+            if (__optlen < sizeof(int) || *int_ptr < 1 || *int_ptr > 127) {
+                errno = EINVAL;
+                ret = -1;
+            } else {
+                si_tcp_logdbg("TCP_SYNCNT value: %d", *int_ptr);
+                m_pcb.syn_max_rtx = static_cast<u8_t>(*int_ptr);
+            }
+        } break;
         case TCP_KEEPIDLE: {
             auto *int_ptr = reinterpret_cast<const int *>(__optval);
             if (__optlen < sizeof(int) || *int_ptr <= 0) {
@@ -5522,6 +5540,17 @@ int sockinfo_tcp::getsockopt_offload(int __level, int __optname, void *__optval,
                 *(unsigned int *)__optval = m_pcb.user_timeout_ms;
                 *__optlen = sizeof(unsigned int);
                 si_tcp_logdbg("TCP_USER_TIMEOUT value: %u", m_pcb.user_timeout_ms);
+                ret = 0;
+            } else {
+                errno = EINVAL;
+            }
+            break;
+        case TCP_SYNCNT:
+            if (*__optlen >= sizeof(int)) {
+                int syncnt = m_pcb.syn_max_rtx != 0 ? m_pcb.syn_max_rtx : TCP_SYNMAXRTX;
+                *(int *)__optval = syncnt;
+                *__optlen = sizeof(int);
+                si_tcp_logdbg("TCP_SYNCNT value: %d", syncnt);
                 ret = 0;
             } else {
                 errno = EINVAL;

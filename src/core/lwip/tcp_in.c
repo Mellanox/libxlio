@@ -396,6 +396,9 @@ static void tcp_listen_input(struct tcp_pcb *pcb, tcp_in_data *in_data)
         npcb->accept = pcb->accept;
         /* inherit socket options */
         npcb->so_options = pcb->so_options & SOF_INHERITED;
+        /* SYN-ACK retransmits follow net.ipv4.tcp_synack_retries. Set before the
+         * listener's inherited-options replay: an inherited TCP_SYNCNT overrides it. */
+        npcb->syn_max_rtx = __atomic_load_n(&tcp_synack_rtx, __ATOMIC_RELAXED);
 
         npcb->snd_scale = 0;
         npcb->rcv_scale = 0;
@@ -447,6 +450,9 @@ static err_t tcp_pcb_reuse(struct tcp_pcb *pcb, tcp_in_data *in_data)
 
     tcp_pcb_recycle(pcb);
     set_tcp_state(pcb, SYN_RCVD);
+    /* SYN-ACK retransmits follow net.ipv4.tcp_synack_retries. Set before the
+     * listener's inherited-options replay: an inherited TCP_SYNCNT overrides it. */
+    pcb->syn_max_rtx = __atomic_load_n(&tcp_synack_rtx, __ATOMIC_RELAXED);
     pcb->rcv_nxt = in_data->seqno + 1;
     pcb->rcv_ann_right_edge = pcb->rcv_nxt;
     pcb->snd_wl1 = in_data->seqno - 1; /* initialise to seqno-1 to force window update */

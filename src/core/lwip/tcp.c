@@ -112,6 +112,16 @@ void set_tmr_resolution(u32_t v)
 {
     slow_tmr_interval = v * TCP_SLOW_INTERVAL_FACTOR;
 }
+
+/* net.ipv4.tcp_synack_retries at startup. 0 = unread, TCP_SYNMAXRTX applies. */
+u8_t tcp_synack_rtx = 0;
+
+void set_tcp_synack_rtx(u8_t v)
+{
+    /* Published from listen() on app threads; the passive-open paths load it on
+     * the RX path. Relaxed is enough: every observed value is a valid budget. */
+    __atomic_store_n(&tcp_synack_rtx, v, __ATOMIC_RELAXED);
+}
 /**
  * Called periodically to dispatch TCP timers.
  *
@@ -576,6 +586,19 @@ err_t tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool
     return ret;
 }
 
+/* The SYN(-ACK) retransmit budget. On an active open, 0 means the socket
+ * option was never set and the build default applies, as Linux treats
+ * icsk_syn_retries. Both passive-open paths store the sysctl value, so in
+ * SYN_RCVD the field is the budget itself: 0 disables SYN-ACK
+ * retransmissions, as in the kernel. */
+static inline u8_t tcp_syn_rtx_budget(const struct tcp_pcb *pcb)
+{
+    if (get_tcp_state(pcb) == SYN_RCVD) {
+        return pcb->syn_max_rtx;
+    }
+    return pcb->syn_max_rtx != 0 ? pcb->syn_max_rtx : TCP_SYNMAXRTX;
+}
+
 static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
 {
     u32_t user_timeout_ticks = tcp_ms_to_ticks(pcb->user_timeout_ms);
@@ -621,13 +644,23 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
             err = ERR_TIMEOUT;
             pcb_reset += (pcb->so_options & SOF_KEEPALIVE);
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: user timeout occurred\n"));
-        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= TCP_SYNMAXRTX) {
+        } else if ((get_tcp_state(pcb) == SYN_SENT || get_tcp_state(pcb) == SYN_RCVD) &&
+                   pcb->nrtx >= tcp_syn_rtx_budget(pcb) &&
+                   (pcb->rto_deadline_us == 0 || tcp_rto_deadline_elapsed(pcb, timer_now_us))) {
+            /* The last retransmission keeps its full RTO window: the abort fires
+             * when that window elapses, not on the pass after the send. The
+             * connect-failure time then covers the whole backoff series. A cleared
+             * deadline (a locally parked retransmission) aborts at once: the
+             * budget stays a hard bound. */
             ++pcb_remove;
             err = ERR_TIMEOUT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max SYN retries reached\n"));
             /* >= not ==: retransmission paths can advance nrtx between timer
-             * passes, so the counter can step past the exact limit. */
-        } else if (pcb->nrtx >= TCP_MAXRTX) {
+             * passes, so the counter can step past the exact limit. The SYN
+             * states are bounded by tcp_syn_rtx_budget() above (up to 127, past
+             * TCP_MAXRTX), so the data-retry limit must not steal their abort. */
+        } else if (get_tcp_state(pcb) != SYN_SENT && get_tcp_state(pcb) != SYN_RCVD &&
+                   pcb->nrtx >= TCP_MAXRTX) {
             ++pcb_remove;
             err = ERR_ABRT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max DATA retries reached\n"));
@@ -757,14 +790,8 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
         }
 #endif /* TCP_QUEUE_OOSEQ */
 
-        /* Check if this PCB has stayed too long in SYN-RCVD */
-        if (get_tcp_state(pcb) == SYN_RCVD) {
-            if ((u32_t)(tcp_ticks - pcb->tmr) > tcp_ms_to_ticks(TCP_SYN_RCVD_TIMEOUT)) {
-                ++pcb_remove;
-                err = ERR_ABRT;
-                LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: removing pcb stuck in SYN-RCVD\n"));
-            }
-        }
+        /* SYN-RCVD lifetime is bounded by the SYN-ACK retransmit budget
+         * (net.ipv4.tcp_synack_retries), checked with the SYN retry abort above. */
 
         /* Check if this PCB has stayed too long in LAST-ACK */
         if (get_tcp_state(pcb) == LAST_ACK) {
@@ -1001,6 +1028,7 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     pcb->is_last_seg_dropped = false;
     pcb->user_timeout_ms = 0;
     pcb->ticks_since_data_sent = -1;
+    pcb->syn_max_rtx = 0;
     tcp_rto_pcb_seed(pcb);
     pcb->nrtx = 0;
     pcb->dupacks = 0;

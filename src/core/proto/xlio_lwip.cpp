@@ -115,6 +115,7 @@ xlio_lwip::xlio_lwip()
     register_sys_now(sys_now);
     tcp_rto_set_floor_us((int64_t)safe_mce_sys().tcp_rto_floor_msec * 1000);
     set_tmr_resolution(safe_mce_sys().tcp_timer_resolution_msec);
+    set_tcp_synack_rtx((u8_t)safe_mce_sys().sysctl_reader.get_net_ipv4_tcp_synack_retries());
     // tcp_ticks increases in the rate of tcp slow_timer
     void *node = g_p_event_handler_manager->register_timer_event(
         safe_mce_sys().tcp_timer_resolution_msec * TCP_SLOW_INTERVAL_FACTOR, this, PERIODIC_TIMER,

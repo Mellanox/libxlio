@@ -82,6 +82,7 @@ public:
         get_ipv6_conf_all_optimistic_dad(true);
         get_ipv6_conf_all_use_optimistic(true);
         get_tcp_keepalive_info(true);
+        get_net_ipv4_tcp_synack_retries(true);
     }
 
     int get_listen_maxconn(bool update = false)
@@ -171,6 +172,30 @@ public:
         static int val;
         if (update) {
             val = read_file_to_int("/proc/sys/net/core/wmem_max", 229376);
+        }
+        return val;
+    }
+
+    /* Uncached: the per-listen() refresh calls this from app threads, so it
+     * must not write the cached static below. 0 is a valid value: the kernel
+     * disables SYN-ACK retransmissions for 0. Values above 127 saturate to
+     * the u8 pcb budget, they do not reset to the default. */
+    int read_net_ipv4_tcp_synack_retries_now()
+    {
+        int v = read_file_to_int("/proc/sys/net/ipv4/tcp_synack_retries", 5);
+        if (v < 0) {
+            v = 5;
+        } else if (v > 127) {
+            v = 127;
+        }
+        return v;
+    }
+
+    int get_net_ipv4_tcp_synack_retries(bool update = false)
+    {
+        static int val;
+        if (update) {
+            val = read_net_ipv4_tcp_synack_retries_now();
         }
         return val;
     }
