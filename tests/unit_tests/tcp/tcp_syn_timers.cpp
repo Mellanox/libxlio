@@ -253,6 +253,86 @@ TEST(tcp_syn_timers, syn_budget_with_cleared_deadline_aborts_at_once)
     EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
 }
 
+/* SYN_RCVD follows the same budget: at the SYN-ACK retransmit budget with the
+ * last RTO window over, the pass aborts. */
+TEST(tcp_syn_timers, syn_rcvd_aborts_at_synack_budget)
+{
+    syn_test_guard guard;
+    tcp_pcb pcb;
+    syn_seg_storage storage;
+    init_syn_pcb(pcb, storage, SYN_RCVD);
+    pcb.syn_max_rtx = 2;
+    pcb.nrtx = 2;
+    pcb.rto_deadline_us = 1;
+
+    syn_slowtmr_tick(pcb);
+
+    EXPECT_EQ(1, g_syn_error_calls);
+    EXPECT_EQ(ERR_TIMEOUT, g_syn_last_error);
+    EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
+}
+
+/* A SYN_RCVD pcb inside its SYN-ACK budget survives past 20 s of handshake
+ * silence: the budget is the bound, there is no fixed watchdog. */
+TEST(tcp_syn_timers, syn_rcvd_inside_budget_survives_twenty_seconds)
+{
+    syn_test_guard guard;
+    tcp_pcb pcb;
+    syn_seg_storage storage;
+    init_syn_pcb(pcb, storage, SYN_RCVD);
+    pcb.syn_max_rtx = 10;
+    pcb.nrtx = 4;
+    pcb.rto_deadline_us = INT64_MAX;
+    /* The last received segment is 25 s in the past. */
+    pcb.tmr = tcp_ticks - tcp_ms_to_ticks(25000);
+
+    syn_slowtmr_tick(pcb);
+
+    EXPECT_EQ(0, g_syn_error_calls) << "a fixed SYN_RCVD watchdog fired";
+    EXPECT_EQ(SYN_RCVD, get_tcp_state(&pcb));
+}
+
+/* A SYN-ACK budget of 0 (net.ipv4.tcp_synack_retries=0) disables SYN-ACK
+ * retransmissions: the pcb aborts at the first elapsed deadline, as in the
+ * kernel. In SYN_RCVD the field is the budget itself, not "unset". */
+TEST(tcp_syn_timers, syn_rcvd_zero_budget_aborts_without_retransmit)
+{
+    syn_test_guard guard;
+    tcp_pcb pcb;
+    syn_seg_storage storage;
+    init_syn_pcb(pcb, storage, SYN_RCVD);
+    pcb.syn_max_rtx = 0;
+    pcb.nrtx = 0;
+    pcb.rto_deadline_us = 1;
+
+    syn_slowtmr_tick(pcb);
+
+    EXPECT_EQ(1, g_syn_error_calls);
+    EXPECT_EQ(ERR_TIMEOUT, g_syn_last_error);
+    EXPECT_EQ(0, g_syn_ip_output_calls) << "a zero budget must not retransmit";
+    EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
+}
+
+/* The user timeout does not govern SYN_RCVD: the listener timeout never
+ * preempts the SYN-ACK budget, as in Linux. */
+TEST(tcp_syn_timers, syn_rcvd_ignores_user_timeout)
+{
+    syn_test_guard guard;
+    tcp_pcb pcb;
+    syn_seg_storage storage;
+    init_syn_pcb(pcb, storage, SYN_RCVD);
+    pcb.syn_max_rtx = 10;
+    pcb.nrtx = 4;
+    pcb.rto_deadline_us = INT64_MAX;
+    pcb.user_timeout_ms = 1000;
+    pcb.ticks_since_data_sent = tcp_ms_to_ticks(5000);
+
+    syn_slowtmr_tick(pcb);
+
+    EXPECT_EQ(0, g_syn_error_calls) << "the user timeout fired in SYN_RCVD";
+    EXPECT_EQ(SYN_RCVD, get_tcp_state(&pcb));
+}
+
 /* Below the budget the connection stays up and the elapsed deadline
  * retransmits the SYN instead of aborting. */
 TEST(tcp_syn_timers, syn_sent_retransmits_below_budget)

@@ -3539,6 +3539,12 @@ int sockinfo_tcp::listen(int backlog)
 {
     si_tcp_logfuncall("");
 
+    /* The kernel reads net.ipv4.tcp_synack_retries live for every SYN-ACK.
+     * Refresh it per listen() call, so a process that tunes the sysctl before
+     * listen() gets the tuned SYN-ACK budget for this listener's children. */
+    set_tcp_synack_rtx(
+        (u8_t)safe_mce_sys().sysctl_reader.read_net_ipv4_tcp_synack_retries_now());
+
     int orig_backlog = backlog;
 
     /* Linux manual doesn't describe negative backlog value, however, kernel implementation treats
