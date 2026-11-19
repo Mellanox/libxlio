@@ -195,11 +195,14 @@ envoy profile ([`profiles.spec`](#profilesspec)=envoy) and creates a ring plus
 hardware flow steering rules per worker. Set to match Envoy's
 `concurrency` value.
 
-**Precedence:** Positive values for both this and
+**Application selection:** Configure a positive worker count for only one
+application. If both
+`applications.envoy.workers_num` and
 [`applications.nginx.workers_num`](#applicationsnginxworkers_num)
-are mutually exclusive and cause configuration to fail. An explicit
-non-`none` [`profiles.spec`](#profilesspec) is respected over the auto-selected
-envoy profile.
+are greater than 0, XLIO logs an error and exits.
+
+**Profile selection:** An explicit non-`none` [`profiles.spec`](#profilesspec)
+is respected over the automatically selected envoy profile.
 
 **Default:** `0`
 
