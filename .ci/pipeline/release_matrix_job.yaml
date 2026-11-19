@@ -55,6 +55,7 @@ runs_on_dockers:
      limits: '{memory: 8Gi, cpu: 6000m}',
      requests: '{memory: 8Gi, cpu: 6000m}'
     }
+  - {name: 'secret-scan', url: '${registry_host}/swx-storage/tools/secret_scan:devops-stable', arch: 'x86_64', tag: 'devops-stable', category: 'tool', limits: '{memory: 3Gi, cpu: 2000m}', requests: '{memory: 3Gi, cpu: 2000m}'}
 
 steps:
   - name: Release
@@ -84,15 +85,23 @@ steps:
     archiveArtifacts: 'logs/'
     credentialsId: 'blackduck_api_token'
 
+# Runs before any matrix cell: a secret scan finding fails the release before anything is built or published.
 pipeline_start:
     shell: action
     module: groovy
+    containerSelector: "{name: 'secret-scan', category: 'tool'}"
     run: |
       if (params.do_dr_build) {
-        env.release_tag = sh (returnStdout: true, script: "git describe --tags --abbrev=0 2>/dev/null").trim()
+        env.release_tag = sh (returnStdout: true, script: 'git -c safe.directory="$WORKSPACE" describe --tags --abbrev=0 2>/dev/null').trim()
+        sh 'git -c safe.directory="$WORKSPACE" checkout "tags/$release_tag"'
       }
       echo "Starting release process for LibXLIO-${release_tag}"
       currentBuild.displayName += "-${release_tag}"
+      try {
+        sh '/opt/nvidia/secret_scan.py --path "$WORKSPACE" --git-repo "$WORKSPACE" --report-file secret_scan.html'
+      } finally {
+        archiveArtifacts artifacts: 'secret_scan.html', allowEmptyArchive: true
+      }
 
 pipeline_stop:
     shell: action
