@@ -167,6 +167,31 @@ TEST(tcp_syn_timers, syn_sent_aborts_at_per_socket_budget)
     EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
 }
 
+/* At the budget the abort waits for the last RTO window: no abort while the
+ * deadline runs, and an abort with no extra retransmit when it elapses. The
+ * total connect-failure time then covers the full backoff series, as in Linux. */
+TEST(tcp_syn_timers, syn_abort_waits_for_the_last_rto_window)
+{
+    syn_test_guard guard;
+    tcp_pcb pcb;
+    syn_seg_storage storage;
+    init_syn_pcb(pcb, storage, SYN_SENT);
+    pcb.syn_max_rtx = 3;
+    pcb.nrtx = 3;
+    pcb.rto_deadline_us = (int64_t)(tcp_ticks + 5) * slow_tmr_interval * 1000;
+
+    for (int pass = 1; pass <= 4; ++pass) {
+        syn_slowtmr_tick(pcb);
+        EXPECT_EQ(0, g_syn_error_calls) << "aborted before the last window, pass " << pass;
+    }
+    syn_slowtmr_tick(pcb);
+
+    EXPECT_EQ(1, g_syn_error_calls);
+    EXPECT_EQ(ERR_TIMEOUT, g_syn_last_error);
+    EXPECT_EQ(0, g_syn_ip_output_calls) << "no retransmit past the budget";
+    EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
+}
+
 /* A budget above TCP_MAXRTX (12) keeps retransmitting past 12: the data retry
  * limit does not apply to the SYN states. */
 TEST(tcp_syn_timers, syn_budget_above_data_retry_limit_retransmits)
@@ -184,6 +209,48 @@ TEST(tcp_syn_timers, syn_budget_above_data_retry_limit_retransmits)
     EXPECT_EQ(0, g_syn_error_calls) << "the data retry limit stole the SYN abort";
     EXPECT_EQ(SYN_SENT, get_tcp_state(&pcb));
     EXPECT_EQ(13, pcb.nrtx);
+}
+
+/* A budget at or above TCP_MAXRTX (12) stays with the SYN abort: the data
+ * retry limit must not steal the wait with an early ERR_ABRT. */
+TEST(tcp_syn_timers, syn_budget_above_data_retry_limit_keeps_the_wait)
+{
+    syn_test_guard guard;
+    tcp_pcb pcb;
+    syn_seg_storage storage;
+    init_syn_pcb(pcb, storage, SYN_SENT);
+    pcb.syn_max_rtx = 12;
+    pcb.nrtx = 12;
+    pcb.rto_deadline_us = (int64_t)(tcp_ticks + 5) * slow_tmr_interval * 1000;
+
+    for (int pass = 1; pass <= 4; ++pass) {
+        syn_slowtmr_tick(pcb);
+        EXPECT_EQ(0, g_syn_error_calls) << "an abort stole the last window, pass " << pass;
+    }
+    syn_slowtmr_tick(pcb);
+
+    EXPECT_EQ(1, g_syn_error_calls);
+    EXPECT_EQ(ERR_TIMEOUT, g_syn_last_error) << "the abort must come from the SYN budget";
+    EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
+}
+
+/* A cleared RTO deadline at the budget aborts at once: the budget stays a hard
+ * bound when a retransmission is parked by a local send failure. */
+TEST(tcp_syn_timers, syn_budget_with_cleared_deadline_aborts_at_once)
+{
+    syn_test_guard guard;
+    tcp_pcb pcb;
+    syn_seg_storage storage;
+    init_syn_pcb(pcb, storage, SYN_SENT);
+    pcb.syn_max_rtx = 3;
+    pcb.nrtx = 3;
+    pcb.rto_deadline_us = 0;
+
+    syn_slowtmr_tick(pcb);
+
+    EXPECT_EQ(1, g_syn_error_calls);
+    EXPECT_EQ(ERR_TIMEOUT, g_syn_last_error);
+    EXPECT_EQ(CLOSED, get_tcp_state(&pcb));
 }
 
 /* Below the budget the connection stays up and the elapsed deadline

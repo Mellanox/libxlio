@@ -628,7 +628,14 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
             err = ERR_TIMEOUT;
             pcb_reset += (pcb->so_options & SOF_KEEPALIVE);
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: user timeout occurred\n"));
-        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= tcp_syn_rtx_budget(pcb)) {
+        } else if (get_tcp_state(pcb) == SYN_SENT && pcb->nrtx >= tcp_syn_rtx_budget(pcb) &&
+                   (pcb->rto_deadline_us == 0 ||
+                    tcp_rto_deadline_elapsed(pcb, timer_now_us))) {
+            /* The last retransmission keeps its full RTO window: the abort fires
+             * when that window elapses, not on the pass after the send. The
+             * connect-failure time then covers the whole backoff series. A cleared
+             * deadline (a locally parked retransmission) aborts at once: the
+             * budget stays a hard bound. */
             ++pcb_remove;
             err = ERR_TIMEOUT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max SYN retries reached\n"));
