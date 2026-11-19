@@ -5,12 +5,14 @@
  */
 
 #include <fstream>
+#include <chrono>
 #include <limits>
 #include <stdexcept>
 #include <tuple>
 
 #include <sys/socket.h>
 #include <sys/types.h> /* See NOTES */
+#include <poll.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include "googletest/include/gtest/gtest.h"
@@ -849,22 +851,18 @@ TEST_P(tcp_sockopt_positive, set_and_get_value)
 INSTANTIATE_TEST_CASE_P(
     keep_alive, tcp_sockopt_positive,
     testing::Values(
-#if LWIP_TCP_KEEPALIVE
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, 1),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, std::numeric_limits<int16_t>::max()),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, 1),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max()),
-#endif
         std::make_tuple(AF_INET, SOL_SOCKET, SO_KEEPALIVE, 1),
         std::make_tuple(AF_INET, SOL_SOCKET, SO_KEEPALIVE, 0),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, 1),
         std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, std::numeric_limits<int16_t>::max()),
-#if LWIP_TCP_KEEPALIVE
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, 1),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, std::numeric_limits<int16_t>::max()),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, 1),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max()),
-#endif
         std::make_tuple(AF_INET6, SOL_SOCKET, SO_KEEPALIVE, 1),
         std::make_tuple(AF_INET6, SOL_SOCKET, SO_KEEPALIVE, 0),
         std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE, 1),
@@ -896,33 +894,77 @@ TEST_P(tcp_setsockopt_negative, set_invalid_value)
  * There may be multiple instantiations of the tcp_setsockopt_negative class and
  * it's test cases.
  */
-INSTANTIATE_TEST_CASE_P(
-    keep_alive, tcp_setsockopt_negative,
-    testing::Values(
-#if LWIP_TCP_KEEPALIVE
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, -1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, 0),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
-                        std::numeric_limits<int16_t>::max() + 1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, -1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, 0),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max() + 1),
-#endif
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, -1),
-        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
-                        std::numeric_limits<int16_t>::max() + 1),
-#if LWIP_TCP_KEEPALIVE
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, -1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, 0),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
-                        std::numeric_limits<int16_t>::max() + 1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, -1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, 0),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, std::numeric_limits<int8_t>::max() + 1),
-#endif
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE, -1),
-        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
-                        std::numeric_limits<int16_t>::max() + 1)));
+INSTANTIATE_TEST_CASE_P(keep_alive, tcp_setsockopt_negative,
+                        testing::Values(std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, -1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL, 0),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        std::numeric_limits<int16_t>::max() + 1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, -1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT, 0),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        std::numeric_limits<int8_t>::max() + 1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE, -1),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        std::numeric_limits<int16_t>::max() + 1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, -1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL, 0),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        std::numeric_limits<int16_t>::max() + 1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, -1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT, 0),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        std::numeric_limits<int8_t>::max() + 1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE, -1),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        std::numeric_limits<int16_t>::max() + 1)));
+
+/*
+ * @test tcp_sockopt.user_timeout_rejects_out_of_range
+ * @brief TCP_USER_TIMEOUT range validation is XLIO-specific: XLIO rejects a value
+ *    above the RFC 5482 maximum (TCP_USER_TIMEOUT_MAX_MS) with EINVAL, whereas Linux
+ *    accepts it. This runs only under libxlio so a bare (non-XLIO) run does not report
+ *    a false failure. 0xFFFFFFFF (a -1 int) also exceeds the maximum.
+ */
+TEST_F(tcp_sockopt, user_timeout_rejects_out_of_range)
+{
+    SKIP_TRUE(xlio_get_api(), "This test should be launched under libxlio.so");
+    auto fd = reusable_cleanable_test_socket(m_family, SOCK_STREAM, 0);
+    ASSERT_GE(fd, 0) << "socket syscall failed to setup a socket";
+    for (unsigned int v : {0xFFFFFFFFU, 2000000000U}) {
+        errno = 0;
+        EXPECT_EQ(-1, setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &v, sizeof(v)))
+            << "value " << v << " was accepted";
+        EXPECT_EQ(EINVAL, errno);
+    }
+}
+
+/*
+ * @test tcp_sockopt.user_timeout_rejects_bad_optlen_and_null
+ * @brief TCP_USER_TIMEOUT setsockopt rejects a short optlen and a NULL optval with
+ *    EINVAL, and accepts a valid value.
+ */
+TEST_F(tcp_sockopt, user_timeout_rejects_bad_optlen_and_null)
+{
+    auto fd = reusable_cleanable_test_socket(m_family, SOCK_STREAM, 0);
+    ASSERT_GE(fd, 0) << "socket syscall failed to setup a socket";
+    unsigned int val = 5000U;
+
+    errno = 0;
+    EXPECT_EQ(-1, setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &val, sizeof(val) - 1))
+        << "short optlen was accepted";
+    EXPECT_EQ(EINVAL, errno);
+
+    errno = 0;
+    EXPECT_EQ(-1, setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, nullptr, sizeof(val)))
+        << "NULL optval was accepted";
+    /* A NULL optval is rejected by the common setsockopt layer (EFAULT) before the
+     * option handler; either EFAULT or EINVAL is a valid rejection. */
+    EXPECT_TRUE(errno == EINVAL || errno == EFAULT)
+        << "unexpected errno for NULL optval: " << errno;
+
+    EXPECT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &val, sizeof(val)))
+        << "a valid TCP_USER_TIMEOUT was rejected";
+}
 
 using getscokopt_params = std::tuple<int, int, int, const char *>;
 using tcp_sockopt_default = testing::TestWithParam<getscokopt_params>;
@@ -960,21 +1002,18 @@ TEST_P(tcp_sockopt_default, matches_the_value_in_the_file)
 }
 
 INSTANTIATE_TEST_CASE_P(keep_alive, tcp_sockopt_default,
-                        testing::Values(
-#if LWIP_TCP_KEEPALIVE
-                            std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
-                            std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_probes"),
-                            std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
-                            std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_probes"),
-#endif
-                            std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_time"),
-                            std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
-                                            "/proc/sys/net/ipv4/tcp_keepalive_time")));
+                        testing::Values(std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_probes"),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPINTVL,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_intvl"),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPCNT,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_probes"),
+                                        std::make_tuple(AF_INET, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_time"),
+                                        std::make_tuple(AF_INET6, IPPROTO_TCP, TCP_KEEPIDLE,
+                                                        "/proc/sys/net/ipv4/tcp_keepalive_time")));
 
 using setsockopt_param = std::tuple<int, int, int>;
 class tcp_with_fifo : public testing::TestWithParam<setsockopt_param> {
@@ -1056,12 +1095,430 @@ TEST_P(tcp_with_fifo, accepted_socket_inherits_the_setsockopt_param)
     }
 }
 
-INSTANTIATE_TEST_CASE_P(keep_alive, tcp_with_fifo,
-                        testing::Values(
-#if LWIP_TCP_KEEPALIVE
-                            std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPINTVL, 12345),
-                            std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPCNT, 123),
-#endif
-                            std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 0),
-                            std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 1),
-                            std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPIDLE, 1234)));
+INSTANTIATE_TEST_CASE_P(
+    keep_alive, tcp_with_fifo,
+    testing::Values(std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPINTVL, 12345),
+                    std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPCNT, 123),
+                    std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 0),
+                    std::make_tuple(SOL_SOCKET, SO_KEEPALIVE, 1),
+                    std::make_tuple(static_cast<int>(IPPROTO_TCP), TCP_KEEPIDLE, 1234)));
+
+/* tcp_base supplies the family-converted client_addr/server_addr, so a mixed-family
+ * run (IPv4 client, IPv6 server) binds mapped addresses on one family. */
+class tcp_keepalive_e2e : public tcp_base {
+protected:
+    ipc m_ipc {};
+    void SetUp() override { m_ipc.create(); }
+    void TearDown() override { m_ipc.reset(); }
+};
+
+/*
+ * @test tcp_keepalive_e2e.answered_probes_keep_user_timeout_connection_alive
+ * @brief With SO_KEEPALIVE + TCP_USER_TIMEOUT set and a peer that answers every
+ *    keepalive probe, the connection must stay up past the user timeout
+ *    (RFC 1122 4.2.2.17 / Linux: an answered probe resets the deadline). This
+ *    guards against a false abort of a healthy idle connection - the regression
+ *    class this PR addresses. The abort-on-silent-peer direction is timer- and
+ *    network-driven and is covered by the lab RED-GREEN in the PR evidence.
+ *    This exercises XLIO's keepalive timer only on an offloaded connection, so
+ *    the gtest harness must supply distinct offloadable client/server addresses
+ *    (--addr=<client>,<server>); on a loopback/kernel path it reduces to an
+ *    idle-survivor smoke check.
+ */
+TEST_F(tcp_keepalive_e2e, answered_probes_keep_user_timeout_connection_alive)
+{
+    SKIP_TRUE(!getenv("XLIO_TCP_CTL_THREAD"), "Skip non default XLIO_TCP_CTL_THREAD");
+
+    const int family = m_family;
+    pid_t pid = fork();
+
+    if (pid > 0) { // Parent: the keepalive sender
+        auto listen_fd = reusable_cleanable_test_socket(family, SOCK_STREAM, 0);
+        ASSERT_GE(listen_fd, 0);
+        ASSERT_EQ(bind(listen_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)), 0);
+        ASSERT_EQ(listen(listen_fd, 5), 0);
+        m_ipc.signal_to_peer();
+
+        reusable_cleanable_test_socket accepted_fd {accept(listen_fd, nullptr, 0)};
+        ASSERT_GE(accepted_fd, 0);
+
+        int on = 1, idle = 1, intvl = 1, cnt = 5;
+        unsigned int ut_ms = 2000U;
+        EXPECT_EQ(0, setsockopt(accepted_fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on)));
+        EXPECT_EQ(0, setsockopt(accepted_fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)));
+        EXPECT_EQ(0, setsockopt(accepted_fd, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl)));
+        EXPECT_EQ(0, setsockopt(accepted_fd, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt)));
+        EXPECT_EQ(0, setsockopt(accepted_fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &ut_ms, sizeof(ut_ms)));
+
+        /* Idle well past user_timeout. The peer answers every probe; a correct
+         * stack keeps the connection up. A false abort surfaces as POLLHUP/POLLERR
+         * or ECONNRESET. Poll keeps the RX path draining the answered probes. */
+        struct pollfd pfd = {accepted_fd, POLLIN, 0};
+        bool aborted = false;
+        for (int elapsed = 0; elapsed < 6000; elapsed += 200) {
+            int r = poll(&pfd, 1, 200);
+            if (r > 0 && (pfd.revents & (POLLHUP | POLLERR))) {
+                aborted = true;
+                break;
+            }
+        }
+        EXPECT_FALSE(aborted) << "connection aborted despite answered keepalive probes";
+
+        int soerr = -1;
+        socklen_t errlen = sizeof(soerr);
+        EXPECT_EQ(0, getsockopt(accepted_fd, SOL_SOCKET, SO_ERROR, &soerr, &errlen));
+        EXPECT_EQ(0, soerr) << "SO_ERROR set despite answered probes";
+        EXPECT_EQ(1, send(accepted_fd, "x", 1, MSG_NOSIGNAL))
+            << "send failed: connection torn down";
+
+        m_ipc.signal_to_peer();
+        int status;
+        EXPECT_EQ(pid, waitpid(pid, &status, 0));
+        ASSERT_TRUE(WIFEXITED(status));
+        EXPECT_EQ(0, WEXITSTATUS(status)) << "child process reported a failure";
+    } else if (pid == 0) { // Child: the answering peer (polls so XLIO ACKs the probes)
+        auto client_fd = reusable_cleanable_test_socket(family, SOCK_STREAM, 0);
+        EXPECT_GE(client_fd, 0);
+        EXPECT_EQ(bind(client_fd, (struct sockaddr *)&client_addr, sizeof(client_addr)), 0);
+        m_ipc.wait_peer();
+        EXPECT_EQ(0, connect(client_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)));
+
+        struct pollfd pfd = {client_fd, POLLIN, 0};
+        for (int i = 0; i < 35; ++i) {
+            poll(&pfd, 1, 200);
+            char buf[8];
+            recv(client_fd, buf, sizeof(buf), MSG_DONTWAIT);
+        }
+        m_ipc.wait_peer();
+        exit(testing::Test::HasFailure());
+    } else {
+        FAIL() << "Fork failed";
+    }
+}
+
+/* The fork+SIGSTOP tests need both endpoints offloaded: a stopped kernel-backed
+ * peer would continue answering probes. */
+static bool offloadable_address(const sockaddr_store_t &address)
+{
+    if (address.addr.sa_family == AF_INET) {
+        const uint32_t ip = ntohl(address.addr4.sin_addr.s_addr);
+        return ip != INADDR_ANY && (ip >> 24) != 127;
+    }
+    return !IN6_IS_ADDR_UNSPECIFIED(&address.addr6.sin6_addr) &&
+        !IN6_IS_ADDR_LOOPBACK(&address.addr6.sin6_addr);
+}
+
+/* A SIGCHLD handler from an earlier test can interrupt a blocking recv() with SO_RCVTIMEO
+ * when the peer stops. Retry on EINTR. */
+static ssize_t recv_retry_eintr(int fd, void *buf, size_t len)
+{
+    ssize_t ret;
+    do {
+        ret = recv(fd, buf, len, 0);
+    } while (ret < 0 && errno == EINTR);
+    return ret;
+}
+
+/* SIGSTOP freezes the peer's userspace TCP stack without sending FIN or RST.
+ * Both endpoints must be offloaded: a stopped kernel-backed peer would continue
+ * answering probes, and this test would correctly fail rather than pass silently.
+ */
+TEST_F(tcp_sockopt, keepalive_detects_unresponsive_peer)
+{
+    SKIP_TRUE(xlio_get_api(), "Requires XLIO and two offloadable --addr addresses");
+    SKIP_TRUE(offloadable_address(client_addr) && offloadable_address(server_addr),
+              "Requires non-loopback --addr addresses for both offloaded endpoints");
+    int ready[2];
+    ASSERT_EQ(0, pipe(ready));
+    const pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        close(ready[0]);
+        alarm(20);
+        const int listener = sock_create();
+        if (listener < 0 ||
+            bind(listener, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) ||
+            listen(listener, 1) || write(ready[1], "R", 1) != 1) {
+            _exit(1);
+        }
+        const int peer = accept(listener, nullptr, nullptr);
+        if (peer < 0 || send(peer, "R", 1, MSG_NOSIGNAL) != 1) {
+            _exit(1);
+        }
+        raise(SIGSTOP);
+        _exit(0);
+    }
+
+    close(ready[1]);
+    // Clean up the stopped child even if a fatal assertion returns early.
+    struct child_guard {
+        pid_t pid;
+        int pipe_fd;
+        ~child_guard()
+        {
+            kill(pid, SIGKILL);
+            waitpid(pid, nullptr, 0);
+            close(pipe_fd);
+        }
+    } child {pid, ready[0]};
+    pollfd readiness {ready[0], POLLIN, 0};
+    ASSERT_EQ(1, poll(&readiness, 1, 3000));
+    char byte;
+    ASSERT_EQ(1, read(ready[0], &byte, 1));
+
+    reusable_cleanable_test_socket fd {sock_create()};
+    ASSERT_GE(fd, 0);
+    timeval timeout {3, 0};
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, bind(fd, reinterpret_cast<sockaddr *>(&client_addr), sizeof(client_addr)));
+    ASSERT_EQ(0, connect(fd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)));
+    ASSERT_EQ(1, recv_retry_eintr(fd, &byte, 1)) << "errno=" << errno;
+    // The keepalive abort clock starts at the last received segment: the "R" byte above.
+    const auto start = std::chrono::steady_clock::now();
+    int status = 0;
+    const auto stop_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    pid_t stopped = 0;
+    do {
+        stopped = waitpid(pid, &status, WUNTRACED | WNOHANG);
+        if (stopped != 0) {
+            break;
+        }
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() < stop_deadline);
+    ASSERT_EQ(pid, stopped);
+    ASSERT_TRUE(WIFSTOPPED(status));
+
+    const int idle = 2, interval = 1, count = 3, enabled = 1;
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)));
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval)));
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count)));
+    // Exercise validation on an established socket and ensure failed setters are atomic.
+    for (const auto &option : {std::make_tuple(TCP_KEEPINTVL, interval, 32768),
+                               std::make_tuple(TCP_KEEPCNT, count, 128)}) {
+        const int name = std::get<0>(option);
+        const int invalid = std::get<2>(option);
+        EXPECT_EQ(-1, setsockopt(fd, IPPROTO_TCP, name, &invalid, sizeof(invalid)));
+        EXPECT_EQ(EINVAL, errno);
+        int actual = 0;
+        socklen_t length = sizeof(actual);
+        ASSERT_EQ(0, getsockopt(fd, IPPROTO_TCP, name, &actual, &length));
+        EXPECT_EQ(sizeof(actual), length);
+        ASSERT_EQ(std::get<1>(option), actual);
+    }
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof(enabled)));
+
+    // In delegate mode (XLIO_TCP_CTL_THREAD=delegate) the 10 ms recv polling drives the timers.
+    int error = 0;
+    do {
+        const ssize_t result = recv(fd, &byte, 1, MSG_DONTWAIT);
+        if (result < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            error = errno;
+            break;
+        }
+        ASSERT_NE(0, result) << "Peer closed gracefully instead of timing out";
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() - start < std::chrono::seconds(9));
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    EXPECT_EQ(ETIMEDOUT, error);
+    EXPECT_GE(elapsed, std::chrono::seconds(4));
+    EXPECT_LT(elapsed, std::chrono::seconds(9));
+}
+
+/* With unacknowledged data in flight, keepalive stays dormant and the
+ * retransmission path measures TCP_USER_TIMEOUT from the send. The abort must
+ * come ~user_timeout after the unacknowledged send, not earlier through the
+ * keepalive clock that runs from the last receive.
+ */
+TEST_F(tcp_sockopt, keepalive_user_timeout_waits_for_new_data)
+{
+    SKIP_TRUE(xlio_get_api(), "Requires XLIO and two offloadable --addr addresses");
+    SKIP_TRUE(offloadable_address(client_addr) && offloadable_address(server_addr),
+              "Requires non-loopback --addr addresses for both offloaded endpoints");
+    int ready[2];
+    ASSERT_EQ(0, pipe(ready));
+    const pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        close(ready[0]);
+        alarm(30);
+        const int listener = sock_create();
+        if (listener < 0 ||
+            bind(listener, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) ||
+            listen(listener, 1) || write(ready[1], "R", 1) != 1) {
+            _exit(1);
+        }
+        const int peer = accept(listener, nullptr, nullptr);
+        if (peer < 0 || send(peer, "R", 1, MSG_NOSIGNAL) != 1) {
+            _exit(1);
+        }
+        raise(SIGSTOP);
+        _exit(0);
+    }
+
+    close(ready[1]);
+    // Clean up the stopped child even if a fatal assertion returns early.
+    struct child_guard {
+        pid_t pid;
+        int pipe_fd;
+        ~child_guard()
+        {
+            kill(pid, SIGKILL);
+            waitpid(pid, nullptr, 0);
+            close(pipe_fd);
+        }
+    } child {pid, ready[0]};
+    pollfd readiness {ready[0], POLLIN, 0};
+    ASSERT_EQ(1, poll(&readiness, 1, 3000));
+    char byte;
+    ASSERT_EQ(1, read(ready[0], &byte, 1));
+
+    reusable_cleanable_test_socket fd {sock_create()};
+    ASSERT_GE(fd, 0);
+    timeval timeout {3, 0};
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, bind(fd, reinterpret_cast<sockaddr *>(&client_addr), sizeof(client_addr)));
+    ASSERT_EQ(0, connect(fd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)));
+    ASSERT_EQ(1, recv_retry_eintr(fd, &byte, 1)) << "errno=" << errno;
+    int status = 0;
+    const auto stop_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    pid_t stopped = 0;
+    do {
+        stopped = waitpid(pid, &status, WUNTRACED | WNOHANG);
+        if (stopped != 0) {
+            break;
+        }
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() < stop_deadline);
+    ASSERT_EQ(pid, stopped);
+    ASSERT_TRUE(WIFSTOPPED(status));
+
+    const int idle = 2, interval = 1, enabled = 1;
+    const unsigned int user_timeout_ms = 10000;
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)));
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval)));
+    ASSERT_EQ(
+        0,
+        setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms, sizeof(user_timeout_ms)));
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof(enabled)));
+
+    // Send one byte just before keep_idle expires; the frozen peer never ACKs it.
+    usleep(1800000);
+    ASSERT_EQ(1, send(fd, "x", 1, MSG_NOSIGNAL));
+
+    // In delegate mode (XLIO_TCP_CTL_THREAD=delegate) the 10 ms recv polling drives the timers.
+    const auto start = std::chrono::steady_clock::now();
+    int error = 0;
+    do {
+        const ssize_t result = recv(fd, &byte, 1, MSG_DONTWAIT);
+        if (result < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            error = errno;
+            break;
+        }
+        ASSERT_NE(0, result) << "Peer closed gracefully instead of timing out";
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() - start < std::chrono::seconds(15));
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    EXPECT_EQ(ETIMEDOUT, error);
+    EXPECT_GE(elapsed, std::chrono::seconds(9));
+    EXPECT_LT(elapsed, std::chrono::seconds(15));
+}
+
+/* With SO_KEEPALIVE + TCP_USER_TIMEOUT on an idle connection, the abort must
+ * wait for a probe plus one full keep_intvl, not fire on the first timer tick
+ * after user_timeout once a probe is out. Timeline with KEEPIDLE=2, KEEPINTVL=5,
+ * TCP_USER_TIMEOUT=3000: first probe at ~2s after the last receive, abort at
+ * ~7s (probe + full keep_intvl). The 6s lower bound rejects an abort at ~3s.
+ */
+TEST_F(tcp_sockopt, keepalive_user_timeout_waits_probe_interval)
+{
+    SKIP_TRUE(xlio_get_api(), "Requires XLIO and two offloadable --addr addresses");
+    SKIP_TRUE(offloadable_address(client_addr) && offloadable_address(server_addr),
+              "Requires non-loopback --addr addresses for both offloaded endpoints");
+    int ready[2];
+    ASSERT_EQ(0, pipe(ready));
+    const pid_t pid = fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        close(ready[0]);
+        alarm(30);
+        const int listener = sock_create();
+        if (listener < 0 ||
+            bind(listener, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) ||
+            listen(listener, 1) || write(ready[1], "R", 1) != 1) {
+            _exit(1);
+        }
+        const int peer = accept(listener, nullptr, nullptr);
+        if (peer < 0 || send(peer, "R", 1, MSG_NOSIGNAL) != 1) {
+            _exit(1);
+        }
+        raise(SIGSTOP);
+        _exit(0);
+    }
+
+    close(ready[1]);
+    // Clean up the stopped child even if a fatal assertion returns early.
+    struct child_guard {
+        pid_t pid;
+        int pipe_fd;
+        ~child_guard()
+        {
+            kill(pid, SIGKILL);
+            waitpid(pid, nullptr, 0);
+            close(pipe_fd);
+        }
+    } child {pid, ready[0]};
+    pollfd readiness {ready[0], POLLIN, 0};
+    ASSERT_EQ(1, poll(&readiness, 1, 3000));
+    char byte;
+    ASSERT_EQ(1, read(ready[0], &byte, 1));
+
+    reusable_cleanable_test_socket fd {sock_create()};
+    ASSERT_GE(fd, 0);
+    timeval timeout {3, 0};
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)));
+    ASSERT_EQ(0, bind(fd, reinterpret_cast<sockaddr *>(&client_addr), sizeof(client_addr)));
+    ASSERT_EQ(0, connect(fd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)));
+    ASSERT_EQ(1, recv_retry_eintr(fd, &byte, 1)) << "errno=" << errno;
+    // The keepalive abort clock starts at the last received segment: the "R" byte above.
+    const auto start = std::chrono::steady_clock::now();
+    int status = 0;
+    const auto stop_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    pid_t stopped = 0;
+    do {
+        stopped = waitpid(pid, &status, WUNTRACED | WNOHANG);
+        if (stopped != 0) {
+            break;
+        }
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() < stop_deadline);
+    ASSERT_EQ(pid, stopped);
+    ASSERT_TRUE(WIFSTOPPED(status));
+
+    const int idle = 2, interval = 5, enabled = 1;
+    const unsigned int user_timeout_ms = 3000;
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)));
+    ASSERT_EQ(0, setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval)));
+    ASSERT_EQ(
+        0,
+        setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms, sizeof(user_timeout_ms)));
+    ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof(enabled)));
+
+    // In delegate mode (XLIO_TCP_CTL_THREAD=delegate) the 10 ms recv polling drives the timers.
+    int error = 0;
+    do {
+        const ssize_t result = recv(fd, &byte, 1, MSG_DONTWAIT);
+        if (result < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            error = errno;
+            break;
+        }
+        ASSERT_NE(0, result) << "Peer closed gracefully instead of timing out";
+        usleep(10000);
+    } while (std::chrono::steady_clock::now() - start < std::chrono::seconds(12));
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    EXPECT_EQ(ETIMEDOUT, error);
+    EXPECT_GE(elapsed, std::chrono::seconds(6));
+    EXPECT_LT(elapsed, std::chrono::seconds(12));
+}

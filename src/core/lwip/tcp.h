@@ -393,10 +393,8 @@ struct tcp_pcb {
 
     /* idle time before KEEPALIVE is sent */
     u32_t keep_idle;
-#if LWIP_TCP_KEEPALIVE
     u32_t keep_intvl;
     u32_t keep_cnt;
-#endif /* LWIP_TCP_KEEPALIVE */
 
     /* Persist timer counter */
     u32_t persist_cnt;
@@ -433,6 +431,14 @@ struct tcp_pcb {
         /* Maximum number of SGE */
         u32_t max_send_sge;
     } tso;
+
+    /* tcp_ticks of the last keepalive probe sent; decouples probe spacing from
+     * the u8 keep_cnt_sent counter (which saturates at 255). */
+    u32_t last_keepalive_tmr;
+
+    /* tcp_ticks of the last received segment. Keepalive measures idle time from
+     * it. Unlike pcb->tmr, it also advances after TF_RXCLOSED. */
+    u32_t keepalive_rx_tmr;
 };
 
 /* The four TX queue heads form one traversal unit in tcp_output(), ACK

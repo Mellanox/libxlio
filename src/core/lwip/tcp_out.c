@@ -1800,9 +1800,9 @@ void tcp_keepalive(struct tcp_pcb *pcb)
                         pcb->is_ipv6);
 
     LWIP_DEBUGF(TCP_DEBUG,
-                ("tcp_keepalive: tcp_ticks %" U32_F "   pcb->tmr %" U32_F
+                ("tcp_keepalive: tcp_ticks %" U32_F "   pcb->keepalive_rx_tmr %" U32_F
                  " pcb->keep_cnt_sent %" U16_F "\n",
-                 tcp_ticks, pcb->tmr, pcb->keep_cnt_sent));
+                 tcp_ticks, pcb->keepalive_rx_tmr, pcb->keep_cnt_sent));
 
 #if LWIP_TCP_TIMESTAMPS
     if (pcb->flags & TF_TIMESTAMP) {
@@ -1830,9 +1830,8 @@ void tcp_keepalive(struct tcp_pcb *pcb)
     pcb->ip_output(p, NULL, pcb, 0);
     tcp_tx_pbuf_free(pcb, p);
 
-    if (pcb->ticks_since_data_sent == -1) {
-        pcb->ticks_since_data_sent = 0;
-    }
+    /* A keepalive probe does not start pcb->ticks_since_data_sent. The keepalive
+     * block measures the idle user timeout from pcb->keepalive_rx_tmr. */
 
     LWIP_DEBUGF(
         TCP_DEBUG,
