@@ -42,7 +42,7 @@ else
 fi
 
 test_list="tcp-pp tcp-tp tcp-ul"
-test_lib=$install_dir/lib/${prj_lib}
+test_lib_env="LD_PRELOAD=${install_dir}/lib/${prj_lib}"
 WORKER_THREADS=${WORKER_THREADS:-"false"}
 
 if [[ -f /.dockerenv ]] || [[ -f /run/.containerenv ]] || [[ -n "${KUBERNETES_SERVICE_HOST}" ]]; then
@@ -75,10 +75,11 @@ nerrors=0
 # Enable params based on the mode choice - given by WORKER_THREADS variable
 if [[ "$WORKER_THREADS" = "true" ]]; then
 	echo "Testing mode: Worker Threads"
-	test_params='-x "--nonblocked" -e "XLIO_WORKER_THREADS=2"'
+	test_params="--nonblocked"
+	test_lib_env+=" XLIO_WORKER_THREADS=2 XLIO_DISABLE_FLOW_TAG=1"
 else
 	echo "Testing mode: R2C"
-	test_params='-x "--debug" '
+	test_params="--debug"
 fi
 
 for test_link in ${test_ip_list}; do
@@ -90,7 +91,7 @@ for test_link in ${test_ip_list}; do
 		for i in $(seq 3); do
 			rm -fv ${test_dir}/${test_name}.log ${test_dir}/${test_name}.dump || :
 			set +e
-			${sudo_cmd} ${timeout_exe} ${PWD}/tests/verifier/verifier.pl ${test_params} -e "LD_PRELOAD=${test_lib}" \
+			${sudo_cmd} ${timeout_exe} ${PWD}/tests/verifier/verifier.pl -x "${test_params}" -e "${test_lib_env}" \
 				-a ${test_app} -t ${test}:tc[1-9]$ -s ${test_ip} -l ${test_dir}/${test_name}.log --progress=0
 			# make sure to catch the error
 			ret=$?
