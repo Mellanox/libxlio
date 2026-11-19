@@ -187,11 +187,19 @@ specific applications or processes.
 >
 > **Maps to:** `XLIO_ENVOY_WORKERS_NUM`
 
-Number of Envoy worker threads. **Must be > 0 to enable XLIO offloading for Envoy.**
+Number of Envoy worker threads.
+**Must be > 0 to enable XLIO acceleration for Envoy.**
 
-**Behavior:** When set to a value greater than 0, XLIO activates the envoy profile ([`profiles.spec`](#profilesspec)=envoy) and creates a ring plus hardware flow steering rules per worker. Set to match Envoy's `concurrency` value.
+**Behavior:** When set to a value greater than 0, XLIO activates the
+envoy profile ([`profiles.spec`](#profilesspec)=envoy) and creates a ring plus
+hardware flow steering rules per worker. Set to match Envoy's
+`concurrency` value.
 
-**Precedence:** Positive values for both this and [`applications.nginx.workers_num`](#applicationsnginxworkers_num) are mutually exclusive and cause configuration to fail. An explicit non-`none` [`profiles.spec`](#profilesspec) is respected over the auto-selected envoy profile.
+**Precedence:** Positive values for both this and
+[`applications.nginx.workers_num`](#applicationsnginxworkers_num)
+are mutually exclusive and cause configuration to fail. An explicit
+non-`none` [`profiles.spec`](#profilesspec) is respected over the auto-selected
+envoy profile.
 
 **Default:** `0`
 

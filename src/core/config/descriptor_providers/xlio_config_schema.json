@@ -1336,7 +1336,7 @@
                             "default": 0,
                             "minimum": 0,
                             "title": "Number of Envoy workers",
-                            "description": "Maps to XLIO_ENVOY_WORKERS_NUM environment variable.\nNumber of Envoy worker threads. **Must be > 0 to enable XLIO offloading for Envoy.**\n\n**Behavior:** When set to a value greater than 0, XLIO activates the envoy profile (`profiles.spec`=envoy) and creates a ring plus hardware flow steering rules per worker. Set to match Envoy's `concurrency` value.\n\n**Precedence:** Positive values for both this and `applications.nginx.workers_num` are mutually exclusive and cause configuration to fail. An explicit non-`none` `profiles.spec` is respected over the auto-selected envoy profile."
+                            "description": "Maps to XLIO_ENVOY_WORKERS_NUM environment variable.\nNumber of Envoy worker threads.\n**Must be > 0 to enable XLIO acceleration for Envoy.**\n\n**Behavior:** When set to a value greater than 0, XLIO activates the\nenvoy profile (`profiles.spec`=envoy) and creates a ring plus\nhardware flow steering rules per worker. Set to match Envoy's\n`concurrency` value.\n\n**Precedence:** Positive values for both this and\n`applications.nginx.workers_num`\nare mutually exclusive and cause configuration to fail. An explicit\nnon-`none` `profiles.spec` is respected over the auto-selected\nenvoy profile."
                         }
                     },
                     "additionalProperties": false
