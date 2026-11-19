@@ -23,6 +23,7 @@ kubernetes:
 credentials:
   - {credentialsId: 'media_coverity_credentials', usernameVariable: 'XLIO_COV_USER', passwordVariable: 'XLIO_COV_PASSWORD'}
   - {credentialsId: 'mellanox_github_credentials', usernameVariable: 'MELLANOX_GH_USER', passwordVariable: 'MELLANOX_GH_TOKEN'}
+  - {credentialsId: 'svc-nbu-swx-media_gh_token', usernameVariable: 'MEDIA_GH_USER', passwordVariable: 'MEDIA_GH_TOKEN'}
 
 volumes:
   - {mountPath: /hpc/local/bin, hostPath: /hpc/local/bin}
@@ -168,7 +169,7 @@ runs_on_dockers:
      limits: '{memory: 3Gi, cpu: 2000m}',
      requests: '{memory: 3Gi, cpu: 2000m}'
     }
-  - {name: 'secret-scan', url: '${registry_host}/toolbox/secret_scan:0.0.27', arch: 'x86_64', tag: '0.0.27', category: 'tool', limits: '{memory: 3Gi, cpu: 2000m}', requests: '{memory: 3Gi, cpu: 2000m}'}
+  - {name: 'secret-scan', url: '${registry_host}/swx-storage/tools/secret_scan:devops-stable', arch: 'x86_64', tag: 'devops-stable', category: 'tool', limits: '{memory: 3Gi, cpu: 2000m}', requests: '{memory: 3Gi, cpu: 2000m}'}
   - {
      file: '.ci/dockerfiles/Dockerfile.ubuntu22.04',
      arch: 'x86_64',
@@ -218,14 +219,17 @@ steps:
     parallel: false
 
   - name: Secret Scan
-    credentialsId: 'mellanox_github_credentials'
+    credentialsId: 'svc-nbu-swx-media_gh_token'
     enable: ${do_secretscan}
     containerSelector:
       - "{name: 'secret-scan', category: 'tool'}"
     agentSelector:
       - "{nodeLabel: 'skip-agent'}"
     run: |
-      env GITHUB_TOKEN=$MELLANOX_GH_TOKEN /opt/nvidia/secret_scan.py --path $WORKSPACE --git-repo $WORKSPACE --report-file secret_scan.html
+      set +x
+      export GITHUB_TOKEN="$MEDIA_GH_TOKEN"
+      python3 "$WORKSPACE/.ci/collect_pr_scan_text.py"
+      /opt/nvidia/secret_scan.py --path "$WORKSPACE" --git-repo "$WORKSPACE" --report-file secret_scan.html
     archiveArtifacts: '*.html'
     parallel: false
 
