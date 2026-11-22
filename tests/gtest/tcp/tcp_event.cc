@@ -17,6 +17,7 @@ protected:
     int m_socket = -1;
     int m_epfd = -1;
     bool m_peer_stopped = false;
+    bool m_peer_connected = false;
 
     int track(int fd)
     {
@@ -26,29 +27,82 @@ protected:
         return fd;
     }
 
+    void finish_connection()
+    {
+        // Keep the child alive to acknowledge our FIN. Otherwise its _exit()
+        // can leave the parent's offloaded flow attached when the tuple is reused.
+        ASSERT_NO_FATAL_FAILURE(command('C'));
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        bool sent_fin = false;
+        tcp_info info = {};
+        do {
+            // EOF stays readable. Poll without POLLIN so XLIO checks the
+            // receive queue for the final ACK even after recv() returns zero.
+            pollfd pfd = {m_socket, 0, 0};
+            int ready = poll(&pfd, 1, 1);
+            if (ready < 0 && errno == EINTR) {
+                continue;
+            }
+            ASSERT_GE(ready, 0);
+            socklen_t len = sizeof(info);
+            ASSERT_EQ(0, getsockopt(m_socket, IPPROTO_TCP, TCP_INFO, &info, &len));
+            if (info.tcpi_state == TCP_CLOSE || info.tcpi_state == TCP_TIME_WAIT) {
+                return;
+            }
+
+            // Drain any test data before closing. A local SHUT_RD also returns
+            // EOF, so wait for CLOSE_WAIT to confirm the peer's FIN arrived.
+            char buffer[64];
+            ssize_t rc = recv(m_socket, buffer, sizeof(buffer), MSG_DONTWAIT);
+            if (rc < 0) {
+                ASSERT_TRUE(errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+                    << strerror(errno);
+            }
+            if (rc == 0 && info.tcpi_state == TCP_CLOSE_WAIT && !sent_fin) {
+                ASSERT_EQ(0, shutdown(m_socket, SHUT_WR));
+                sent_fin = true;
+            }
+        } while (std::chrono::steady_clock::now() < deadline);
+        ADD_FAILURE() << "Timed out waiting for TCP close, state=" << unsigned(info.tcpi_state);
+    }
+
+    void close_tracked_fds()
+    {
+        for (auto it = m_fds.rbegin(); it != m_fds.rend(); ++it) {
+            close(*it);
+        }
+    }
+
     void TearDown() override
     {
         if (m_peer_stopped) {
             EXPECT_EQ(0, kill(m_child, SIGCONT));
+        } else if (m_peer_connected) {
+            finish_connection();
         }
-        // Closing the control channel releases the peer even after a fatal
-        // assertion.
-        for (auto it = m_fds.rbegin(); it != m_fds.rend(); ++it) {
-            close(*it);
-        }
+        // Closing the control channel releases the peer even after a fatal assertion.
+        close_tracked_fds();
         if (m_child > 0) {
             EXPECT_EQ(0, wait_fork(m_child));
         }
     }
 
-    static int receive_control(int fd, char &value)
+    static int receive_control(int control, char &value, int tcp_fd = -1)
     {
-        pollfd pfd = {fd, POLLIN, 0};
-        int rc;
+        // During teardown, poll TCP as well so a delegated peer processes the
+        // parent's FIN while it waits for the control channel to close.
+        pollfd fds[] = {{control, POLLIN, 0}, {tcp_fd, 0, 0}};
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         do {
-            rc = poll(&pfd, 1, 10000);
-        } while (rc < 0 && errno == EINTR);
-        return rc > 0 ? recv(fd, &value, 1, 0) : -1;
+            int rc = poll(fds, 2, tcp_fd >= 0 ? 10 : 10000);
+            if (rc < 0 && errno != EINTR) {
+                return -1;
+            }
+            if (rc > 0 && fds[0].revents) {
+                return recv(control, &value, 1, 0);
+            }
+        } while (std::chrono::steady_clock::now() < deadline);
+        return -1;
     }
 
     void peer(int control)
@@ -63,6 +117,7 @@ protected:
         ASSERT_GE(fd, 0) << "accept errno=" << accept_errno << " (" << strerror(accept_errno)
                          << ")";
         ASSERT_EQ(1, send(control, "A", 1, MSG_NOSIGNAL));
+        bool sent_fin = false;
         for (;;) {
             char command = 0;
             int rc = receive_control(control, command);
@@ -72,16 +127,24 @@ protected:
             ASSERT_EQ(1, rc);
             if (command == 'D') {
                 ASSERT_EQ(1, send(fd, "x", 1, MSG_NOSIGNAL));
-            } else if (command == 'F') {
-                ASSERT_EQ(0, shutdown(fd, SHUT_WR));
+            } else if (command == 'F' || command == 'C') {
+                if (!sent_fin) {
+                    ASSERT_EQ(0, shutdown(fd, SHUT_WR));
+                    sent_fin = true;
+                }
             } else if (command == 'R') {
                 linger abortive = {1, 0};
                 ASSERT_EQ(0, setsockopt(fd, SOL_SOCKET, SO_LINGER, &abortive, sizeof(abortive)));
                 ASSERT_EQ(0, close(fd));
+                m_fds.pop_back(); // The accepted socket was tracked last.
             } else {
                 FAIL() << "Unexpected peer command " << command;
             }
             ASSERT_EQ(1, send(control, &command, 1, MSG_NOSIGNAL));
+            if (command == 'C') {
+                EXPECT_EQ(0, receive_control(control, command, fd));
+                return;
+            }
         }
     }
 
@@ -99,6 +162,8 @@ protected:
         if (m_child == 0) {
             close(control[0]);
             peer(control[1]);
+            close_tracked_fds();
+            close(control[1]);
             // Fatal assertions in peer() must not return into the parent test body.
             _exit(testing::Test::HasFailure() ? 1 : 0);
         }
@@ -125,6 +190,7 @@ protected:
         ASSERT_EQ(0, error);
         ASSERT_EQ(1, receive_control(m_control, response));
         ASSERT_EQ('A', response);
+        m_peer_connected = true;
     }
 
     void command(char value)
@@ -133,6 +199,9 @@ protected:
         char response = 0;
         ASSERT_EQ(1, receive_control(m_control, response));
         ASSERT_EQ(value, response);
+        if (value == 'R') {
+            m_peer_connected = false;
+        }
     }
 
     void interest(int operation, uint32_t events, uint64_t data = 1)
