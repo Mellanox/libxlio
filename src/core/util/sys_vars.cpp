@@ -130,6 +130,7 @@ static const char *const STR_LATENCY = "latency";
 static const char *const STR_NGINX = "nginx";
 static const char *const STR_NGINX_DPU = "nginx_dpu";
 static const char *const STR_NVME_BF3 = "nvme_bf3";
+static const char *const STR_ENVOY = "envoy";
 
 static const char *names_none[] = {STR_NONE, nullptr};
 static const char *spec_names_ulatency[] = {STR_ULTRA_LATENCY, nullptr};
@@ -137,6 +138,7 @@ static const char *spec_names_latency[] = {STR_LATENCY, nullptr};
 static const char *spec_names_nginx[] = {STR_NGINX, nullptr};
 static const char *spec_names_nginx_dpu[] = {STR_NGINX_DPU, nullptr};
 static const char *spec_names_nvme_bf3[] = {STR_NVME_BF3, nullptr};
+static const char *spec_names_envoy[] = {STR_ENVOY, nullptr};
 
 // must be by order because "to_str" relies on that!
 static const xlio_spec_names specs[] = {
@@ -145,7 +147,8 @@ static const xlio_spec_names specs[] = {
     {MCE_SPEC_LATENCY, STR_LATENCY, (const char **)spec_names_latency},
     {MCE_SPEC_NGINX, STR_NGINX, (const char **)spec_names_nginx},
     {MCE_SPEC_NGINX_DPU, STR_NGINX_DPU, (const char **)spec_names_nginx_dpu},
-    {MCE_SPEC_NVME_BF3, STR_NVME_BF3, (const char **)spec_names_nvme_bf3}};
+    {MCE_SPEC_NVME_BF3, STR_NVME_BF3, (const char **)spec_names_nvme_bf3},
+    {MCE_SPEC_ENVOY, STR_ENVOY, (const char **)spec_names_envoy}};
 
 // convert str to _spec_t; upon error - returns the given 'def_value'
 xlio_spec_t from_str(const char *str, xlio_spec_t def_value)
@@ -879,16 +882,16 @@ void mce_sys_var::get_env_params()
     nginx_udp_socket_pool_size = MCE_DEFAULT_NGINX_UDP_POOL_SIZE;
     nginx_udp_socket_pool_rx_num_buffs_reuse = MCE_DEFAULT_NGINX_UDP_POOL_RX_NUM_BUFFS_REUSE;
 #endif
-#if defined(DEFINED_NGINX)
-    nginx_workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
-#endif
-#if defined(DEFINED_ENVOY)
-    envoy_workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
-#endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     app.type = APP_NONE;
     app.workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
     app.distribute_cq_interrupts = MCE_DEFAULT_DISTRIBUTE_CQ;
+#if defined(DEFINED_NGINX)
+    app.nginx.workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
+#endif
+#if defined(DEFINED_ENVOY)
+    app.envoy.workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
+#endif
 #endif
     lwip_mss = MCE_DEFAULT_MSS;
     lwip_cc_algo_mod = MCE_DEFAULT_LWIP_CC_ALGO_MOD;
@@ -936,14 +939,19 @@ void mce_sys_var::get_env_params()
      * Check for specific application configuration first. We can make decisions
      * based on number of workers or application type further.
      */
+    // Preserve an explicit non-none profile when selecting the application profile.
+    const xlio_spec_t user_spec = static_cast<xlio_spec_t>(mce_spec);
+    // Suppress unused-variable warnings when both Nginx and Envoy support are disabled.
+    (void)user_spec;
 #if defined(DEFINED_NGINX)
     if ((env_ptr = getenv(SYS_VAR_NGINX_WORKERS_NUM))) {
-        app.workers_num = (uint32_t)atoi(env_ptr);
-        if (app.workers_num > 0) {
+        app.nginx.workers_num = (uint32_t)atoi(env_ptr);
+        if (app.nginx.workers_num > 0) {
+            app.workers_num = app.nginx.workers_num;
             app.type = APP_NGINX;
             // In order to ease the usage of Nginx cases, we apply Nginx profile when
             // user will choose to use Nginx workers environment variable.
-            if (mce_spec == MCE_SPEC_NONE) {
+            if (user_spec == MCE_SPEC_NONE) {
                 mce_spec = MCE_SPEC_NGINX;
             }
         }
@@ -951,20 +959,21 @@ void mce_sys_var::get_env_params()
 #endif // DEFINED_NGINX
 #if defined(DEFINED_ENVOY)
     if ((env_ptr = getenv(SYS_VAR_ENVOY_WORKERS_NUM)) != NULL) {
-        // Commit the value only when it selects Envoy: a non-positive value must not clobber a
-        // worker count configured by XLIO_NGINX_WORKERS_NUM above. Supplying both applications is
-        // a contradictory configuration, so XLIO exits instead of silently picking one.
-        int env_workers_num = atoi(env_ptr);
+        app.envoy.workers_num = atoi(env_ptr);
 #if defined(DEFINED_NGINX)
-        if (env_workers_num > 0 && app.type == APP_NGINX) {
+        if (app.envoy.workers_num > 0 && app.type == APP_NGINX) {
             vlog_printf(VLOG_ERROR, "%s and %s are mutually exclusive; set only one.\n",
                         SYS_VAR_NGINX_WORKERS_NUM, SYS_VAR_ENVOY_WORKERS_NUM);
             exit(-1);
         }
 #endif
-        if (env_workers_num > 0) {
-            app.workers_num = env_workers_num;
+        if (app.envoy.workers_num > 0) {
+            app.workers_num = app.envoy.workers_num;
             app.type = APP_ENVOY;
+            // Ease Envoy usage: apply the envoy profile when the user sets envoy workers.
+            if (user_spec == MCE_SPEC_NONE) {
+                mce_spec = MCE_SPEC_ENVOY;
+            }
         }
     }
 #endif /* DEFINED_ENVOY */
@@ -1065,6 +1074,26 @@ void mce_sys_var::get_env_params()
         }
         break;
 #endif // DEFINED_NGINX
+#if defined(DEFINED_ENVOY)
+    case MCE_SPEC_ENVOY:
+        ring_allocation_logic_tx = RING_LOGIC_PER_THREAD;
+        ring_allocation_logic_rx = RING_LOGIC_PER_THREAD;
+        progress_engine_interval_msec = 0; // Disable internal thread CQ draining logic.
+        cq_poll_batch_max = 128; // Maximum CQEs to poll in one batch.
+        enable_tso = option_3::ON; // Enable TCP Segmentation Offload(=TSO).
+        timer_resolution_msec = 32; // Reduce CPU utilization of internal thread.
+        tcp_timer_resolution_msec = 256; // Reduce CPU utilization of internal thread.
+        tcp_send_buffer_size = 2 * 1024 * 1024; // LWIP TCP send buffer size.
+        tcp_push_flag = false; // When false, we don't set PSH flag in outgoing TCP segments.
+        select_poll_num = 0; // Poll CQ only once before going to sleep.
+        select_skip_os_fd_check = 1000; // Poll OS every X epoll_waits if we do not sleep.
+        tcp_3t_rules = true; // Use 3 tuple instead rules of 5 tuple rules.
+        rx_cq_wait_ctrl = true;
+        rx_bufs_batch = 8; // RX buffers batch size.
+        // Do polling on RX queue on TX operations, helpful to maintain TCP stack management.
+        rx_poll_on_tx_tcp = true;
+        break;
+#endif // DEFINED_ENVOY
     case MCE_SPEC_NVME_BF3:
         strq_stride_num_per_rwqe = 8192U;
         enable_lro = option_3::ON;

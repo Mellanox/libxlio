@@ -42,6 +42,7 @@ private:
     void apply_ultra_latency_profile();
     void apply_latency_profile();
     void apply_nginx_profile();
+    void apply_envoy_profile();
     void apply_nvme_bf3_profile();
 
     void configure_before_user_settings();

@@ -309,19 +309,21 @@ public:
     int nginx_udp_socket_pool_size;
     int nginx_udp_socket_pool_rx_num_buffs_reuse;
 #endif
-    // Staging for the per-application worker-count keys; detect_application_profile() selects
-    // the application type and copies the winning value into app.workers_num.
-#if defined(DEFINED_NGINX)
-    int nginx_workers_num;
-#endif
-#if defined(DEFINED_ENVOY)
-    int envoy_workers_num;
-#endif
 #if defined(DEFINED_NGINX) || defined(DEFINED_ENVOY)
     struct {
         app_type_t type;
-        int workers_num;
-        bool distribute_cq_interrupts;
+        int workers_num; // resolved active worker count consumed downstream
+        bool distribute_cq_interrupts; // shared across apps -> XLIO_DISTRIBUTE_CQ
+#if defined(DEFINED_NGINX)
+        struct {
+            int workers_num;
+        } nginx;
+#endif
+#if defined(DEFINED_ENVOY)
+        struct {
+            int workers_num;
+        } envoy;
+#endif
     } app;
 #endif
     uint32_t tcp_send_buffer_size;

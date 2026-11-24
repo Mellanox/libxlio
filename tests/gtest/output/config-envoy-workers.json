@@ -3,5 +3,8 @@
     "envoy": {
       "workers_num": 4
     }
+  },
+  "profiles": {
+    "spec": "none"
   }
 }

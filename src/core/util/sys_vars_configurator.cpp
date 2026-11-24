@@ -281,9 +281,20 @@ void sys_var_configurator::configure()
 
     configure_before_user_settings();
 
+    // Profile selection is already resolved. Preserve it and its reason when an explicit
+    // "none" is reloaded below, while allowing user overrides of individual profile settings.
+    const auto selected_spec = static_cast<int64_t>(m_sys_vars.mce_spec);
+    const auto selection_reason = m_runtime_registry.get_last_change_reason(CONFIG_VAR_SPEC.name);
+    const std::string selection_description =
+        m_runtime_registry.get_last_change_description(CONFIG_VAR_SPEC.name);
+
     // Scans config registry for all user settings and sets
     // run-time variables accordingly
     m_runtime_registry.set_all_configured_values();
+    if (selection_reason != change_reason::NotChanged) {
+        m_runtime_registry.set_value(CONFIG_VAR_SPEC, selected_spec, selection_reason,
+                                     selection_description);
+    }
 
     // Check and overrides some run-time variables
     configure_after_user_settings();
@@ -640,11 +651,11 @@ void sys_var_configurator::initialize_base_variables()
     m_sys_vars.app.type = APP_NONE;
     m_sys_vars.app.workers_num = MCE_DEFAULT_APP_WORKERS_NUM;
 #if defined(DEFINED_NGINX)
-    m_runtime_registry.register_and_set_default_value(&m_sys_vars.nginx_workers_num,
+    m_runtime_registry.register_and_set_default_value(&m_sys_vars.app.nginx.workers_num,
                                                       CONFIG_VAR_NGINX_WORKERS_NUM);
 #endif
 #if defined(DEFINED_ENVOY)
-    m_runtime_registry.register_and_set_default_value(&m_sys_vars.envoy_workers_num,
+    m_runtime_registry.register_and_set_default_value(&m_sys_vars.app.envoy.workers_num,
                                                       CONFIG_VAR_ENVOY_WORKERS_NUM);
 #endif
     m_runtime_registry.register_and_set_default_value(&m_sys_vars.app.distribute_cq_interrupts,
@@ -718,6 +729,10 @@ void sys_var_configurator::detect_application_profile()
     // Read user-set value from registry info mce_spec now, so that it will be used in the next
     // line.
     m_runtime_registry.set_value_if_exists(CONFIG_VAR_SPEC.name);
+    // Preserve an explicit non-none profile when selecting the application profile.
+    const xlio_spec_t user_spec = static_cast<xlio_spec_t>(m_sys_vars.mce_spec);
+    // Suppress unused-variable warnings when both Nginx and Envoy support are disabled.
+    (void)user_spec;
 
     /*
      * Check for specific application configuration first. We can make decisions
@@ -725,42 +740,47 @@ void sys_var_configurator::detect_application_profile()
      */
     // Nginx and Envoy coexist in one binary; each has its own worker-count key and the application
     // type is selected at runtime. Supplying both keys is a contradictory configuration, so XLIO
-    // exits instead of silently picking one. Envoy sets only the application type, while Nginx
-    // additionally auto-applies the Nginx spec profile.
+    // exits instead of silently picking one. Each application auto-selects its profile when
+    // the user has not selected an explicit non-none profile.
 #if defined(DEFINED_ENVOY)
-    // Read user-set value from registry into envoy_workers_num now, so that it will be used in
+    // Read user-set value from registry into app.envoy.workers_num now, so that it will be used in
     // the next lines.
     m_runtime_registry.set_value_if_exists(CONFIG_VAR_ENVOY_WORKERS_NUM.name);
 #endif
 #if defined(DEFINED_NGINX)
-    // Read user-set value from registry into nginx_workers_num now, so that it will be used in
+    // Read user-set value from registry into app.nginx.workers_num now, so that it will be used in
     // the next lines.
     m_runtime_registry.set_value_if_exists(CONFIG_VAR_NGINX_WORKERS_NUM.name);
 #endif
 #if defined(DEFINED_ENVOY) && defined(DEFINED_NGINX)
-    if (m_sys_vars.envoy_workers_num > 0 && m_sys_vars.nginx_workers_num > 0) {
+    if (m_sys_vars.app.envoy.workers_num > 0 && m_sys_vars.app.nginx.workers_num > 0) {
         vlog_printf(VLOG_ERROR, "%s and %s are mutually exclusive; set only one.\n",
                     CONFIG_VAR_NGINX_WORKERS_NUM.name, CONFIG_VAR_ENVOY_WORKERS_NUM.name);
         exit(-1);
     }
 #endif
 #if defined(DEFINED_NGINX)
-    if (m_sys_vars.nginx_workers_num > 0) {
+    if (m_sys_vars.app.nginx.workers_num > 0) {
         m_sys_vars.app.type = APP_NGINX;
-        m_sys_vars.app.workers_num = m_sys_vars.nginx_workers_num;
+        m_sys_vars.app.workers_num = m_sys_vars.app.nginx.workers_num;
         // In order to ease the usage of Nginx cases, we apply Nginx profile when
         // user will choose to use Nginx workers environment variable.
-        if (m_sys_vars.mce_spec == MCE_SPEC_NONE) {
+        if (user_spec == MCE_SPEC_NONE) {
             m_runtime_registry.set_value(CONFIG_VAR_SPEC, static_cast<int64_t>(MCE_SPEC_NGINX),
-                                         change_reason::Profile,
+                                         change_reason::AutoCorrected,
                                          std::string(CONFIG_VAR_NGINX_WORKERS_NUM.name) + " > 0");
         }
     }
 #endif
 #if defined(DEFINED_ENVOY)
-    if (m_sys_vars.envoy_workers_num > 0) {
+    if (m_sys_vars.app.envoy.workers_num > 0) {
         m_sys_vars.app.type = APP_ENVOY;
-        m_sys_vars.app.workers_num = m_sys_vars.envoy_workers_num;
+        m_sys_vars.app.workers_num = m_sys_vars.app.envoy.workers_num;
+        if (user_spec == MCE_SPEC_NONE) {
+            m_runtime_registry.set_value(CONFIG_VAR_SPEC, static_cast<int64_t>(MCE_SPEC_ENVOY),
+                                         change_reason::AutoCorrected,
+                                         std::string(CONFIG_VAR_ENVOY_WORKERS_NUM.name) + " > 0");
+        }
     }
 #endif
 }
@@ -782,6 +802,12 @@ void sys_var_configurator::apply_spec_profile_optimizations()
         apply_nginx_profile();
         break;
 #endif // DEFINED_NGINX
+
+#ifdef DEFINED_ENVOY
+    case MCE_SPEC_ENVOY:
+        apply_envoy_profile();
+        break;
+#endif // DEFINED_ENVOY
 
     case MCE_SPEC_NVME_BF3:
         apply_nvme_bf3_profile();
@@ -946,6 +972,41 @@ void sys_var_configurator::apply_nginx_profile()
     }
 }
 #endif // DEFINED_NGINX
+
+#if defined(DEFINED_ENVOY)
+void sys_var_configurator::apply_envoy_profile()
+{
+    const char *desc = "Envoy profile";
+    m_runtime_registry.set_value(CONFIG_VAR_RING_ALLOCATION_LOGIC_TX,
+                                 static_cast<int64_t>(RING_LOGIC_PER_THREAD),
+                                 change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_RING_ALLOCATION_LOGIC_RX,
+                                 static_cast<int64_t>(RING_LOGIC_PER_THREAD),
+                                 change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_PROGRESS_ENGINE_INTERVAL, static_cast<int64_t>(0),
+                                 change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_CQ_POLL_BATCH_MAX, static_cast<int64_t>(128),
+                                 change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_TSO, static_cast<int64_t>(option_3::ON),
+                                 change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_TIMER_RESOLUTION_MSEC, static_cast<int64_t>(32),
+                                 change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_TCP_TIMER_RESOLUTION_MSEC, static_cast<int64_t>(256),
+                                 change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_TCP_SEND_BUFFER_SIZE,
+                                 static_cast<int64_t>(2 * 1024 * 1024), change_reason::Profile,
+                                 desc);
+    m_runtime_registry.set_value(CONFIG_VAR_TCP_PUSH_FLAG, false, change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_SELECT_NUM_POLLS, static_cast<int64_t>(0),
+                                 change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_SELECT_SKIP_OS, static_cast<int64_t>(1000),
+                                 change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_TCP_3T_RULES, true, change_reason::Profile, desc);
+    m_runtime_registry.set_value(CONFIG_VAR_RX_CQ_WAIT_CTRL, true, change_reason::Profile, desc);
+    m_sys_vars.rx_bufs_batch = 8; // not a config key
+    m_runtime_registry.set_value(CONFIG_VAR_RX_POLL_ON_TX_TCP, true, change_reason::Profile, desc);
+}
+#endif // DEFINED_ENVOY
 
 void sys_var_configurator::apply_nvme_bf3_profile()
 {
