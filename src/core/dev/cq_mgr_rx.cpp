@@ -5,6 +5,7 @@
  */
 
 #include "cq_mgr_rx.h"
+#include "dev/rx_layout_sample.h"
 #include "cq_mgr_rx_inl.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -44,7 +45,8 @@
 
 cq_mgr_rx::cq_mgr_rx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int cq_size,
                      struct ibv_comp_channel *p_comp_event_channel)
-    : m_p_ring(p_ring)
+    : m_rx_capture_control(xlio_rx_layout::recording_control(p_ring->get_rx_layout_capture()))
+    , m_p_ring(p_ring)
     , m_n_sysvar_cq_poll_batch_max(safe_mce_sys().cq_poll_batch_max)
     , m_n_sysvar_progress_engine_wce_max(safe_mce_sys().progress_engine_wce_max)
     , m_p_cq_stat(&m_cq_stat_static) // use local copy of stats by default
@@ -68,8 +70,30 @@ cq_mgr_rx::cq_mgr_rx(ring_simple *p_ring, ib_ctx_handler *p_ib_ctx_handler, int 
     m_rx_queue.set_id("cq_mgr_rx (%p) : m_rx_queue", this);
     m_rx_pool.set_id("cq_mgr_rx (%p) : m_rx_pool", this);
     configure(cq_size);
+    dpcp::adapter_hca_capabilities caps {};
+    auto *adapter = m_p_ib_ctx_handler->get_dpcp_adapter();
+    if (adapter && adapter->get_hca_capabilities(caps) == dpcp::DPCP_OK) {
+        m_rx_analysis_context.caps_known = 1;
+        m_rx_analysis_context.min_mss = caps.lro_min_mss_size;
+        m_rx_analysis_context.psh = caps.lro_psh_flag;
+        m_rx_analysis_context.timestamp = caps.lro_time_stamp;
+        m_rx_analysis_context.max_size_mode = caps.lro_max_msg_sz_mode;
+    }
+    // Same effective values used by hw_queue_rx::create_tir().
+    m_rx_analysis_context.tir_known = 1;
+    m_rx_analysis_context.enable_mask =
+        m_p_ring->m_lro.cap && m_p_ring->m_lro.max_payload_sz ? 3 : 0;
+    m_rx_analysis_context.max_lro_bytes = m_p_ring->m_lro.max_payload_sz;
+    m_rx_analysis_context.timeout_us = XLIO_MLX5_PARAMS_LRO_TIMEOUT;
 
     memset(&m_mlx5_cq, 0, sizeof(m_mlx5_cq));
+}
+
+void cq_mgr_rx::record_rx_sample(const mem_buf_desc_t *buffer, bool striding,
+                                 const xlio_mlx5_cqe *cqe)
+{
+    xlio_rx_layout::capture_sample(m_p_ring->get_rx_layout_capture(), buffer->p_buffer,
+                                   buffer->sz_data, striding, cqe, m_rx_analysis_context);
 }
 
 void cq_mgr_rx::configure(int cq_size)

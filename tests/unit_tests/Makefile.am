@@ -88,6 +88,11 @@ unit_tests_CXXFLAGS = \
 
 # Tests
 unit_tests_SOURCES = \
+	stats/rx_layout_view.cpp \
+	$(top_builddir)/src/stats/rx_layout_view.cpp \
+	stats/rx_layout_capture.cpp \
+	stats/rx_layout_summary.cpp \
+	dev/rx_layout_sample.cpp \
 	main.cpp \
 	config/config_registry.cpp \
 	config/config_descriptor.cpp \

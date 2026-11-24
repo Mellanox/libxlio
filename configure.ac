@@ -298,7 +298,8 @@ else
 fi
 
 AC_MSG_CHECKING([for md5 version of library statistics is])
-STATS_PROTOCOL_VER=`md5sum ${srcdir}/src/core/util/xlio_stats.h | awk '{ print $1}'`
+# The capture extension is part of the shared statistics ABI as well.
+STATS_PROTOCOL_VER=`cat "${srcdir}/src/core/util/xlio_stats.h" "${srcdir}/src/core/util/rx_layout_capture.h" | md5sum | awk '{ print $1}'`
 AC_DEFINE_UNQUOTED(STATS_PROTOCOL_VER, "${STATS_PROTOCOL_VER}", [Stats Protocol Version])
 AC_SUBST(STATS_PROTOCOL_VER)
 AC_MSG_RESULT(${STATS_PROTOCOL_VER})

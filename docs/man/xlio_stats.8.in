@@ -61,6 +61,180 @@ Log only sockets that match list or range, format: 4-16 or 1,9 (or combination).
 Print version.
 .TP
 
+.SH RX ANALYSIS
+Use --rx-analysis with -p to request bounded receive analysis batches:
+.nf
+xlio_stats -p PID --rx-analysis --rx-samples 256 -i 1 -c 10 --csv_file packets.csv
+.fi
+.nf
+
+RX analysis (--rx-analysis, optionally -C/--csv_file PATH):
+  --rx-samples N: up to N packet completions per ring per batch (1..256).
+  Excluded packets count toward N. An LRO aggregate is one completion.
+  Capture runs only on request; closing a ring publishes its partial batch.
+  No traffic / Collecting samples: empty / partial batch.
+  Sizes are bytes. Missing or inapplicable values are '-'.
+  Histograms group identical layouts, reasons and categories, not exact ACKs
+  or timestamp values. Headers are captured before XLIO repairs LRO headers.
+
+  Histogram:
+    Count: number of records with this layout and these categories.
+    Share: percentage of all records in this ring batch.
+    RQ: STRQ (striding) or RQ (regular).
+    IP: IP version.
+    LRO: CQE segment count; 0=no session, 1=single packet, >1=aggregate.
+    Hdr: L2 + IP + TCP header bytes.
+    L2/IP/TCP: individual header lengths, including tags/options/extensions.
+    Frame: completed Ethernet frame size.
+    Payload: aggregate TCP payload size for LRO>1.
+    Offset: payload offset from Ethernet frame start.
+    A%64: payload address modulo 64.
+    L%64: payload length modulo 64.
+    Flags: first packet's raw TCP flags, before LRO repair.
+    Incomplete: some requested headers or metadata were not recorded.
+    LRO_PSH: CQE PSH across the session; valid only for LRO>0.
+    TS_valid: CQE contains LRO TCP timestamps; valid only for LRO>0.
+    TS_change: none, first-only, final-only, same, changed or malformed.
+      Compares first/final TSval and, when both ACKs are valid, TSecr.
+      Applies only to LRO>0; first/final refer to packet header / CQE.
+    ACK_change: same, advanced, regressed, ambiguous or first-unset.
+      Uses modulo-2^32 ACK comparison; a half-space difference is ambiguous.
+      Requires LRO>0 and CQE L4 type 3 or 4; first-unset means no first ACK.
+    Win_change: zero (final window=0), same, increased or decreased.
+      Compares first/final raw windows for LRO>0; no window scaling applied.
+    lro_abrt: HW reason: 0:max-size, 1:timeout, 2:exception, 3:Other.
+      Valid for LRO>0. The triggering packet is generally outside the aggregate.
+    lro disq: observed disqualifiers for LRO=0; '-' for LRO>0.
+      Inferred from samples/settings, not proof of the NIC's decision.
+      'not validated' does not prove bad checksum. NOP/EOL padding is allowed.
+      Resource exhaustion and unsampled packets cannot be diagnosed.
+    Excluded: no safely interpretable complete TCP layout; separate histogram.
+    Data: packets with TCP payload; alignment percentages use these packets.
+    control-only: TCP packets without payload.
+
+  CSV: one row per completion, including excluded records, in ring capture order.
+  There is no global packet ordering across rings. Raw CQE fields require
+  opcode/validity checks; a zero union value does not make every use applicable.
+  IPv4 option and IPv6 extension bodies are omitted; extension types are kept.
+  Application payload is never captured. LRO timestamps are TCP option values,
+  not NIC clock values or a measurement of aggregation duration.
+    batch: Display update number.
+    ring-id: Process-wide monotonic ring registration ID.
+    ring-generation: Capture-slot generation; disambiguates slot reuse.
+    ifindex: Interface index.
+    flow-id: Directional-flow ID retained across batches; bounded to 4096 active IDs.
+    tuple: Interface, source/destination IP:port and VLAN context; eviction gives a new ID.
+    expected-seqno: Previous observed sequence + aggregate payload + SYN + FIN, modulo 2^32.
+      Unavailable at batch/ring changes, SYN or after lost/malformed context.
+      No inference spans sampling gaps; FIN/RST ends continuity.
+    sw-time-ns: CLOCK_MONOTONIC_RAW at SW completion processing; includes polling delay.
+      Not wire-arrival time.
+    incomplete: Some requested headers/metadata unavailable; omitted payload does not set it.
+    excluded: Reason no complete TCP layout could be interpreted, or '-'.
+    rq: STRQ (striding) or RQ (regular).
+    frame-bytes: Completed Ethernet frame size.
+    frame-address-mod64: Ethernet frame address modulo 64.
+    l2-bytes: Ethernet header length, including captured VLAN tags.
+    ip-bytes: IP header length, including options/extensions.
+    tcp-bytes: TCP header length, including options.
+    payload-bytes: TCP payload size; aggregate completion payload for LRO>1.
+    payload-offset: Payload offset from Ethernet frame start.
+    payload-address-mod64: Payload address modulo 64.
+    payload-length-mod64: Payload length modulo 64.
+    LRO: CQE segment count: 0=no session, 1=single packet, >1=aggregate.
+    lro_abrt: HW completion reason; valid for LRO>0. See histogram description.
+    lro disq: Observed disqualifiers for LRO=0; inferred, not HW session state.
+    ethernet-header: Bounded raw Ethernet header in hex, before repair.
+    ip-header: Raw IP base header in hex; option/extension bodies are omitted.
+    ipv6-extension-types: Bounded IPv6 extension-type list in hex.
+    tcp-header: Raw TCP header in hex, including up to 40 option bytes.
+    tcp-options: Raw TCP option bytes in hex.
+    ip-version: 4 or 6.
+    ip-dscp-ecn: Combined IP DSCP+ECN byte.
+    ipv4-total-length: First packet's raw IPv4 total length.
+    ipv4-id: First packet's raw IPv4 identification.
+    ipv4-frag: Raw IPv4 flags and fragment offset.
+    ip-ttl-hop-limit: First packet's TTL (IPv4) or hop limit (IPv6).
+    ip-protocol-next-header: Raw base-IP protocol / next-header byte.
+    ipv4-checksum: Raw IPv4 header checksum.
+    ipv6-flow-label: Raw IPv6 flow label.
+    ipv6-payload-length: First packet's raw IPv6 payload length.
+    src-port: Raw TCP source port.
+    dst-port: Raw TCP destination port.
+    seqno: First packet's raw TCP sequence number.
+    ackno: First packet's raw TCP ACK number; meaningful only when ACK is set.
+    tcp-doff-reserved-ns: Raw TCP byte containing data offset, reserved bits and NS.
+    tcp-flags: First packet's raw TCP flags.
+    tcp-window: First packet's raw advertised window; no scaling applied.
+    tcp-checksum: Raw TCP checksum.
+    tcp-urgent: Raw TCP urgent pointer.
+    cqe: Full raw 64-byte CQE in hex.
+    cqe-pkt-info: Raw CQE packet-info byte.
+    cqe-lro-tcppsh-abort-dupack: Raw packed LRO timestamp-valid/PSH/abort/dupack byte.
+    cqe-min-ttl: Raw CQE minimum TTL / hop limit.
+    cqe-tcp-window: Raw CQE final LRO window union field.
+    cqe-ack-seq: Raw CQE final LRO ACK union field.
+    cqe-rx-hash: Raw RX hash.
+    cqe-rx-hash-type: Raw RX hash type.
+    cqe-csum: Raw HW checksum; coverage depends on completion type.
+    cqe-hds-ip-ext: Raw validation bits.
+    cqe-l4-hdr-type-etc: Raw L3/L4 types, fragment/extension and VLAN flags.
+    cqe-vlan-info: Raw VLAN TCI.
+    cqe-byte-count: Raw byte-count field, including STRQ encoding.
+    cqe-timestamp: Raw 64-bit union: LRO TCP timestamps when valid, otherwise CQ clock.
+    cqe-flow-table-metadata: Raw flow-table metadata.
+    cqe-sop-rxdrop-qpn-flowtag: Raw packed SOP/drop/QPN/flow-tag metadata.
+    cqe-wqe-counter: Raw WQE counter.
+    cqe-op-own: Raw opcode, format and ownership byte.
+    lro-enable-mask: Effective TIR IP-family mask: IPv4=1, IPv6=2.
+    lro-min-mss: Device minimum TCP payload for LRO.
+    lro-psh-cap: Device PSH support boolean.
+    lro-timestamp-cap: Device TCP timestamp support boolean.
+    lro-max-size: Configured LRO size limit.
+    lro-max-size-mode: 0=TCP header+data; 1=whole frame.
+    lro-timeout-us: Configured TIR LRO timeout in microseconds.
+    LRO_PSH: Decoded aggregate PSH bit, valid only for LRO>0.
+    lro-timestamp-valid: Decoded LRO timestamp-valid bit, valid only for LRO>0.
+    tcp-timestamp-present: First packet has a well-formed timestamp option.
+    tcp-tsval: First packet's TCP TSval; unavailable for malformed options.
+    tcp-tsecr: First packet's TCP TSecr; requires timestamp option and ACK flag.
+    lro-tsval: Final CQE TCP TSval; requires LRO timestamp-valid.
+    lro-tsecr: CQE TCP TSecr; requires LRO timestamp-valid and L4 type 3 or 4.
+    timestamp-change: First/final TCP timestamp category; see TS_change.
+    lro-ackno: Decoded final ACK; requires LRO>0 and CQE L4 type 3 or 4.
+    ack-change: First/final ACK category; see ACK_change.
+    lro-window: Decoded final raw window; valid for LRO>0.
+    window-change: First/final raw window category; see Win_change.
+    lro-min-ttl: Decoded session minimum TTL / hop limit; valid for LRO>0.
+    ttl-change: First TTL/hop limit versus session minimum: same or changed.
+    tcp-option-profile: none, timestamp-only, SACK, other, malformed or unknown.
+    ip-ecn: IP ECN bits: 0=Not-ECT, 1=ECT(1), 2=ECT(0), 3=CE.
+    tcp-ece: First packet's TCP ECE bit.
+    tcp-cwr: First packet's TCP CWR bit.
+    sequence-relation: unknown, contiguous, forward-gap or overlap within a capture batch.
+      Describes observations, not proof of loss/retransmission; half-space is unknown.
+    mean-segment-payload: Aggregate payload divided by LRO count; may be fractional.
+      Valid for LRO>0; not an original segment-size distribution.
+    lro-dup-ack-count: Decoded diagnostic duplicate-ACK count; valid for LRO>0.
+      Expected to be zero according to the PRM; not a reliable loss counter.
+
+.fi
+
+.PP
+The target must provide this version of the capture extension. Write access to
+its statistics file is required. One capture reader may hold the exclusive file
+lock; ordinary statistics readers can run concurrently. Capture cannot be combined
+with view, details, socket-filter, logging, reset or dump options. The interval
+must be at least one second; -c counts display updates (zero means unlimited).
+.PP
+Capture adds a state check to each successful packet completion while inactive.
+If a reader exits, its bounded request may finish and be adopted by a later reader.
+There are 16 capture slots per process. Closed unread slots stay pinned until
+consumed; rings denied a slot continue networking but remain unsampled. The view
+reports coverage limitations. Samples are completion layouts, not PCIe transaction
+sizes or wire sizes including FCS/preamble. Percentages describe sampled bursts,
+not all traffic during the display interval.
+
 .SH SEE ALSO
 .BR xlio (7)
 

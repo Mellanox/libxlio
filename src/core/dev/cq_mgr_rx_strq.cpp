@@ -240,6 +240,11 @@ inline bool cq_mgr_rx_strq::strq_cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
             ++(m_p_cq_stat->n_rx_tls_resync);
         }
 #endif /* DEFINED_UTLS */
+        if (unlikely(rx_recording_requested())) {
+            if (!is_filler) {
+                record_rx_sample(_hot_buffer_stride, true, cqe);
+            }
+        }
         if (cqe->lro_num_seg > 1) {
             lro_update_hdr(cqe, _hot_buffer_stride);
             m_p_cq_stat->n_rx_lro_packets++;
