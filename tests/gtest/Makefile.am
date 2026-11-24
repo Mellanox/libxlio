@@ -1,4 +1,4 @@
-noinst_PROGRAMS = gtest ultra_api_connect_helper
+noinst_PROGRAMS = gtest ultra_api_connect_helper tcp_listener_churn_helper tcp_listener_cosink_helper
 
 # google test shows some warnings that are suppressed
 AM_CXXFLAGS = \
@@ -116,6 +116,8 @@ gtest_SOURCES = \
 	tcp/tcp_socket.cc \
 	tcp/tcp_sockopt.cc \
 	tcp/tcp_stream_integrity.cc \
+	tcp/tcp_listener_churn.cc \
+	tcp/tcp_listener_cosink.cc \
 	tcp/tcp_tls.cc \
 	\
 	udp/udp_socket.cc \
@@ -157,6 +159,7 @@ noinst_HEADERS = \
 	mix/mix_base.h \
 	\
 	tcp/tcp_base.h \
+	tcp/listener_test_utils.h \
 	\
 	udp/udp_base.h \
 	\
@@ -170,3 +173,16 @@ ultra_api_connect_helper_SOURCES = xlio_ultra_api/ultra_api_connect_helper.c
 ultra_api_connect_helper_CPPFLAGS = -I$(top_srcdir)/src/core
 ultra_api_connect_helper_CFLAGS = -Wall
 ultra_api_connect_helper_LDFLAGS = -no-install
+
+# Helper binary for the listener-churn regression test. Plain BSD sockets,
+# intercepted by the preloaded libxlio at runtime; multi-threaded, so C++11.
+tcp_listener_churn_helper_SOURCES = tcp/tcp_listener_churn_helper.cc
+tcp_listener_churn_helper_CXXFLAGS = -Wall -g -O2 -std=c++11 -pthread
+tcp_listener_churn_helper_LDFLAGS = -no-install -pthread
+
+# Helper binary for the listener co-sink regression test (detach the listener
+# RFS sink at close, not at the deferred destructor). Plain BSD sockets,
+# intercepted by the preloaded libxlio at runtime; single-threaded.
+tcp_listener_cosink_helper_SOURCES = tcp/tcp_listener_cosink_helper.cc
+tcp_listener_cosink_helper_CXXFLAGS = -Wall -g -O2 -std=c++11
+tcp_listener_cosink_helper_LDFLAGS = -no-install

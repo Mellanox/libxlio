@@ -130,6 +130,14 @@ typedef err_t (*tcp_accept_fn)(void *arg, struct tcp_pcb *newpcb, err_t err);
  */
 typedef err_t (*tcp_syn_handled_fn)(void *arg, struct tcp_pcb *newpcb);
 
+/** Function prototype for the TIME_WAIT SYN pre-reuse gate. Consulted before
+ * tcp_pcb_reuse() mutates the pcb. A zero return refuses the reuse and leaves
+ * the pcb untouched in TIME_WAIT (RFC 6191 silent drop).
+ *
+ * @param listen_sock The pcb's listen_sock pointer
+ */
+typedef u8_t (*tcp_syn_tw_may_reuse_fn)(void *listen_sock);
+
 /** Function prototype for tcp clone callback functions. Called to clone listen pcb
  * on connection establishment.
  * @param arg Additional argument to pass to the callback function (@see tcp_arg())
@@ -285,6 +293,7 @@ struct tcp_pcb {
 
     void *listen_sock;
     tcp_syn_handled_fn syn_tw_handled_cb;
+    tcp_syn_tw_may_reuse_fn syn_tw_may_reuse_cb;
 
     /* ports are in host byte order */
     u16_t remote_port;

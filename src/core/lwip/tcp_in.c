@@ -518,6 +518,10 @@ static err_t tcp_timewait_input(struct tcp_pcb *pcb, tcp_in_data *in_data)
         reusable = TCP_SEQ_GEQ(in_data->seqno, pcb->rcv_nxt);
 #endif
         reusable &= (pcb->syn_tw_handled_cb != NULL);
+        /* Gate before tcp_pcb_reuse() mutates the pcb: a refused SYN must leave
+         * the pcb untouched in TIME_WAIT (RFC 6191 silent drop). */
+        reusable = reusable && (pcb->syn_tw_may_reuse_cb != NULL) &&
+            pcb->syn_tw_may_reuse_cb(pcb->listen_sock);
         if (reusable) {
             return tcp_pcb_reuse(pcb, in_data);
         } else {
