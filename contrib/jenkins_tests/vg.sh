@@ -77,7 +77,7 @@ else
 	if [[ "$TEST_MODE" == "worker_threads" ]]; then
 		echo "Testing mode: Worker Threads"
 		test_list="tcp-worker-threads:--tcp"
-		test_lib_env="${test_lib_env} XLIO_WORKER_THREADS=1 XLIO_MEMORY_LIMIT=512MB"
+		test_lib_env="${test_lib_env} XLIO_WORKER_THREADS=1 XLIO_DISABLE_FLOW_TAG=1 XLIO_MEMORY_LIMIT=512MB"
 		test_params="--nonblocked"
 	else
 		echo "Testing mode: R2C"

@@ -159,16 +159,16 @@ do
 	IFS=: read -r select_poll poll_mode <<< "$poll_spec"
 
 	run_worker_threads_test "$poll_mode/ipv4/1-worker" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}.xml"
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_DISABLE_FLOW_TAG=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}.xml"
 
 	run_worker_threads_test "$poll_mode/ipv6/1-worker" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-ipv6.xml"
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_DISABLE_FLOW_TAG=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_ipv6 --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-ipv6.xml"
 
 	run_worker_threads_test "$poll_mode/ipv4/2-workers" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-pow2.xml"
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=2 XLIO_DISABLE_FLOW_TAG=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-pow2.xml"
 
 	run_worker_threads_test "$poll_mode/ipv4/3-workers" \
-		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-not-pow2.xml"
+		"${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=3 XLIO_DISABLE_FLOW_TAG=1 XLIO_SELECT_POLL=$select_poll GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$worker_threads_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-worker-threads-${poll_mode}-not-pow2.xml"
 done
 
 echo "Worker Threads Mode tests: $worker_threads_samples samples, ${#worker_threads_failures[@]} failures"
@@ -184,7 +184,7 @@ passthrough_filter="tcp_listen_connect_nb.server_client_nb"
 
 # worker threads mode
 gtest_opt_lo="--addr=127.0.0.1,127.0.0.1"
-eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_lo --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-loopback-wt.xml"
+eval "${sudo_cmd} $timeout_exe env XLIO_WORKER_THREADS=1 XLIO_DISABLE_FLOW_TAG=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt_lo --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-loopback-wt.xml"
 rc=$(($rc+$?))
 
 # R2C mode
@@ -200,7 +200,7 @@ passthrough_conf=$(mktemp /tmp/libxlio-passthrough-XXXXXX.conf)
 printf "use os tcp_client %s:*:*:*\nuse os tcp_server %s:*\n" "$server_ip" "$server_ip" > "$passthrough_conf"
 
 # worker threads mode
-eval "${sudo_cmd} $timeout_exe env XLIO_CONFIG_FILE=$passthrough_conf XLIO_WORKER_THREADS=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-rules-wt.xml"
+eval "${sudo_cmd} $timeout_exe env XLIO_CONFIG_FILE=$passthrough_conf XLIO_WORKER_THREADS=1 XLIO_DISABLE_FLOW_TAG=1 GTEST_TAP=2 LD_PRELOAD=$gtest_lib $gtest_app $gtest_opt --gtest_filter=$passthrough_filter --gtest_output=xml:${WORKSPACE}/${prefix}/test-passthrough-rules-wt.xml"
 rc=$(($rc+$?))
 
 # R2C mode
