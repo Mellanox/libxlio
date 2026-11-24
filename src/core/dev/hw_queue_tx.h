@@ -39,7 +39,7 @@ enum {
 
 /* WQE properties description. */
 struct sq_wqe_prop {
-    /* A buffer held by the WQE. This is NULL for control WQEs. */
+    /* A buffer held by the WQE, including GET_PSV's hardware-written result buffer. */
     mem_buf_desc_t *buf;
     /* Number of credits (usually number of WQEBBs). */
     unsigned credits;
@@ -93,7 +93,7 @@ public:
                               xlio_comp_cb_t callback, void *callback_arg);
     void tls_context_resync_tx(const xlio_tls_info *info, xlio_tis *tis, bool skip_static);
     void tls_resync_rx(xlio_tir *tir, const xlio_tls_info *info, uint32_t hw_resync_tcp_sn);
-    void tls_get_progress_params_rx(xlio_tir *tir, void *buf, uint32_t lkey);
+    void tls_get_progress_params_rx(xlio_tir *tir, mem_buf_desc_t *buf, uint32_t lkey);
     void tls_release_tis(xlio_tis *tis);
     void tls_release_tir(xlio_tir *tir);
     void tls_tx_post_dump_wqe(xlio_tis *tis, void *addr, uint32_t len, uint32_t lkey, bool first);
@@ -223,7 +223,8 @@ private:
                                              uint32_t tis_tir_number, uint32_t next_record_tcp_sn);
     inline void tls_post_progress_params_wqe(xlio_ti *ti, uint32_t tis_tir_number,
                                              uint32_t next_record_tcp_sn, bool fence, bool is_tx);
-    inline void tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn, void *buf, uint32_t lkey);
+    inline void tls_get_progress_params_wqe(xlio_ti *ti, uint32_t tirn, mem_buf_desc_t *buf,
+                                            uint32_t lkey);
 #endif /* DEFINED_UTLS */
 
     inline void submit_wqe(mem_buf_desc_t *buf, unsigned credits, uint8_t wqebbs, xlio_ti *ti,
