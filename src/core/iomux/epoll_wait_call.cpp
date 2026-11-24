@@ -127,6 +127,15 @@ int epoll_wait_call::get_current_events()
         si = si_next;
     }
 
+    // The events array is full and si is the first socket that was not visited. Move the
+    // visited sockets to the tail, so the next call starts at si and ready sockets take turns.
+    if (si) {
+        ep_ready_fd_list_t &ready_list = m_epfd_info->m_ready_fds;
+        for (size_t moves = ready_list.size(); moves > 0 && ready_list.front() != si; --moves) {
+            ready_list.push_back(ready_list.get_and_pop_front());
+        }
+    }
+
     m_n_ready_rfds += ready_rfds;
     m_n_ready_wfds += ready_wfds;
     m_p_stats->n_iomux_rx_ready += ready_rfds;
