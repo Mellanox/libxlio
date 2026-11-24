@@ -83,3 +83,6 @@ tests/unit_tests/unit_tests
 
 # Install dir
 install/
+
+# Test results
+*gtest-results/
