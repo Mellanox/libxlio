@@ -7,6 +7,8 @@
 #ifndef TESTS_GTEST_COMMON_BASE_H_
 #define TESTS_GTEST_COMMON_BASE_H_
 
+#include <functional>
+
 #include "src/core/util/sock_addr.h"
 
 #define DO_WHILE0(x)                                                                               \
@@ -61,6 +63,12 @@ class test_base {
 public:
     static int sock_noblock(int fd);
     static int event_wait(struct epoll_event *event);
+    // Run assertions inside body: a fatal ASSERT_* returns from the callback,
+    // then this helper exits the child with failure status. It cannot skip the
+    // child's exit and fall through into subsequent tests. The parent continues
+    // normally; assertions in the child are reported through its exit status.
+    // Returns the child PID (or -1) to the parent, which owns waiting/status checks.
+    static pid_t fork_child(const std::function<void()> &body);
     static int wait_fork(int pid);
     static void handle_signal(int signo);
 
