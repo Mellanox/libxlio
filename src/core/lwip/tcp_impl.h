@@ -118,7 +118,6 @@ void set_tmr_resolution(u32_t v);
 #endif
 
 #define TCP_FIN_WAIT_TIMEOUT 20000 /* milliseconds */
-#define TCP_SYN_RCVD_TIMEOUT 20000 /* milliseconds */
 
 #define TCP_OOSEQ_TIMEOUT 6U /* x RTO */
 
@@ -322,6 +321,8 @@ extern u8_t enable_push_flag;
 extern u8_t enable_ts_option;
 extern u32_t tcp_ticks;
 extern u32_t slow_tmr_interval;
+extern u8_t tcp_synack_rtx;
+void set_tcp_synack_rtx(u8_t v);
 extern ip_route_mtu_fn external_ip_route_mtu;
 
 static inline u32_t tcp_ms_to_ticks(u32_t ms)

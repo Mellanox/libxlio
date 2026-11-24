@@ -104,6 +104,7 @@ unit_tests_SOURCES = \
 	tcp/tcp_in.cpp \
 	tcp/tcp_output.cpp \
 	tcp/tcp_rto.cpp \
+	tcp/tcp_syn_timers.cpp \
 	$(top_builddir)/src/core/lwip/cc.c \
 	$(top_builddir)/src/core/lwip/cc_lwip.c \
 	$(top_builddir)/src/core/lwip/cc_none.c \

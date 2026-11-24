@@ -266,6 +266,11 @@ struct tcp_pcb {
 
     enum tcp_state private_state; /* TCP state - should only be touched thru get/set functions */
     u8_t nrtx; /* number of retransmissions */
+    u8_t syn_max_rtx; /* SYN or SYN-ACK retransmit budget: TCP_SYNCNT on an active open,
+                       * net.ipv4.tcp_synack_retries on a passive open. On the active
+                       * side 0 = never set, the build default TCP_SYNMAXRTX applies.
+                       * The passive paths always store the sysctl value, so 0 means
+                       * no SYN-ACK retransmissions there. */
     u8_t prio;
     /* Local-send retry marker: the sole unacked segment did not reach the
      * wire and must be moved back to unsent before the next attempt. */
