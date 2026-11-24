@@ -1,0 +1,68 @@
+// Test the behavior of EPOLLET for EPOLLIN.
+//
+// If new data comes in, epoll_wait returns EPOLLIN regardless of whether
+// we have drained the socket or not.
+`packetdrill/gtests/net/common/defaults.sh`
+
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 8>
+   +0 < . 1:1(0) ack 1 win 257
+
+   +0 accept(3, ..., ...) = 4
+
+   +0 fcntl(4, F_SETFL, O_RDWR|O_NONBLOCK) = 0
+   +0 epoll_create(1) = 5
+
+   // Add the FD as EPOLLET and clear all the events.
+   +0 epoll_ctl(5, EPOLL_CTL_ADD, 4, {events=EPOLLOUT|EPOLLIN|EPOLLET, fd=4}) = 0
+   +0 epoll_wait(5, {events=EPOLLOUT, fd=4}, 1, 0) = 1
+   +0 epoll_wait(5, {events=0, ptr=0}, 1, 0) = 0
+
+   // Linux and XLIO differ in the readiness mask returned after an EPOLLIN edge.
+   // Linux uses the new EPOLLIN edge to put the fd back on the ready list, then
+   // reports the complete current readiness mask. Since the socket remains
+   // writable, Linux returns EPOLLIN|EPOLLOUT even though EPOLLOUT did not
+   // independently generate a new edge.
+   //
+   // XLIO tracks edge-triggered readiness bits individually. Once the initial
+   // EPOLLOUT edge above has been consumed, a later data arrival returns only
+   // the newly triggered EPOLLIN bit. These expectations deliberately describe
+   // current XLIO behavior. Returning Linux's complete readiness mask remains
+   // a compatibility improvement for XLIO.
+
+   // We have 1KB of data ready to read so we get EPOLLIN.
+   +0 < P. 1:1001(1000) ack 1 win 257
+   +0 > . 1:1(0) ack 1001
+   +0 epoll_wait(5, {events=EPOLLIN, fd=4}, 1, 0) = 1
+   // Now epoll_wait should not return any event because there is no new data.
+   +0 epoll_wait(5, {events=0, ptr=0}, 1, 0) = 0
+
+   // Another 1KB arrives, so we get a new EPOLLIN edge.
+   +0 < P. 1001:2001(1000) ack 1 win 257
+   +0 > . 1:1(0) ack 2001
+   +0 epoll_wait(5, {events=EPOLLIN, fd=4}, 1, 0) = 1
+   // Now epoll_wait should not return any event because there is no new data.
+   +0 epoll_wait(5, {events=0, ptr=0}, 1, 0) = 0
+
+   // Read some data from the socket, but do not drain it.
+   +0 read(4, ..., 1000) = 1000
+   // epoll_wait should still return no events because there is no new data.
+   +0 epoll_wait(5, {events=0, ptr=0}, 1, 0) = 0
+
+   // New data arrives while unread data remains, so we get another EPOLLIN edge.
+   +0 < P. 2001:3001(1000) ack 1 win 257
+   +0 > . 1:1(0) ack 3001
+   +0 epoll_wait(5, {events=EPOLLIN, fd=4}, 1, 0) = 1
+   // Now epoll_wait should not return any event because there is no new data.
+   +0 epoll_wait(5, {events=0, ptr=0}, 1, 0) = 0
+
+   // Keep the remote flow and its kernel-drop rules alive until the final
+   // epoll assertions complete. Without this later packet event, the wire
+   // server can tear down first and let the peer kernel reset the socket,
+   // creating a spurious final epoll event.
+  +.1 < . 3001:3001(0) ack 1 win 257

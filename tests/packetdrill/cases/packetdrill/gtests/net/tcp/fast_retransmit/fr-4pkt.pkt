@@ -1,0 +1,41 @@
+// Test fast retransmit with XLIO's initial congestion window outstanding.
+// Three duplicate ACKs should trigger retransmission of the first MSS.
+// In this variant the receiver does not support SACK.
+
+// Set up config.
+`packetdrill/gtests/net/common/defaults.sh`
+
+// Establish a connection.
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+  +.1 < S 0:0(0) win 32792 <mss 1460,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 8>
+  +.1 < . 1:1(0) ack 1 win 257
+   +0 accept(3, ..., ...) = 4
+
+// XLIO follows RFC 3390, giving an initial window of 4380 bytes at MSS 1460.
+   +0 write(4, ..., 4380) = 4380
+   +0 > P. 1:4381(4380) ack 1
+
+// Get 3 duplicate ACKs.
+  +.1 < . 1:1(0) ack 1 win 257
+   +0 < . 1:1(0) ack 1 win 257
+   +0 < . 1:1(0) ack 1 win 257
+// We've received 3 duplicate ACKs, so we do a fast retransmit.
+// Linux retransmits only the first inferred-lost MSS here. XLIO currently
+// retransmits the first two MSS (2920 bytes). This expectation deliberately
+// records XLIO's current behavior; limiting the retransmission to one MSS
+// would avoid sending unnecessary duplicate data and improve Linux parity.
+   +0 > . 1:2921(2920) ack 1
+
+// Receiver ACKs all data.
+  +.1 < . 1:1(0) ack 4381 win 257
+
+// Clean up.
+  +.1 close(4) = 0
+   +0 > F. 4381:4381(0) ack 1
+  +.1 < F. 1:1(0) ack 4382 win 257
++.001 > . 4382:4382(0) ack 2
