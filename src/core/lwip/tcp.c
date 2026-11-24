@@ -576,6 +576,7 @@ err_t tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port, bool
     return ret;
 }
 
+/* tcp_user_timeout_overrides_maxrtx() must stay a subset of these conditions. */
 static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
 {
     u32_t user_timeout_ticks = tcp_ms_to_ticks(pcb->user_timeout_ms);
@@ -583,6 +584,17 @@ static inline bool tcp_user_timeout_occured(struct tcp_pcb *pcb)
     return pcb->user_timeout_ms != 0 && pcb->ticks_since_data_sent > 0 &&
         (u32_t)pcb->ticks_since_data_sent > user_timeout_ticks &&
         (get_tcp_state(pcb) == ESTABLISHED || get_tcp_state(pcb) == SYN_SENT);
+}
+
+/* RFC 5482: an armed TCP_USER_TIMEOUT owns the abort of a data retransmission
+ * episode, so the TCP_MAXRTX limit must not cut the episode short. Restricted
+ * to ESTABLISHED with a running send clock: there tcp_user_timeout_occured()
+ * bounds the retransmissions. In every other case the retransmission-count
+ * limits stay the bound. */
+static inline bool tcp_user_timeout_overrides_maxrtx(struct tcp_pcb *pcb)
+{
+    return pcb->user_timeout_ms != 0 && pcb->ticks_since_data_sent >= 0 &&
+        get_tcp_state(pcb) == ESTABLISHED;
 }
 
 /**
@@ -627,7 +639,7 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max SYN retries reached\n"));
             /* >= not ==: retransmission paths can advance nrtx between timer
              * passes, so the counter can step past the exact limit. */
-        } else if (pcb->nrtx >= TCP_MAXRTX) {
+        } else if (pcb->nrtx >= TCP_MAXRTX && !tcp_user_timeout_overrides_maxrtx(pcb)) {
             ++pcb_remove;
             err = ERR_ABRT;
             LWIP_DEBUGF(TCP_DEBUG, ("tcp_slowtmr: max DATA retries reached\n"));
@@ -645,6 +657,11 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
                      * update without sending any data (which will force us to split the segment).
                      * tcp_zero_window_probe(pcb); */
                     tcp_keepalive(pcb);
+                    /* Zero-window data starts the TCP_USER_TIMEOUT clock. The keepalive
+                     * block measures idle time from pcb->keepalive_rx_tmr. */
+                    if (pcb->ticks_since_data_sent == -1) {
+                        pcb->ticks_since_data_sent = 0;
+                    }
                 }
             } else {
                 if (tcp_rexmit_timer_running(pcb)) {
@@ -710,16 +727,39 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
             }
         }
 
-        /* Check if KEEPALIVE should be sent */
+        /* Check if KEEPALIVE should be sent. With TCP_USER_TIMEOUT in ESTABLISHED, skip it
+         * while data is on unacked or an RTO retransmission waits on unsent (rtime >= 0).
+         * tcp_user_timeout_occured() then measures the user timeout from the send. */
         if ((pcb->so_options & SOF_KEEPALIVE) &&
-            ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT))) {
-#if LWIP_TCP_KEEPALIVE
-            if ((u32_t)(tcp_ticks - pcb->tmr) >
-                tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt * pcb->keep_intvl))
-#else
-            if ((u32_t)(tcp_ticks - pcb->tmr) > tcp_ms_to_ticks(pcb->keep_idle + TCP_MAXIDLE))
-#endif /* LWIP_TCP_KEEPALIVE */
-            {
+            ((get_tcp_state(pcb) == ESTABLISHED) || (get_tcp_state(pcb) == CLOSE_WAIT)) &&
+            !(pcb->user_timeout_ms != 0 && get_tcp_state(pcb) == ESTABLISHED &&
+              (pcb->unacked != NULL || tcp_rexmit_timer_running(pcb)))) {
+            u32_t ka_elapsed = (u32_t)(tcp_ticks - pcb->keepalive_rx_tmr);
+            u8_t ka_abort = 0;
+
+            if (pcb->user_timeout_ms != 0) {
+                /* TCP_USER_TIMEOUT: abort once user_timeout has elapsed since
+                 * the last received segment (keepalive_rx_tmr), at least one probe
+                 * is out, and a full keep_intvl has passed since the last probe. A
+                 * probe reply resets keepalive_rx_tmr and keep_cnt_sent (tcp_in.c). */
+                ka_abort = (ka_elapsed >= tcp_ms_to_ticks(pcb->user_timeout_ms)) &&
+                    (pcb->keep_cnt_sent > 0) &&
+                    ((u32_t)(tcp_ticks - pcb->last_keepalive_tmr) >=
+                     tcp_ms_to_ticks(pcb->keep_intvl));
+            } else {
+                /* No TCP_USER_TIMEOUT: abort once keep_cnt probes have been sent
+                 * and the final probe's keep_intvl has elapsed without a reply,
+                 * matching Linux (icsk_probes_out >= keepalive_probes). A count
+                 * gate keeps the abort consistent with the per-interval probe
+                 * spacing below, which rounds each keep_intvl up to whole timer
+                 * ticks; a single keep_idle + keep_cnt * keep_intvl deadline can
+                 * abort before all keep_cnt probes are sent. */
+                ka_abort = (pcb->keep_cnt_sent >= pcb->keep_cnt) &&
+                    ((u32_t)(tcp_ticks - pcb->last_keepalive_tmr) >=
+                     tcp_ms_to_ticks(pcb->keep_intvl));
+            }
+
+            if (ka_abort) {
                 LWIP_DEBUGF_IP_ADDR(TCP_DEBUG,
                                     "tcp_slowtmr: KEEPALIVE timeout. Aborting connection to ",
                                     pcb->remote_ip, pcb->is_ipv6);
@@ -727,17 +767,15 @@ void tcp_slowtmr(struct tcp_pcb *pcb, int64_t timer_now_us)
                 ++pcb_remove;
                 err = ERR_TIMEOUT;
                 ++pcb_reset;
-            }
-#if LWIP_TCP_KEEPALIVE
-            else if ((u32_t)(tcp_ticks - pcb->tmr) >
-                     tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt_sent * pcb->keep_intvl))
-#else
-            else if ((u32_t)(tcp_ticks - pcb->tmr) >
-                     tcp_ms_to_ticks(pcb->keep_idle + pcb->keep_cnt_sent * TCP_KEEPINTVL_DEFAULT))
-#endif /* LWIP_TCP_KEEPALIVE */
-            {
+            } else if (ka_elapsed > tcp_ms_to_ticks(pcb->keep_idle) &&
+                       (pcb->keep_cnt_sent == 0 ||
+                        (u32_t)(tcp_ticks - pcb->last_keepalive_tmr) >=
+                            tcp_ms_to_ticks(pcb->keep_intvl))) {
                 tcp_keepalive(pcb);
-                pcb->keep_cnt_sent++;
+                pcb->last_keepalive_tmr = tcp_ticks;
+                if (pcb->keep_cnt_sent < UINT8_MAX) {
+                    pcb->keep_cnt_sent++;
+                }
             }
         }
 
@@ -976,13 +1014,12 @@ void tcp_pcb_init(struct tcp_pcb *pcb, u8_t prio, void *container)
 
     /* Init KEEPALIVE timer */
     pcb->keep_idle = TCP_KEEPIDLE_DEFAULT;
-
-#if LWIP_TCP_KEEPALIVE
     pcb->keep_intvl = TCP_KEEPINTVL_DEFAULT;
     pcb->keep_cnt = TCP_KEEPCNT_DEFAULT;
-#endif /* LWIP_TCP_KEEPALIVE */
 
     pcb->keep_cnt_sent = 0;
+    pcb->last_keepalive_tmr = tcp_ticks;
+    pcb->keepalive_rx_tmr = tcp_ticks;
     pcb->quickack = 0;
     pcb->is_in_input = 0;
     pcb->enable_ts_opt = enable_ts_option;
@@ -1021,6 +1058,8 @@ void tcp_pcb_recycle(struct tcp_pcb *pcb)
     pcb->tcp_timer = 0;
     pcb->recv = tcp_recv_null;
     pcb->keep_cnt_sent = 0;
+    pcb->last_keepalive_tmr = tcp_ticks;
+    pcb->keepalive_rx_tmr = tcp_ticks;
     pcb->quickack = 0;
     pcb->is_in_input = 0;
     pcb->snd_scale = 0;
@@ -1296,16 +1335,27 @@ u16_t tcp_send_mss(struct tcp_pcb *pcb)
     return tcp_initial_mss(pcb);
 }
 
+/* The keep_cnt clamp in tcp_set_keepalive() is only sufficient while
+ * TCP_KEEPCNT_MAX fits the u8 keep_cnt_sent counter it is compared against in the
+ * user_timeout==0 abort; otherwise that abort would be unreachable. */
+#if defined(__cplusplus)
+static_assert(TCP_KEEPCNT_MAX <= UINT8_MAX,
+              "TCP_KEEPCNT_MAX must fit the u8 keep_cnt_sent counter");
+#else
+_Static_assert(TCP_KEEPCNT_MAX <= UINT8_MAX,
+               "TCP_KEEPCNT_MAX must fit the u8 keep_cnt_sent counter");
+#endif
+
 void tcp_set_keepalive(struct tcp_pcb *pcb, u32_t idle, u32_t intvl, u32_t cnt)
 {
     pcb->keep_idle = idle;
-#if LWIP_TCP_KEEPALIVE
     pcb->keep_intvl = intvl;
-    pcb->keep_cnt = cnt;
-#else
-    (void)intvl;
-    (void)cnt;
-#endif /* LWIP_TCP_KEEPALIVE */
+    /* keep_cnt is compared against the u8_t keep_cnt_sent (which saturates at
+     * UINT8_MAX) in the user_timeout==0 keepalive abort; clamp it to the same
+     * bound setsockopt enforces (Linux MAX_TCP_KEEPCNT) so an out-of-range
+     * tcp_keepalive_probes sysctl cannot push keep_cnt past the u8 ceiling and
+     * make the probe-count abort unreachable (see the static_assert above). */
+    pcb->keep_cnt = (cnt > TCP_KEEPCNT_MAX) ? TCP_KEEPCNT_MAX : cnt;
 }
 
 #if TCP_DEBUG || TCP_INPUT_DEBUG || TCP_OUTPUT_DEBUG
