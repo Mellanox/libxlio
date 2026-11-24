@@ -346,6 +346,7 @@ libxlio_la_SOURCES := \
 	util/sg_array.h \
 	util/ip_address.h \
 	util/sock_addr.h \
+	util/relaxed_ordering.h \
 	util/sysctl_reader.h \
 	util/sys_vars.h \
 	util/sys_vars_configurator.h \

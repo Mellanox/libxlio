@@ -22,6 +22,12 @@
 
 #define LISTEN_MAGIC 0xdeadc0de
 
+/*
+ * Some devices accept relaxed ordering memory keys only, so the send buffer registration
+ * requests relaxed ordering.
+ */
+#define SNDBUF_MR_ACCESS (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_RELAXED_ORDERING)
+
 static bool quit = false;
 static bool terminated = false;
 static int g_comp_events = 0;
@@ -159,7 +165,7 @@ static void socket_accept_cb(xlio_socket_t sock, xlio_socket_t parent_sock,
     if (!pd) {
         pd = xlio_socket_get_pd(sock);
         assert(pd != NULL);
-        mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), IBV_ACCESS_LOCAL_WRITE);
+        mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), SNDBUF_MR_ACCESS);
         assert(mr_buf != NULL);
     }
 

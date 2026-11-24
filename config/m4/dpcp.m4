@@ -30,7 +30,7 @@ get_version_number()
 
 get_min_supported_version()
 {
-    echo 10161
+    echo 10168
 }
 
 AC_ARG_ENABLE([dpcp-shared],

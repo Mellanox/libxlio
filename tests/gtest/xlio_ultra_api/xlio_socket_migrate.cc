@@ -62,7 +62,7 @@ public:
         if (event == XLIO_SOCKET_EVENT_ESTABLISHED) {
             pd = xlio_api->xlio_socket_get_pd(sock);
             ASSERT_TRUE(pd != NULL);
-            mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), IBV_ACCESS_LOCAL_WRITE);
+            mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), ULTRA_API_MR_ACCESS);
             ASSERT_TRUE(mr_buf != NULL);
             connected_counter++;
         } else if (event == XLIO_SOCKET_EVENT_CLOSED) {

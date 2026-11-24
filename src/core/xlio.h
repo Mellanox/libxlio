@@ -603,6 +603,10 @@ int xlio_socket_listen(xlio_socket_t sock);
  * @return Pointer to ibv_pd structure, or NULL on error
  *
  * @note Socket must be connected or in progress of connecting.
+ *
+ * @note XLIO_RELAXED_ORDERING does not apply to the memory that the application registers
+ * with this protection domain. Some devices accept relaxed ordering memory keys only: to
+ * run on such a device, register with IBV_ACCESS_RELAXED_ORDERING.
  */
 struct ibv_pd *xlio_socket_get_pd(xlio_socket_t sock);
 

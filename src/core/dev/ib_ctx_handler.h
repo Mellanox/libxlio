@@ -8,11 +8,13 @@
 #define IB_CTX_HANDLER_H
 
 #include <infiniband/verbs.h>
+#include <atomic>
 #include <unordered_map>
 
 #include "event/event_handler_ibverbs.h"
 #include "dev/time_converter.h"
 #include "ib/base/verbs_extra.h"
+#include "util/relaxed_ordering.h"
 #include "utils/lock_wrapper.h"
 #include <mellanox/dpcp.h>
 
@@ -70,6 +72,7 @@ public:
     bool is_packet_pacing_supported(uint32_t rate = 1);
     size_t get_on_device_memory_size() { return m_on_device_memory; }
     uint32_t get_max_sq_wqebbs() { return m_max_sq_wqebbs; }
+    void report_relaxed_ordering_verdict_once();
     bool is_active(int port_num);
     bool is_mlx4() { return is_mlx4(get_ibname()); }
     static bool is_mlx4(const char *dev) { return strncmp(dev, "mlx4", 4) == 0; }
@@ -94,6 +97,10 @@ private:
     pacing_caps_t m_pacing_caps;
     size_t m_on_device_memory;
     uint32_t m_max_sq_wqebbs = 0U;
+    // Set when the device accepts relaxed ordering memory keys only.
+    bool m_relaxed_ordering_only = false;
+    ro_decision m_relaxed_ordering_verdict = ro_decision::NOT_REQUESTED;
+    std::atomic<bool> m_relaxed_ordering_reported {false};
     bool m_removed;
     lock_spin m_lock_umr;
     time_converter *m_p_ctx_time_converter;

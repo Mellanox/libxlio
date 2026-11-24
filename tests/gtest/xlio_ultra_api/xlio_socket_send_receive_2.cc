@@ -95,7 +95,7 @@ public:
         connected_counter++;
         pd = xlio_api->xlio_socket_get_pd(sock);
         ASSERT_TRUE(pd != NULL);
-        mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), IBV_ACCESS_LOCAL_WRITE);
+        mr_buf = ibv_reg_mr(pd, sndbuf, sizeof(sndbuf), ULTRA_API_MR_ACCESS);
         ASSERT_TRUE(mr_buf != NULL);
         base_send_single_msg(sock, data_to_send, strlen(data_to_send), 0x1, 0, mr_buf, sndbuf);
     }
