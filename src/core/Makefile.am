@@ -169,6 +169,7 @@ libxlio_la_SOURCES := \
 	util/match.cpp \
 	util/utils.cpp \
 	util/instrumentation.cpp \
+	util/vm_detection.cpp \
 	util/sys_vars.cpp \
 	util/sys_vars_configurator.cpp \
 	util/data_updater.cpp \
@@ -347,6 +348,7 @@ libxlio_la_SOURCES := \
 	util/ip_address.h \
 	util/sock_addr.h \
 	util/sysctl_reader.h \
+	util/vm_detection.h \
 	util/sys_vars.h \
 	util/sys_vars_configurator.h \
 	util/sys_vars_types.h \

@@ -89,6 +89,7 @@ unit_tests_CXXFLAGS = \
 # Tests
 unit_tests_SOURCES = \
 	main.cpp \
+	config/vm_detection.cpp \
 	config/config_registry.cpp \
 	config/config_descriptor.cpp \
 	config/inline_loader.cpp \
@@ -104,6 +105,7 @@ unit_tests_SOURCES = \
 	tcp/tcp_in.cpp \
 	tcp/tcp_output.cpp \
 	tcp/tcp_rto.cpp \
+	$(top_builddir)/src/core/util/vm_detection.cpp \
 	$(top_builddir)/src/core/lwip/cc.c \
 	$(top_builddir)/src/core/lwip/cc_lwip.c \
 	$(top_builddir)/src/core/lwip/cc_none.c \

@@ -19,6 +19,7 @@
 #include "core/config/runtime_registry.h"
 #include "core/ib/base/verbs_extra.h"
 #include "core/util/sysctl_reader.h"
+#include "core/util/vm_detection.h"
 #include "core/xlio_extra.h"
 #include "core/util/sys_vars_configurator.h"
 #include "core/util/sys_vars_types.h"
@@ -121,9 +122,6 @@ private:
         static mce_sys_var the_instance; // singelton
         return the_instance;
     }
-
-public:
-    enum hyper_t { HYPER_NONE = 0, HYPER_XEN, HYPER_KVM, HYPER_MSHV, HYPER_VMWARE };
 
 public:
     // Use this to read variables.
@@ -304,7 +302,7 @@ public:
     bool tcp_abort_on_close;
     bool rx_poll_on_tx_tcp;
     bool rx_cq_wait_ctrl;
-    hyper_t hypervisor;
+    vm_detection::hyper_t hypervisor;
 #if defined(DEFINED_NGINX)
     int nginx_udp_socket_pool_size;
     int nginx_udp_socket_pool_rx_num_buffs_reuse;
@@ -353,10 +351,6 @@ private:
     static int hex_to_cpuset(char *start, cpu_set_t *cpu_set);
     void read_env_variable_with_pid(char *mce_sys_name, size_t mce_sys_max_size,
                                     const char *env_ptr);
-    bool check_cpuinfo_flag(const char *flag);
-    bool cpuid_hv();
-    const char *cpuid_hv_vendor();
-    void read_hv();
     void legacy_read_strq_strides_num();
     void legacy_read_strq_stride_size_bytes();
 
@@ -744,8 +738,6 @@ extern const mce_sys_var &safe_mce_sys();
 #define STRQ_MAX_STRIDES_NUM       65536
 #define STRQ_MIN_STRIDE_SIZE_BYTES 64
 #define STRQ_MAX_STRIDE_SIZE_BYTES 8192
-
-#define VIRTUALIZATION_FLAG "hypervisor"
 
 extern bool g_b_exit;
 extern bool g_is_forked_child;
