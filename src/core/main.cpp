@@ -1334,6 +1334,9 @@ extern "C" int xlio_init(void)
     } else {
         print_env_vars_xlio_global_settings();
     }
+    if (safe_mce_sys().hypervisor != vm_detection::HYPER_NONE) {
+        vlog_printf(VLOG_INFO, "Virtual machine detected. TX device memory is disabled.\n");
+    }
     mce_sys_var::safe_instance().freeze();
 
     check_debug();

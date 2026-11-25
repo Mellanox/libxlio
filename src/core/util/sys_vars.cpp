@@ -558,110 +558,6 @@ void mce_sys_var::read_env_variable_with_pid(char *mce_sys_name, size_t mce_sys_
     }
 }
 
-bool mce_sys_var::check_cpuinfo_flag(const char *flag)
-{
-    FILE *fp;
-    char *line;
-    bool ret = false;
-
-    fp = fopen("/proc/cpuinfo", "r");
-    if (!fp) {
-        vlog_printf(VLOG_ERROR, "error while fopen\n");
-        print_xlio_load_failure_msg();
-        return false;
-    }
-    line = (char *)malloc(MAX_CMD_LINE);
-    BULLSEYE_EXCLUDE_BLOCK_START
-    if (!line) {
-        vlog_printf(VLOG_ERROR, "error while malloc\n");
-        print_xlio_load_failure_msg();
-        goto exit;
-    }
-    BULLSEYE_EXCLUDE_BLOCK_END
-    while (fgets(line, MAX_CMD_LINE, fp)) {
-        if (strncmp(line, "flags\t", 5) == 0) {
-            if (strstr(line, flag)) {
-                ret = true;
-                goto exit;
-            }
-        }
-    }
-
-exit:
-    fclose(fp);
-    free(line);
-    return ret;
-}
-
-/*
- * Intel and AMD CPUs have reserved bit 31 of ECX of CPUID leaf 0x1 as the
- * hypervisor present bit. This bit allows hypervisors to indicate their
- * presence to the guest operating system. Hypervisors set this bit and physical
- * CPUs (all existing and future CPUs) set this bit to zero. Guest operating
- * systems can test bit 31 to detect if they are running inside a virtual
- * machine.
- */
-bool mce_sys_var::cpuid_hv()
-{
-#if defined(__x86_64__)
-    uint32_t _eax, _ebx, _ecx, _edx;
-    __asm__("cpuid" : "=a"(_eax), "=b"(_ebx), "=c"(_ecx), "=d"(_edx) : "a"(0x1));
-    return (bool)((_ecx >> 31) & 0x1);
-#else
-    return check_cpuinfo_flag(VIRTUALIZATION_FLAG);
-#endif
-}
-
-/*
- * Intel and AMD have also reserved CPUID leaves 0x40000000 - 0x400000FF for
- * software use. Hypervisors can use these leaves to provide an interface to
- * pass information from the hypervisor to the guest operating system running
- * inside a virtual machine. The hypervisor bit indicates the presence of a
- * hypervisor and that it is safe to test these additional software leaves.
- * VMware defines the 0x40000000 leaf as the hypervisor CPUID information leaf.
- * Code running on a VMware hypervisor can test the CPUID information leaf for
- * the hypervisor signature. VMware stores the string "VMwareVMware" in EBX,
- * ECX, EDX of CPUID leaf 0x40000000.
- */
-const char *mce_sys_var::cpuid_hv_vendor()
-{
-    static __thread char vendor[13] = {0};
-
-    if (!cpuid_hv()) {
-        return nullptr;
-    }
-#if defined(__x86_64__)
-    uint32_t _ebx = 0, _ecx = 0, _edx = 0;
-    __asm__ __volatile__("cpuid" : "=b"(_ebx), "=c"(_ecx), "=d"(_edx) : "a"(0x40000000));
-    sprintf(vendor, "%c%c%c%c", _ebx, (_ebx >> 8), (_ebx >> 16), (_ebx >> 24));
-    sprintf(vendor + 4, "%c%c%c%c", _ecx, (_ecx >> 8), (_ecx >> 16), (_ecx >> 24));
-    sprintf(vendor + 8, "%c%c%c%c", _edx, (_edx >> 8), (_edx >> 16), (_edx >> 24));
-    vendor[12] = 0x00;
-#endif
-    return vendor;
-}
-
-void mce_sys_var::read_hv()
-{
-    const char *hyper_vendor_id = nullptr;
-
-    hypervisor = mce_sys_var::HYPER_NONE;
-    hyper_vendor_id = cpuid_hv_vendor();
-    if (hyper_vendor_id) {
-        if (!strncmp("XenVMMXenVMM", hyper_vendor_id, 12)) {
-            hypervisor = HYPER_XEN;
-        } else if (!strncmp("KVMKVMKVM", hyper_vendor_id, 9)) {
-            hypervisor = HYPER_KVM;
-        } else if (!strncmp("Microsoft Hv", hyper_vendor_id, 12)) {
-            hypervisor = HYPER_MSHV;
-        } else if (!strncmp("VMwareVMware", hyper_vendor_id, 12)) {
-            hypervisor = HYPER_VMWARE;
-        } else {
-            hypervisor = HYPER_NONE;
-        }
-    }
-}
-
 void mce_sys_var::legacy_read_strq_strides_num()
 {
     char *env_ptr = nullptr;
@@ -907,7 +803,7 @@ void mce_sys_var::get_env_params()
     skip_poll_in_rx = MCE_DEFAULT_SKIP_POLL_IN_RX;
     multilock = MCE_DEFAULT_MULTILOCK;
 
-    read_hv();
+    hypervisor = vm_detection::detect();
 
     if ((env_ptr = getenv(SYS_VAR_STRQ))) {
         enable_strq_env = option_3::from_str(env_ptr, MCE_DEFAULT_STRQ);
@@ -1876,7 +1772,7 @@ void mce_sys_var::get_env_params()
 
 void mce_sys_var::apply_config_from_registry()
 {
-    read_hv();
+    hypervisor = vm_detection::detect();
 
     m_runtime_registry = runtime_registry();
     sys_var_configurator configurator(*m_runtime_registry, *this);

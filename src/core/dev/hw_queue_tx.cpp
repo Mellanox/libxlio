@@ -62,7 +62,7 @@ static bool is_bf(struct ibv_context *ib_ctx)
     char *env;
 
     /* This limitation is done for RM: 1557652, 1894523, 1914464, 2069198 */
-    if (safe_mce_sys().hypervisor != mce_sys_var::HYPER_NONE) {
+    if (safe_mce_sys().hypervisor != vm_detection::HYPER_NONE) {
         return false;
     }
 
