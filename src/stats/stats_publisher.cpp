@@ -8,10 +8,12 @@
 #include "config.h"
 #endif
 
-#include "stats/stats_data_reader.h"
-#include "core/util/xlio_stats.h"
-#include "core/sock/sock-redirect.h"
 #include "core/event/event_handler_manager.h"
+#include "core/sock/sock-redirect.h"
+#include "core/util/rx_layout_capture.h"
+#include "core/util/xlio_stats.h"
+#include "stats/stats_data_reader.h"
+#include <new>
 
 #define MODULE_NAME "STATS: "
 
@@ -27,6 +29,7 @@ static lock_spin g_lock_iomux("g_lock_iomux");
 static sh_mem_info_t g_sh_mem_info;
 static sh_mem_t *g_sh_mem;
 static sh_mem_t g_local_sh_mem;
+static xlio_rx_layout::region *g_rx_layout_region = nullptr;
 
 // statistic file
 FILE *g_stats_file = NULL;
@@ -147,6 +150,11 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
     mode_t saved_mode;
     const char *dir_path = safe_mce_sys().stats_shmem_dirname;
 
+    g_sh_mem_info.fd_sh_stats = -1;
+    g_sh_mem_info.filename_sh_stats[0] = '\0';
+    g_sh_mem_info.p_sh_stats = MAP_FAILED;
+    g_rx_layout_region = nullptr;
+
     g_p_stats_data_reader = new stats_data_reader();
 
     BULLSEYE_EXCLUDE_BLOCK_START
@@ -157,7 +165,10 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
     }
     BULLSEYE_EXCLUDE_BLOCK_END
 
-    shmem_size = SHMEM_STATS_SIZE(safe_mce_sys().stats_fd_num_monitor);
+    shmem_size =
+        xlio_rx_layout::extension_offset(SHMEM_STATS_SIZE(safe_mce_sys().stats_fd_num_monitor)) +
+        sizeof(xlio_rx_layout::region);
+    g_sh_mem_info.shmem_size = shmem_size;
     buf = malloc(shmem_size);
     if (buf == NULL) {
         goto shmem_error;
@@ -175,8 +186,6 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
         goto no_shmem;
     }
 
-    g_sh_mem_info.filename_sh_stats[0] = '\0';
-    g_sh_mem_info.p_sh_stats = MAP_FAILED;
     ret = snprintf(g_sh_mem_info.filename_sh_stats, sizeof(g_sh_mem_info.filename_sh_stats),
                    "%s/xliostat.%d", dir_path, getpid());
     if (!((0 < ret) && (ret < (int)sizeof(g_sh_mem_info.filename_sh_stats)))) {
@@ -200,9 +209,9 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
     ret = write(g_sh_mem_info.fd_sh_stats, buf, shmem_size);
 
     BULLSEYE_EXCLUDE_BLOCK_START
-    if (ret < 0) {
-        vlog_printf(VLOG_ERROR, "%s: Could not write to %s - %s\n", __func__,
-                    g_sh_mem_info.filename_sh_stats, strerror(errno));
+    if (ret < 0 || static_cast<size_t>(ret) != shmem_size) {
+        vlog_printf(VLOG_ERROR, "%s: Incomplete statistics write to %s (%d of %zu bytes)\n",
+                    __func__, g_sh_mem_info.filename_sh_stats, ret, shmem_size);
         goto no_shmem;
     }
     BULLSEYE_EXCLUDE_BLOCK_END
@@ -227,11 +236,10 @@ void xlio_shmem_stats_open(vlog_levels_t **p_p_xlio_log_level, uint8_t **p_p_xli
     goto success;
 
 no_shmem:
-    if (g_sh_mem_info.p_sh_stats == MAP_FAILED) {
-        if (g_sh_mem_info.fd_sh_stats > 0) {
-            close(g_sh_mem_info.fd_sh_stats);
-            unlink(g_sh_mem_info.filename_sh_stats);
-        }
+    if (g_sh_mem_info.fd_sh_stats >= 0) {
+        close(g_sh_mem_info.fd_sh_stats);
+        unlink(g_sh_mem_info.filename_sh_stats);
+        g_sh_mem_info.fd_sh_stats = -1;
     }
 
     g_sh_mem_info.p_sh_stats = 0;
@@ -258,6 +266,12 @@ success:
     g_sh_mem->fd_dump = 0;
     g_sh_mem->fd_dump_log_level = STATS_FD_STATISTICS_LOG_LEVEL_DEFAULT;
 
+    if (g_sh_mem_info.p_sh_stats && g_sh_mem_info.p_sh_stats != MAP_FAILED) {
+        size_t offset =
+            xlio_rx_layout::extension_offset(SHMEM_STATS_SIZE(safe_mce_sys().stats_fd_num_monitor));
+        g_rx_layout_region = new (static_cast<char *>(p_shmem) + offset) xlio_rx_layout::region;
+    }
+
     // ReMap internal log level to ShMem area
     *p_p_xlio_log_level = &g_sh_mem->log_level;
     *p_p_xlio_log_details = &g_sh_mem->log_details_level;
@@ -280,14 +294,14 @@ shmem_error:
 
 void xlio_shmem_stats_close()
 {
+    g_rx_layout_region = nullptr;
     if (g_sh_mem_info.p_sh_stats && g_sh_mem_info.p_sh_stats != MAP_FAILED) {
         __log_dbg("file '%s' fd %d shared memory at %p with %d max blocks",
                   g_sh_mem_info.filename_sh_stats, g_sh_mem_info.fd_sh_stats,
                   g_sh_mem_info.p_sh_stats, safe_mce_sys().stats_fd_num_monitor);
 
         BULLSEYE_EXCLUDE_BLOCK_START
-        if (munmap(g_sh_mem_info.p_sh_stats,
-                   SHMEM_STATS_SIZE(safe_mce_sys().stats_fd_num_monitor)) != 0) {
+        if (munmap(g_sh_mem_info.p_sh_stats, g_sh_mem_info.shmem_size) != 0) {
             vlog_printf(VLOG_ERROR,
                         "%s: file [%s] fd [%d] error while unmap shared memory at [%p]\n", __func__,
                         g_sh_mem_info.filename_sh_stats, g_sh_mem_info.fd_sh_stats,
@@ -297,8 +311,9 @@ void xlio_shmem_stats_close()
 
         g_sh_mem_info.p_sh_stats = MAP_FAILED;
 
-        if (g_sh_mem_info.fd_sh_stats) {
+        if (g_sh_mem_info.fd_sh_stats >= 0) {
             close(g_sh_mem_info.fd_sh_stats);
+            g_sh_mem_info.fd_sh_stats = -1;
         }
 
         if (!g_is_forked_child) {
@@ -372,9 +387,8 @@ void xlio_stats_instance_remove_socket_block(socket_stats_t *local_addr)
     // coverity - g_sh_mem->skt_inst_arr cannot be null
     /*BULLSEYE_EXCLUDE_BLOCK_START
     if (g_sh_mem->skt_inst_arr == NULL) {
-        vlog_printf(VLOG_ERROR,"%s:%d: g_sh_mem->instances_arr not init\n", __func__, __LINE__);
-        g_lock_skt_stats.unlock();
-        return;
+        vlog_printf(VLOG_ERROR,"%s:%d: g_sh_mem->instances_arr not init\n",
+    __func__, __LINE__); g_lock_skt_stats.unlock(); return;
     }
     BULLSEYE_EXCLUDE_BLOCK_END*/
 
@@ -496,9 +510,8 @@ void xlio_stats_instance_remove_ring_block(ring_stats_t *local_stats_addr)
     // coverity - g_sh_mem->ring_inst_arr cannot be null
     /*BULLSEYE_EXCLUDE_BLOCK_START
     if (g_sh_mem->ring_inst_arr == NULL) {
-        vlog_printf(VLOG_ERROR,"%s:%d: g_sh_mem->instances_arr not init\n", __func__, __LINE__);
-                g_lock_skt_stats.unlock();
-        return;
+        vlog_printf(VLOG_ERROR,"%s:%d: g_sh_mem->instances_arr not init\n",
+    __func__, __LINE__); g_lock_skt_stats.unlock(); return;
     }
     BULLSEYE_EXCLUDE_BLOCK_END*/
 
@@ -557,9 +570,8 @@ void xlio_stats_instance_remove_cq_block(cq_stats_t *local_stats_addr)
     // coverity - g_sh_mem->cq_inst_arr cannot be null
     /*BULLSEYE_EXCLUDE_BLOCK_START
     if (g_sh_mem->cq_inst_arr == NULL) {
-        vlog_printf(VLOG_ERROR,"%s:%d: g_sh_mem->instances_arr not init\n", __func__, __LINE__);
-                g_lock_skt_stats.unlock();
-        return;
+        vlog_printf(VLOG_ERROR,"%s:%d: g_sh_mem->instances_arr not init\n",
+    __func__, __LINE__); g_lock_skt_stats.unlock(); return;
     }
     BULLSEYE_EXCLUDE_BLOCK_END*/
 
@@ -798,4 +810,19 @@ void xlio_stats_instance_remove_epoll_block(iomux_func_stats_t *local_stats_addr
                 ep_func_stats);
     g_lock_iomux.unlock();
     return;
+}
+
+// Capture records are written directly by RX, never by the timer's memcpy map.
+xlio_rx_layout::slot *xlio_rx_layout::register_ring(uint32_t if_index)
+{
+    if (!g_rx_layout_region) {
+        return nullptr;
+    }
+    for (auto &slot : g_rx_layout_region->slots) {
+        if (register_slot(slot, if_index)) {
+            return &slot;
+        }
+    }
+    g_rx_layout_region->registration_failures.fetch_add(1, std::memory_order_relaxed);
+    return nullptr;
 }

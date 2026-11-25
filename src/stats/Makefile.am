@@ -12,7 +12,7 @@ xlio_stats_LDADD= -lrt \
 	libstats.la \
 	$(top_builddir)/src/utils/libutils.la \
 	$(top_builddir)/src/vlogger/libvlogger.la
-xlio_stats_SOURCES = stats_reader.cpp
+xlio_stats_SOURCES = stats_reader.cpp rx_layout_view.cpp rx_layout_view.h rx_layout_summary.h rx_analysis_csv.h
 xlio_stats_DEPENDENCIES = \
 	libstats.la \
 	$(top_builddir)/src/vlogger/libvlogger.la

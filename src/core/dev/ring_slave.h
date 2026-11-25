@@ -8,6 +8,7 @@
 #define RING_SLAVE_H_
 
 #include "ring.h"
+#include "util/rx_layout_capture.h"
 #include <memory>
 #include "dev/net_device_table_mgr.h"
 #include "util/sock_addr.h"
@@ -279,6 +280,8 @@ public:
 
     void accumulate_ring_stats(aggregated_ring_stats &agg) const override;
 
+    xlio_rx_layout::slot *get_rx_layout_capture() const { return m_rx_layout_capture; }
+
     bool m_active; /* State indicator */
 
     virtual mem_buf_desc_t *mem_buf_tx_get(ring_user_id_t id, bool b_block, pbuf_type type,
@@ -307,6 +310,7 @@ protected:
     descq_t m_zc_pool;
     transport_type_t m_transport_type; /* transport ETH/IB */
     std::unique_ptr<ring_stats_t> m_p_ring_stat;
+    xlio_rx_layout::slot *m_rx_layout_capture;
     uint16_t m_vlan;
     bool m_flow_tag_enabled;
     const bool m_b_sysvar_eth_mc_l2_only_rules;
@@ -315,7 +319,7 @@ protected:
     template <typename KEY4T, typename KEY2T, typename HDR> friend class steering_handler;
 
 private:
-    uint8_t padding[58] = {}; // make class size up to a whole cache line
+    uint8_t padding[50] = {}; // make class size up to a whole cache line
 };
 
 static_assert(sizeof(ring_slave) % 64 == 0, "ring_slave size is not a multiple of cache line size");

@@ -126,6 +126,9 @@ void cq_mgr_rx_regrq::cqe_to_mem_buff_desc(struct xlio_mlx5_cqe *cqe,
         p_rx_wc_buf_desc->rx.is_sw_csum_need =
             !(m_b_is_rx_hw_csum_on && (cqe->hds_ip_ext & MLX5_CQE_L4_OK) &&
               (cqe->hds_ip_ext & MLX5_CQE_L3_OK));
+        if (unlikely(rx_recording_requested())) {
+            record_rx_sample(p_rx_wc_buf_desc, false, cqe);
+        }
         if (cqe->lro_num_seg > 1) {
             lro_update_hdr(cqe, p_rx_wc_buf_desc);
             m_p_cq_stat->n_rx_lro_packets++;

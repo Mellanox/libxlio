@@ -8,37 +8,39 @@
 #include "config.h"
 #endif
 
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <signal.h>
-#include <getopt.h> /* getopt()*/
-#include <errno.h>
-#include <dirent.h>
-#include <string.h>
+#include <cinttypes>
 #include <ctime>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <getopt.h> /* getopt()*/
 #include <iomanip>
 #include <new>
-#include <vector>
-#include <cinttypes>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
-#include <sys/utsname.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
+#include <unistd.h>
+#include <utility>
+#include <vector>
 
 #include <cinttypes>
 #include <iostream>
 #include <list>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
-#include "utils/rdtsc.h"
+#include "core/util/rx_layout_capture.h"
+#include "core/util/sys_vars.h"
 #include "core/util/utils.h"
 #include "core/util/xlio_stats.h"
-#include "core/util/sys_vars.h"
+#include "stats/rx_layout_view.h"
 #include "stats/stats_data_reader.h"
+#include "utils/rdtsc.h"
 #include <sstream>
 
 using namespace std;
@@ -137,35 +139,43 @@ void usage(const char *argv0)
     printf("\n");
     printf("Options:\n");
     printf("  -p, --pid=<pid>\t\tShow " PRODUCT_NAME " statistics for process with pid: <pid>\n");
-    printf("  -k, --directory=<directory>\tSet shared memory directory path to <directory>\n");
+    printf("  -k, --directory=<directory>\tSet shared memory directory path to "
+           "<directory>\n");
     printf("  -n, --name=<application>\tShow " PRODUCT_NAME
            " statistics for application: <application>\n");
     printf("  -f, --find_pid\t\tFind and show statistics for " PRODUCT_NAME
            " instance running (default)\n");
-    printf("  -F, --forbid_clean\t\tBy setting this flag inactive shared objects would not be "
+    printf("  -F, --forbid_clean\t\tBy setting this flag inactive shared objects "
+           "would not be "
            "removed\n");
     printf("  -i, --interval=<n>\t\tPrint report every <n> seconds\n");
-    printf("  -c, --cycles=<n>\t\tDo <n> report print cycles and exit, use 0 value for infinite "
+    printf("  -c, --cycles=<n>\t\tDo <n> report print cycles and exit, use 0 "
+           "value for infinite "
            "(default)\n");
     printf("  -v, --view=<1|2|3|4|5|6>\tSet view type:\n" INFO_TABS "1 - Basic info\n" INFO_TABS
            "2 - Extra info\n" INFO_TABS "3 - Full info\n" INFO_TABS
            "4 - Multicast groups\n" INFO_TABS "5 - Show as 'netstat -tunaep'\n" INFO_TABS
            "6 - Entity Context info\n");
+    printf("  --rx-analysis\t\t\tCapture raw RX analysis batches (requires write "
+           "access)\n");
+    printf("  --rx-samples=<1..256>\t\tRecords per ring per batch (default 256)\n");
     printf("  -d, --details=<1|2>\t\tSet details mode:\n" INFO_TABS "1 - Totals\n" INFO_TABS
            "2 - Deltas\n");
     printf("  -z, --zero\t\t\tZero counters\n");
-    printf(
-        "  -l, --log_level=<level>\tSet " PRODUCT_NAME
-        " log level to <level>(one of: none/panic/error/warn/info/details/debug/fine/finer/all)\n");
-    printf("  -S, --fd_dump=<fd> [<level>]\tDump statistics for fd number <fd> using log level "
+    printf("  -l, --log_level=<level>\tSet " PRODUCT_NAME " log level to <level>(one of: "
+           "none/panic/error/warn/info/details/debug/fine/finer/all)\n");
+    printf("  -S, --fd_dump=<fd> [<level>]\tDump statistics for fd number <fd> "
+           "using log level "
            "<level>. use 0 value for all open fds.\n");
     printf("  -D, --details_level=<level>\tSet " PRODUCT_NAME
            " log details level to <level>(0 <= level <= 3)\n");
-    printf("  -s, --sockets=<list|range>\tLog only sockets that match <list> or <range>, format: "
+    printf("  -s, --sockets=<list|range>\tLog only sockets that match <list> or "
+           "<range>, format: "
            "4-16 or 1,9 (or combination)\n");
-    printf("  -C, --csv_file=<file path>\tA path to the statics CSV file\n");
+    printf("  -C, --csv_file=<file path>\tA path to the statistics or RX analysis CSV file\n");
     printf("  -V, --version\t\t\tPrint version\n");
     printf("  -h, --help\t\t\tPrint this help message\n");
+    fputs(rx_analysis_help(), stdout);
 }
 
 void update_delta_stat(socket_stats_t *p_curr_stat, socket_stats_t *p_prev_stat)
@@ -637,13 +647,17 @@ void print_entity_context_stats(entity_context_instance_block_t *p_ent_ctx_inst_
         strcpy(post_fix, "/s");
     }
 
-    printf("======================================================================================="
+    printf("====================================================================="
+           "=================="
            "============\n");
-    printf("Entity  | CPUTime                  | Job Queue     | Sockets                           "
+    printf("Entity  | CPUTime                  | Job Queue     | Sockets         "
+           "                  "
            "    | RSS   \n");
-    printf("Context | Idle | PollHit | JobProc | Max   | Avg   | Total   | Added   | Removed | Delt"
+    printf("Context | Idle | PollHit | JobProc | Max   | Avg   | Total   | Added "
+           "  | Removed | Delt"
            "a   | Childs\n");
-    printf("---------------------------------------------------------------------------------------"
+    printf("---------------------------------------------------------------------"
+           "------------------"
            "------------\n");
 
     for (int i = 0; i < NUM_OF_SUPPORTED_ENTITY_CTX; i++) {
@@ -1294,8 +1308,7 @@ void add_fd_to_array(int fd, ip_addr mc_grp, mc_group_fds_t *mc_group_fds, int *
     }
     // the mc_group wasnt found
     // Add this mc group to the array
-    // coverity[copy_assignment_call] /* Turn off coverity warning for COPY_INSTEAD_OF_MOVE */
-    mc_group_fds[i].mc_grp = mc_grp;
+    mc_group_fds[i].mc_grp = std::move(mc_grp);
     int fd1 = fd;
     mc_group_fds[i].fd_list.push_back(fd1);
     (*array_size)++;
@@ -1394,10 +1407,10 @@ void cleanup(sh_mem_info *p_sh_mem_info)
     }
     if (p_sh_mem_info->p_sh_stats != MAP_FAILED) {
         if (munmap(p_sh_mem_info->p_sh_stats, p_sh_mem_info->shmem_size) != 0) {
-            log_system_err(
-                "file='%s' sh_mem_info.fd_sh_stats=%d; error while munmap shared memory at [%p]\n",
-                p_sh_mem_info->filename_sh_stats, p_sh_mem_info->fd_sh_stats,
-                p_sh_mem_info->p_sh_stats);
+            log_system_err("file='%s' sh_mem_info.fd_sh_stats=%d; error while munmap "
+                           "shared memory at [%p]\n",
+                           p_sh_mem_info->filename_sh_stats, p_sh_mem_info->fd_sh_stats,
+                           p_sh_mem_info->p_sh_stats);
         }
     }
     close(p_sh_mem_info->fd_sh_stats);
@@ -1993,7 +2006,8 @@ int get_pid(char *proc_desc, char *argv0)
             };
             free(pid_str);
         } else {
-            log_err("Failed to identify process please provide pid of active proccess...\n");
+            log_err("Failed to identify process please provide pid of active "
+                    "proccess...\n");
         }
     }
 
@@ -2026,6 +2040,12 @@ int main(int argc, char **argv)
 {
     char proc_desc[MAX_BUFF_SIZE] = {0};
 
+    bool rx_layout = false;
+    bool legacy_options_given = false;
+    std::string csv_path;
+    bool csv_given = false;
+    bool rx_samples_given = false;
+    unsigned rx_samples = xlio_rx_layout::capacity;
     set_defaults();
     if (!g_fd_mask) {
         return 1;
@@ -2053,6 +2073,8 @@ int main(int argc, char **argv)
                                                {"forbid_clean", 0, NULL, 'F'},
                                                {"help", 0, NULL, 'h'},
                                                {"csv_file", 1, NULL, 'C'},
+                                               {"rx-analysis", 0, NULL, 1000},
+                                               {"rx-samples", 1, NULL, 1001},
                                                {0, 0, 0, 0}};
 
         if ((c = getopt_long(argc, argv, "i:c:v:d:p:k:s:Vzl:S:C:D:n:fFh?", long_options,
@@ -2060,7 +2082,25 @@ int main(int argc, char **argv)
             break;
         }
 
+        if (c == 0 || (c > 0 && c < 256 && strchr("vdzlsSD", c))) {
+            legacy_options_given = true;
+        }
         switch (c) {
+        case 1000:
+            rx_layout = true;
+            break;
+        case 1001: {
+            char *end = nullptr;
+            errno = 0;
+            unsigned long n = strtoul(optarg, &end, 10);
+            if (errno || !end || *end || end == optarg || !n || n > xlio_rx_layout::capacity) {
+                log_err("--rx-samples must be in [1, %u]", xlio_rx_layout::capacity);
+                free(g_fd_mask);
+                return 1;
+            }
+            rx_samples = static_cast<unsigned>(n);
+            rx_samples_given = true;
+        } break;
         case 0: {
             if (strcmp("dump", long_options[option_index].name) == 0) {
                 if (strcasecmp("fd", optarg) == 0) {
@@ -2180,13 +2220,8 @@ int main(int argc, char **argv)
             }
         } break;
         case 'C': {
-            user_params.csv_stream.open(optarg);
-            if (!user_params.csv_stream.is_open()) {
-                log_err("Unable to open file: %s", optarg);
-                usage(argv[0]);
-                cleanup(NULL);
-                return 1;
-            }
+            csv_path = optarg;
+            csv_given = true;
         } break;
         case 'D': {
             errno = 0;
@@ -2224,6 +2259,25 @@ int main(int argc, char **argv)
         }
     }
 
+    if ((rx_samples_given && !rx_layout) ||
+        (rx_layout &&
+         (legacy_options_given || user_params.view_mode != DEFAULT_VIEW_MODE ||
+          user_params.zero_counters || user_params.dump != DUMP_DISABLED ||
+          user_params.interval < 1))) {
+        log_err("--rx-analysis cannot combine with view/detail/socket/log/zero/dump "
+                "options and needs interval >= 1; --rx-samples requires --rx-analysis");
+        free(g_fd_mask);
+        return 1;
+    }
+
+    if (csv_given && !rx_layout) {
+        user_params.csv_stream.open(csv_path);
+        if (!user_params.csv_stream.is_open()) {
+            log_err("Unable to open file: %s", csv_path.c_str());
+            cleanup(NULL);
+            return 1;
+        }
+    }
     clean_inactive_sh_ibj();
 
     std::vector<int> pids;
@@ -2251,7 +2305,9 @@ int main(int argc, char **argv)
         user_params.cycles = 1; // print once and exit
     }
 
-    int ret = print_processes_stats(pids);
+    int ret = rx_layout ? print_rx_analysis(pids.front(), user_params.xlio_stats_path, rx_samples,
+                                            user_params.interval, user_params.cycles, csv_path)
+                        : print_processes_stats(pids);
 
     free(g_fd_mask);
     return ret;
@@ -2306,9 +2362,10 @@ int init_print_process_stats(sh_mem_info_t &sh_mem_info)
     }
     if (!version_check) {
         if (munmap(sh_mem_info.p_sh_stats, sizeof(sh_mem_t)) != 0) {
-            log_system_err(
-                "file='%s' sh_mem_info.fd_sh_stats=%d; error while munmap shared memory at [%p]\n",
-                sh_mem_info.filename_sh_stats, sh_mem_info.fd_sh_stats, sh_mem_info.p_sh_stats);
+            log_system_err("file='%s' sh_mem_info.fd_sh_stats=%d; error while munmap "
+                           "shared memory at [%p]\n",
+                           sh_mem_info.filename_sh_stats, sh_mem_info.fd_sh_stats,
+                           sh_mem_info.p_sh_stats);
         }
         close(sh_mem_info.fd_sh_stats);
         return 1;
@@ -2316,9 +2373,10 @@ int init_print_process_stats(sh_mem_info_t &sh_mem_info)
 
     sh_mem_info.shmem_size = SHMEM_STATS_SIZE(sh_mem->max_skt_inst_num);
     if (munmap(sh_mem_info.p_sh_stats, sizeof(sh_mem_t)) != 0) {
-        log_system_err(
-            "file='%s' sh_mem_info.fd_sh_stats=%d; error while munmap shared memory at [%p]\n",
-            sh_mem_info.filename_sh_stats, sh_mem_info.fd_sh_stats, sh_mem_info.p_sh_stats);
+        log_system_err("file='%s' sh_mem_info.fd_sh_stats=%d; error while munmap "
+                       "shared memory at [%p]\n",
+                       sh_mem_info.filename_sh_stats, sh_mem_info.fd_sh_stats,
+                       sh_mem_info.p_sh_stats);
     }
     if (user_params.write_auth) {
         sh_mem_info.p_sh_stats = mmap(0, sh_mem_info.shmem_size, PROT_WRITE | PROT_READ, MAP_SHARED,
@@ -2412,9 +2470,9 @@ int print_processes_stats(const std::vector<int> &pids)
     }
 
     // 2. one sleep to rule them all
-    usleep(STATS_READER_DELAY *
-           1000); // After 'init_print_process_stats' we wait for XLIO publisher to recognize
-                  // that we asked for statistics, otherwise, the first read will be zero
+    usleep(STATS_READER_DELAY * 1000); // After 'init_print_process_stats' we wait for XLIO
+                                       // publisher to recognize that we asked for statistics,
+                                       // otherwise, the first read will be zero
 
     // 3. N * read from shmem, write to user, and shmem cleanup
     for (int i = 0; i < num_instances; ++i) {

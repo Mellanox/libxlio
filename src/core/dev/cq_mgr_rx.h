@@ -12,6 +12,7 @@
 #include "dev/ib_ctx_handler.h"
 #include "util/sys_vars.h"
 #include "util/xlio_stats.h"
+#include "util/rx_layout_capture.h"
 #include "proto/mem_buf_desc.h"
 #include "proto/xlio_lwip.h"
 #include "xlio_extra.h"
@@ -118,6 +119,14 @@ public:
     uint64_t get_n_rx_hw_pkt_drops() { return m_p_cq_stat->n_rx_hw_pkt_drops; }
 
 protected:
+    xlio_rx_layout::receive_context m_rx_analysis_context {};
+    const std::atomic<uint64_t> *m_rx_capture_control;
+    inline __attribute__((always_inline)) bool rx_recording_requested() const
+    {
+        return xlio_rx_layout::recording_requested(*m_rx_capture_control);
+    }
+    void record_rx_sample(const mem_buf_desc_t *buffer, bool striding, const xlio_mlx5_cqe *cqe)
+        __attribute__((noinline, cold));
     /**
      * Poll the CQ that is managed by this object
      * @p_wce pointer to array where to save the wce in

@@ -38,6 +38,7 @@ ring_slave::ring_slave(int if_index, ring *parent, bool use_locks)
     , m_lock_ring_rx(get_new_lock("ring_slave:lock_rx", use_locks))
     , m_lock_ring_tx(get_new_lock("ring_slave:lock_tx", use_locks))
     , m_p_ring_stat(new ring_stats_t)
+    , m_rx_layout_capture(nullptr)
     , m_vlan(0)
     , m_flow_tag_enabled(false)
     , m_b_sysvar_eth_mc_l2_only_rules(safe_mce_sys().eth_mc_l2_only_rules)
@@ -75,12 +76,16 @@ ring_slave::ring_slave(int if_index, ring *parent, bool use_locks)
     m_zc_pool.set_id("ring_slave (%p) : m_zc_pool", this);
 
     xlio_stats_instance_create_ring_block(m_p_ring_stat.get());
+    m_rx_layout_capture = xlio_rx_layout::register_ring(if_index);
 
     print_val();
 }
 
 ring_slave::~ring_slave()
 {
+    if (m_rx_layout_capture) {
+        xlio_rx_layout::close(*m_rx_layout_capture);
+    }
     print_val();
 
     if (m_p_ring_stat) {
